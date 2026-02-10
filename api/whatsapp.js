@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -7,24 +7,26 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     const { to, message } = req.body;
-    if (!to || !message) return res.status(400).json({ error: 'Missing "to" and "message"' });
+    if (!to || !message) return res.status(400).json({ error: 'Missing to and message' });
 
     const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
     const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
     const FROM_NUMBER = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages.json`;
+    const url = 'https://api.twilio.com/2010-04-01/Accounts/' + ACCOUNT_SID + '/Messages.json';
 
     const params = new URLSearchParams();
-    params.append('To', `whatsapp:+${to.replace(/\D/g, '')}`);
+    params.append('To', 'whatsapp:+' + to.replace(/\D/g, ''));
     params.append('From', FROM_NUMBER);
     params.append('Body', message);
+
+    const credentials = Buffer.from(ACCOUNT_SID + ':' + AUTH_TOKEN).toString('base64');
 
     try {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': 'Basic ' + btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`),
+                'Authorization': 'Basic ' + credentials,
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: params.toString()
@@ -40,4 +42,4 @@ export default async function handler(req, res) {
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
-}
+};
