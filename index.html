@@ -485,6 +485,120 @@
         .cot-header-bar h2 { color: white; font-size: 20px; font-weight: 800; letter-spacing: 2px; }
         .cot-header-bar p { color: rgba(255,255,255,0.9); font-size: 11px; margin-top: 2px; }
 
+        /* ======================== */
+        /* PROYECTOS STYLES        */
+        /* ======================== */
+        .proy-container { padding: 20px 32px 32px; }
+        .proy-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+        .proy-header h2 { font-size: 22px; font-weight: 900; }
+        .proy-header p { font-size: 12px; color: var(--gray); margin-top: 2px; }
+        .proy-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 16px;
+        }
+        .proy-card {
+            background: var(--white); border-radius: 14px; border: 1px solid var(--border);
+            overflow: hidden; transition: box-shadow 0.2s;
+        }
+        .proy-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .proy-card-header {
+            padding: 16px 18px 12px; display: flex; justify-content: space-between;
+            align-items: flex-start; border-bottom: 1px solid #f3f4f6;
+        }
+        .proy-card-title { font-size: 15px; font-weight: 800; color: var(--dark); }
+        .proy-card-desc {
+            font-size: 12px; color: var(--gray); margin-top: 3px;
+            max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .proy-card-actions { display: flex; gap: 4px; }
+        .proy-card-actions button {
+            width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--white); cursor: pointer; font-size: 12px;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        .proy-card-actions button:hover { background: #f3f4f6; }
+        .proy-card-actions button.delete:hover { background: #fef2f2; border-color: var(--red); }
+        .proy-status-bar {
+            display: flex; align-items: center; gap: 8px; padding: 10px 18px;
+            background: #fafafa; border-bottom: 1px solid #f3f4f6;
+        }
+        .proy-priority {
+            display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 50px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .proy-p-urgente { background: #fecaca; color: #991b1b; }
+        .proy-p-alta { background: #fed7aa; color: #9a3412; }
+        .proy-p-media { background: #fef3c7; color: #92400e; }
+        .proy-p-baja { background: #d1fae5; color: #065f46; }
+        .proy-estado {
+            display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 50px;
+            font-size: 10px; font-weight: 700;
+        }
+        .proy-e-activo { background: #dbeafe; color: #1e40af; }
+        .proy-e-pausado { background: #f3f4f6; color: #374151; }
+        .proy-e-completado { background: #d1fae5; color: #065f46; }
+        .proy-e-cancelado { background: #fecaca; color: #991b1b; }
+        .proy-resp-tag {
+            font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 50px;
+        }
+        .proy-progress-bar {
+            height: 4px; background: #e5e7eb; border-radius: 4px; overflow: hidden;
+            margin: 0 18px;
+        }
+        .proy-progress-fill {
+            height: 100%; background: linear-gradient(90deg, var(--cyan), var(--green));
+            border-radius: 4px; transition: width 0.4s;
+        }
+        .proy-pendientes { padding: 12px 18px 16px; }
+        .proy-pendientes-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+        }
+        .proy-pendientes-header span {
+            font-size: 11px; font-weight: 700; color: var(--gray);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .proy-pendientes-header .proy-count {
+            font-size: 10px; font-weight: 800; color: var(--cyan);
+        }
+        .proy-add-pendiente {
+            border: none; background: none; color: var(--cyan); font-size: 18px;
+            cursor: pointer; font-weight: 700; line-height: 1; padding: 0 4px;
+        }
+        .proy-pendiente-item {
+            display: flex; align-items: flex-start; gap: 8px; padding: 6px 0;
+            border-bottom: 1px solid #f9fafb; font-size: 13px;
+        }
+        .proy-pendiente-item:last-child { border-bottom: none; }
+        .proy-check {
+            width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px;
+            cursor: pointer; flex-shrink: 0; margin-top: 1px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; font-size: 10px; color: transparent;
+        }
+        .proy-check:hover { border-color: var(--cyan); }
+        .proy-check.done { background: var(--green); border-color: var(--green); color: white; }
+        .proy-pendiente-text { flex: 1; font-weight: 500; color: var(--dark); }
+        .proy-pendiente-text.done { text-decoration: line-through; color: var(--gray-light); }
+        .proy-pendiente-delete {
+            border: none; background: none; color: var(--gray-light); font-size: 14px;
+            cursor: pointer; opacity: 0; transition: opacity 0.2s; padding: 0 2px;
+        }
+        .proy-pendiente-item:hover .proy-pendiente-delete { opacity: 1; }
+        .proy-pendiente-delete:hover { color: var(--red); }
+        .proy-add-input {
+            width: 100%; padding: 8px 10px; border: 1.5px dashed var(--border);
+            border-radius: 6px; font-size: 12px; font-family: 'Inter', sans-serif;
+            font-weight: 500; margin-top: 6px; background: #fafafa;
+        }
+        .proy-add-input:focus { outline: none; border-color: var(--cyan); background: white; }
+        .proy-empty {
+            text-align: center; padding: 60px 20px; color: var(--gray);
+        }
+        .proy-empty .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
         /* RESPONSIVE */
         @media (max-width: 768px) {
             nav { padding: 12px 16px; }
@@ -497,6 +611,9 @@
             .search-box { min-width: 160px; }
             .form-row { grid-template-columns: 1fr; }
             .tabs-bar { padding: 0 16px; overflow-x: auto; }
+            .proy-container { padding: 16px; }
+            .proy-grid { grid-template-columns: 1fr; }
+            .proy-header { flex-direction: column; align-items: flex-start; gap: 10px; }
         }
     </style>
 </head>
@@ -518,6 +635,7 @@
             <a class="active" id="nav-vendedores" onclick="switchCRMTab('vendedores')">VENDEDORES</a>
             <a id="nav-compradores" onclick="switchCRMTab('compradores')">COMPRADORES</a>
             <a id="nav-cotizador" onclick="switchCRMTab('cotizador')">COTIZADOR</a>
+            <a id="nav-proyectos" onclick="switchCRMTab('proyectos')">PROYECTOS</a>
         </div>
         <div class="user-badge" id="user-badge" onclick="toggleUser()">
             <span id="user-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
@@ -572,6 +690,9 @@
         </button>
         <button class="tab-btn" id="tab-btn-cotizador" onclick="switchCRMTab('cotizador')">
             Cotizador
+        </button>
+        <button class="tab-btn" id="tab-btn-proyectos" onclick="switchCRMTab('proyectos')">
+            Proyectos <span class="tab-count" id="count-proyectos">0</span>
         </button>
     </div>
 
@@ -799,6 +920,85 @@
         </div>
     </div>
 
+    <!-- ======================== -->
+    <!-- PROYECTOS TAB            -->
+    <!-- ======================== -->
+    <div id="tab-proyectos" style="display:none;">
+        <div class="proy-container">
+            <div class="proy-header">
+                <div>
+                    <h2>Proyectos FYRADRIVE</h2>
+                    <p>Seguimiento de proyectos y pendientes — en tiempo real con Mario</p>
+                </div>
+                <button class="btn-new" style="background:var(--purple);" onclick="openProyectoModal()">+ Nuevo Proyecto</button>
+            </div>
+            <div class="proy-grid" id="proy-grid"></div>
+        </div>
+    </div>
+
+    <!-- MODAL PROYECTO -->
+    <div class="modal-overlay" id="modal-proyecto">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modal-proyecto-title">Nuevo Proyecto</h2>
+                <button class="modal-close" onclick="closeProyectoModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="p-edit-id">
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label>Nombre del Proyecto</label>
+                        <input type="text" id="p-nombre" placeholder="Ej: Integrar ManyChat al CRM">
+                    </div>
+                </div>
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label>Descripcion</label>
+                        <textarea id="p-descripcion" placeholder="Descripcion breve del proyecto..."></textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prioridad</label>
+                        <select id="p-prioridad">
+                            <option value="Urgente">Urgente</option>
+                            <option value="Alta">Alta</option>
+                            <option value="Media" selected>Media</option>
+                            <option value="Baja">Baja</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select id="p-estado">
+                            <option value="Activo" selected>Activo</option>
+                            <option value="Pausado">Pausado</option>
+                            <option value="Completado">Completado</option>
+                            <option value="Cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Responsable</label>
+                        <select id="p-responsable">
+                            <option value="Sebastian">Sebastian</option>
+                            <option value="Mario">Mario</option>
+                            <option value="Ambos">Ambos</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha Limite (opcional)</label>
+                        <input type="date" id="p-fecha">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeProyectoModal()">Cancelar</button>
+                <button class="btn-save" style="background:var(--purple);" onclick="saveProyecto()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL VENDEDOR -->
     <div class="modal-overlay" id="modal-vendedor">
         <div class="modal">
@@ -979,6 +1179,7 @@
         const API_URL = '/api/db';
         let vendedores = [];
         let compradores = [];
+        let proyectos = [];
         let currentUser = localStorage.getItem('fyra_crm_user') || 'Sebastian';
         let activeFilter = { vendedores: 'todos', compradores: 'todos' };
         let isConnected = false;
@@ -998,8 +1199,10 @@
                     lastDataHash = newHash;
                     vendedores = data.vendedores || [];
                     compradores = data.compradores || [];
+                    proyectos = data.proyectos || [];
                     renderVendedores();
                     renderCompradores();
+                    renderProyectos();
                     updateStats();
                     flashSync();
                 }
@@ -1017,20 +1220,23 @@
                 // Fallback to localStorage
                 vendedores = JSON.parse(localStorage.getItem('fyra_crm_vendedores') || '[]');
                 compradores = JSON.parse(localStorage.getItem('fyra_crm_compradores') || '[]');
+                proyectos = JSON.parse(localStorage.getItem('fyra_crm_proyectos') || '[]');
                 renderVendedores();
                 renderCompradores();
+                renderProyectos();
                 updateStats();
                 document.getElementById('loading').classList.add('hidden');
             }
         }
 
         async function saveToCloud() {
-            const data = { vendedores, compradores };
+            const data = { vendedores, compradores, proyectos };
             lastDataHash = JSON.stringify(data);
 
             // Also save to localStorage as backup
             localStorage.setItem('fyra_crm_vendedores', JSON.stringify(vendedores));
             localStorage.setItem('fyra_crm_compradores', JSON.stringify(compradores));
+            localStorage.setItem('fyra_crm_proyectos', JSON.stringify(proyectos));
 
             try {
                 await fetch(API_URL, {
@@ -1082,20 +1288,22 @@
         // TABS
         // ==========================================
         function switchCRMTab(tab) {
-            document.getElementById('tab-btn-vendedores').classList.toggle('active', tab === 'vendedores');
-            document.getElementById('tab-btn-compradores').classList.toggle('active', tab === 'compradores');
-            document.getElementById('tab-btn-cotizador').classList.toggle('active', tab === 'cotizador');
-            document.getElementById('nav-vendedores').classList.toggle('active', tab === 'vendedores');
-            document.getElementById('nav-compradores').classList.toggle('active', tab === 'compradores');
-            document.getElementById('nav-cotizador').classList.toggle('active', tab === 'cotizador');
-            document.getElementById('tab-vendedores').style.display = tab === 'vendedores' ? 'block' : 'none';
-            document.getElementById('tab-compradores').style.display = tab === 'compradores' ? 'block' : 'none';
-            document.getElementById('tab-cotizador').style.display = tab === 'cotizador' ? 'block' : 'none';
+            var tabs = ['vendedores','compradores','cotizador','proyectos'];
+            tabs.forEach(function(t) {
+                var btn = document.getElementById('tab-btn-' + t);
+                var nav = document.getElementById('nav-' + t);
+                var panel = document.getElementById('tab-' + t);
+                if (btn) btn.classList.toggle('active', tab === t);
+                if (nav) nav.classList.toggle('active', tab === t);
+                if (panel) panel.style.display = tab === t ? 'block' : 'none';
+            });
 
             // Show/hide CRM-only sections
-            var isCot = tab === 'cotizador';
-            document.querySelector('.crm-header').style.display = isCot ? 'none' : 'flex';
-            document.querySelector('.stats-row').style.display = isCot ? 'none' : 'flex';
+            var isCRM = tab === 'vendedores' || tab === 'compradores';
+            document.querySelector('.crm-header').style.display = isCRM ? 'flex' : 'none';
+            document.querySelector('.stats-row').style.display = isCRM ? 'flex' : 'none';
+
+            if (tab === 'proyectos') renderProyectos();
         }
 
         // ==========================================
@@ -1404,6 +1612,236 @@
             n.style.background = isError ? '#ef4444' : '#111827';
             n.classList.add('show');
             setTimeout(function() { n.classList.remove('show'); }, 2500);
+        }
+
+        // ==========================================
+        // PROYECTOS
+        // ==========================================
+        function openProyectoModal(id) {
+            var modal = document.getElementById('modal-proyecto');
+            modal.classList.add('show');
+
+            if (id) {
+                var p = proyectos.find(function(x) { return x.id === id; });
+                document.getElementById('modal-proyecto-title').textContent = 'Editar Proyecto';
+                document.getElementById('p-edit-id').value = id;
+                document.getElementById('p-nombre').value = p.nombre;
+                document.getElementById('p-descripcion').value = p.descripcion || '';
+                document.getElementById('p-prioridad').value = p.prioridad;
+                document.getElementById('p-estado').value = p.estado;
+                document.getElementById('p-responsable').value = p.responsable;
+                document.getElementById('p-fecha').value = p.fecha || '';
+            } else {
+                document.getElementById('modal-proyecto-title').textContent = 'Nuevo Proyecto';
+                document.getElementById('p-edit-id').value = '';
+                document.querySelectorAll('#modal-proyecto input, #modal-proyecto textarea').forEach(function(i) { if(i.type !== 'hidden') i.value = ''; });
+                document.getElementById('p-prioridad').value = 'Media';
+                document.getElementById('p-estado').value = 'Activo';
+                document.getElementById('p-responsable').value = currentUser;
+            }
+        }
+
+        function closeProyectoModal() {
+            document.getElementById('modal-proyecto').classList.remove('show');
+        }
+
+        function saveProyecto() {
+            var nombre = document.getElementById('p-nombre').value.trim();
+            var descripcion = document.getElementById('p-descripcion').value.trim();
+            var prioridad = document.getElementById('p-prioridad').value;
+            var estado = document.getElementById('p-estado').value;
+            var responsable = document.getElementById('p-responsable').value;
+            var fecha = document.getElementById('p-fecha').value;
+            var editId = document.getElementById('p-edit-id').value;
+
+            if (!nombre) {
+                showNotif('Escribe el nombre del proyecto', true);
+                return;
+            }
+
+            if (editId) {
+                var idx = proyectos.findIndex(function(x) { return x.id === editId; });
+                if (idx >= 0) {
+                    proyectos[idx].nombre = nombre;
+                    proyectos[idx].descripcion = descripcion;
+                    proyectos[idx].prioridad = prioridad;
+                    proyectos[idx].estado = estado;
+                    proyectos[idx].responsable = responsable;
+                    proyectos[idx].fecha = fecha;
+                    proyectos[idx].updated = Date.now();
+                }
+                showNotif('Proyecto actualizado');
+            } else {
+                proyectos.push({
+                    id: 'P' + Date.now(),
+                    nombre: nombre,
+                    descripcion: descripcion,
+                    prioridad: prioridad,
+                    estado: estado,
+                    responsable: responsable,
+                    fecha: fecha,
+                    pendientes: [],
+                    created: Date.now(),
+                    updated: Date.now()
+                });
+                showNotif('Proyecto creado');
+            }
+
+            saveToCloud();
+            renderProyectos();
+            updateStats();
+            closeProyectoModal();
+        }
+
+        function deleteProyecto(id) {
+            if (!confirm('Eliminar este proyecto y todos sus pendientes?')) return;
+            proyectos = proyectos.filter(function(x) { return x.id !== id; });
+            saveToCloud();
+            renderProyectos();
+            updateStats();
+            showNotif('Proyecto eliminado');
+        }
+
+        function addPendiente(proyId) {
+            var input = document.getElementById('pend-input-' + proyId);
+            if (!input) {
+                // Create input
+                var container = document.getElementById('pend-list-' + proyId);
+                var inp = document.createElement('input');
+                inp.type = 'text';
+                inp.id = 'pend-input-' + proyId;
+                inp.className = 'proy-add-input';
+                inp.placeholder = 'Escribe el pendiente y presiona Enter...';
+                inp.onkeydown = function(e) {
+                    if (e.key === 'Enter' && this.value.trim()) {
+                        var p = proyectos.find(function(x) { return x.id === proyId; });
+                        if (p) {
+                            if (!p.pendientes) p.pendientes = [];
+                            p.pendientes.push({
+                                id: 'T' + Date.now(),
+                                texto: this.value.trim(),
+                                done: false,
+                                created: Date.now()
+                            });
+                            p.updated = Date.now();
+                            saveToCloud();
+                            renderProyectos();
+                        }
+                    }
+                    if (e.key === 'Escape') {
+                        renderProyectos();
+                    }
+                };
+                container.appendChild(inp);
+                inp.focus();
+            } else {
+                input.focus();
+            }
+        }
+
+        function togglePendiente(proyId, pendId) {
+            var p = proyectos.find(function(x) { return x.id === proyId; });
+            if (p && p.pendientes) {
+                var t = p.pendientes.find(function(x) { return x.id === pendId; });
+                if (t) {
+                    t.done = !t.done;
+                    p.updated = Date.now();
+                    saveToCloud();
+                    renderProyectos();
+                }
+            }
+        }
+
+        function deletePendiente(proyId, pendId) {
+            var p = proyectos.find(function(x) { return x.id === proyId; });
+            if (p && p.pendientes) {
+                p.pendientes = p.pendientes.filter(function(x) { return x.id !== pendId; });
+                p.updated = Date.now();
+                saveToCloud();
+                renderProyectos();
+            }
+        }
+
+        function getProyProgress(p) {
+            if (!p.pendientes || p.pendientes.length === 0) return 0;
+            var done = p.pendientes.filter(function(t) { return t.done; }).length;
+            return Math.round((done / p.pendientes.length) * 100);
+        }
+
+        function prioridadClass(pri) {
+            return 'proy-p-' + pri.toLowerCase();
+        }
+
+        function estadoProyClass(est) {
+            return 'proy-e-' + est.toLowerCase();
+        }
+
+        function renderProyectos() {
+            var grid = document.getElementById('proy-grid');
+            if (!grid) return;
+
+            var countEl = document.getElementById('count-proyectos');
+            if (countEl) countEl.textContent = proyectos.length;
+
+            if (proyectos.length === 0) {
+                grid.innerHTML = '<div class="proy-empty"><div class="empty-icon">&#128204;</div><p>No hay proyectos. Crea uno nuevo para empezar.</p></div>';
+                return;
+            }
+
+            // Sort: Urgente first, then by created desc
+            var sorted = proyectos.slice().sort(function(a, b) {
+                var priOrder = { Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
+                var estOrder = { Activo: 0, Pausado: 1, Completado: 2, Cancelado: 3 };
+                if (estOrder[a.estado] !== estOrder[b.estado]) return estOrder[a.estado] - estOrder[b.estado];
+                if (priOrder[a.prioridad] !== priOrder[b.prioridad]) return priOrder[a.prioridad] - priOrder[b.prioridad];
+                return b.created - a.created;
+            });
+
+            grid.innerHTML = sorted.map(function(p) {
+                var progress = getProyProgress(p);
+                var totalPend = p.pendientes ? p.pendientes.length : 0;
+                var donePend = p.pendientes ? p.pendientes.filter(function(t) { return t.done; }).length : 0;
+                var respClass = p.responsable === 'Sebastian' ? 'resp-sebastian' :
+                                p.responsable === 'Mario' ? 'resp-mario' : 'resp-sebastian';
+
+                var pendientesHTML = '';
+                if (p.pendientes && p.pendientes.length > 0) {
+                    pendientesHTML = p.pendientes.map(function(t) {
+                        return '<div class="proy-pendiente-item">' +
+                            '<div class="proy-check ' + (t.done ? 'done' : '') + '" onclick="togglePendiente(\'' + p.id + '\',\'' + t.id + '\')">' + (t.done ? '&#10003;' : '') + '</div>' +
+                            '<span class="proy-pendiente-text ' + (t.done ? 'done' : '') + '">' + t.texto + '</span>' +
+                            '<button class="proy-pendiente-delete" onclick="deletePendiente(\'' + p.id + '\',\'' + t.id + '\')">&times;</button>' +
+                            '</div>';
+                    }).join('');
+                }
+
+                return '<div class="proy-card">' +
+                    '<div class="proy-card-header">' +
+                        '<div>' +
+                            '<div class="proy-card-title">' + p.nombre + '</div>' +
+                            (p.descripcion ? '<div class="proy-card-desc" title="' + p.descripcion + '">' + p.descripcion + '</div>' : '') +
+                        '</div>' +
+                        '<div class="proy-card-actions">' +
+                            '<button onclick="openProyectoModal(\'' + p.id + '\')" title="Editar">&#9998;</button>' +
+                            '<button class="delete" onclick="deleteProyecto(\'' + p.id + '\')" title="Eliminar">&#128465;</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="proy-status-bar">' +
+                        '<span class="proy-priority ' + prioridadClass(p.prioridad) + '">' + p.prioridad + '</span>' +
+                        '<span class="proy-estado ' + estadoProyClass(p.estado) + '">' + p.estado + '</span>' +
+                        '<span class="responsable-tag ' + respClass + '" style="font-size:10px;">' + p.responsable + '</span>' +
+                        (p.fecha ? '<span style="font-size:10px;color:var(--gray);margin-left:auto;">&#128197; ' + formatDate(p.fecha) + '</span>' : '') +
+                    '</div>' +
+                    '<div class="proy-progress-bar"><div class="proy-progress-fill" style="width:' + progress + '%"></div></div>' +
+                    '<div class="proy-pendientes">' +
+                        '<div class="proy-pendientes-header">' +
+                            '<span>Pendientes <span class="proy-count">' + donePend + '/' + totalPend + '</span></span>' +
+                            '<button class="proy-add-pendiente" onclick="addPendiente(\'' + p.id + '\')" title="Agregar pendiente">+</button>' +
+                        '</div>' +
+                        '<div id="pend-list-' + p.id + '">' + pendientesHTML + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
         }
 
         // ==========================================
