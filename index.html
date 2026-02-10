@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FYRADRIVE - CRM</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- CRM en tiempo real -->
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -29,6 +30,35 @@
             color: var(--dark);
         }
 
+        /* SYNC INDICATOR */
+        .sync-bar {
+            position: fixed; top: 0; left: 0; right: 0; height: 3px;
+            background: var(--cyan); z-index: 9999;
+            transform: scaleX(0); transform-origin: left;
+            transition: transform 0.3s;
+        }
+        .sync-bar.active { transform: scaleX(1); }
+        .sync-badge {
+            position: fixed; bottom: 20px; right: 20px;
+            padding: 8px 16px; border-radius: 50px;
+            font-size: 11px; font-weight: 700;
+            display: flex; align-items: center; gap: 6px;
+            z-index: 1000; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            transition: all 0.3s;
+        }
+        .sync-badge.online { background: #d1fae5; color: #065f46; }
+        .sync-badge.offline { background: #fecaca; color: #991b1b; }
+        .sync-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .sync-badge.online .sync-dot { background: #10b981; }
+        .sync-badge.offline .sync-dot { background: #ef4444; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
         /* NAV */
         nav {
             display: flex;
@@ -43,14 +73,14 @@
         }
         .logo { font-size: 22px; font-weight: 900; letter-spacing: 0.04em; color: var(--dark); text-decoration: none; }
         .nav-links { display: flex; align-items: center; gap: 24px; }
-        .nav-links a { text-decoration: none; color: #374151; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; transition: color 0.2s; }
+        .nav-links a { text-decoration: none; color: #374151; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; transition: color 0.2s; cursor: pointer; }
         .nav-links a:hover { color: var(--dark); }
         .nav-links a.active { color: var(--cyan); border-bottom: 2px solid var(--cyan); padding-bottom: 2px; }
         .user-badge {
             display: flex; align-items: center; gap: 8px;
             padding: 6px 14px; background: #f0fdf4; border-radius: 50px;
             font-size: 12px; font-weight: 700; color: #065f46;
-            border: 1px solid #d1fae5;
+            border: 1px solid #d1fae5; cursor: pointer;
         }
 
         /* HEADER */
@@ -305,6 +335,21 @@
         .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
         .empty-state p { font-size: 14px; }
 
+        /* LOADING */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.9); display: flex;
+            align-items: center; justify-content: center; z-index: 2000;
+            flex-direction: column; gap: 16px;
+        }
+        .loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid var(--border);
+            border-top-color: var(--cyan); border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         /* FOOTER */
         footer {
             text-align: center; padding: 20px; color: var(--gray);
@@ -328,12 +373,21 @@
 </head>
 <body>
 
+    <!-- LOADING -->
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <div style="font-size:14px;font-weight:700;color:var(--dark);">Conectando a la base de datos...</div>
+    </div>
+
+    <!-- SYNC BAR -->
+    <div class="sync-bar" id="sync-bar"></div>
+
     <!-- NAV -->
     <nav>
         <a href="index.html" class="logo">FYRADRIVE CRM</a>
         <div class="nav-links">
-            <a href="index.html" class="active">VENDEDORES</a>
-            <a href="#" onclick="switchCRMTab('compradores'); this.classList.add('active'); this.previousElementSibling.classList.remove('active'); return false;">COMPRADORES</a>
+            <a class="active" id="nav-vendedores" onclick="switchCRMTab('vendedores')">VENDEDORES</a>
+            <a id="nav-compradores" onclick="switchCRMTab('compradores')">COMPRADORES</a>
         </div>
         <div class="user-badge" id="user-badge" onclick="toggleUser()">
             <span id="user-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
@@ -346,7 +400,7 @@
     <div class="crm-header">
         <div>
             <h1>CRM FYRADRIVE</h1>
-            <p>Seguimiento de clientes vendedores y compradores</p>
+            <p>Seguimiento de clientes vendedores y compradores — <strong>en tiempo real</strong></p>
         </div>
         <div class="header-actions">
             <button class="btn-new" onclick="openModal('vendedor')">+ Nuevo Vendedor</button>
@@ -380,17 +434,15 @@
 
     <!-- TABS -->
     <div class="tabs-bar">
-        <button class="tab-btn active" onclick="switchCRMTab('vendedores')">
+        <button class="tab-btn active" id="tab-btn-vendedores" onclick="switchCRMTab('vendedores')">
             Vendedores <span class="tab-count" id="count-vendedores">0</span>
         </button>
-        <button class="tab-btn" onclick="switchCRMTab('compradores')">
+        <button class="tab-btn" id="tab-btn-compradores" onclick="switchCRMTab('compradores')">
             Compradores <span class="tab-count" id="count-compradores">0</span>
         </button>
     </div>
 
-    <!-- ======================== -->
-    <!-- VENDEDORES TAB           -->
-    <!-- ======================== -->
+    <!-- VENDEDORES TAB -->
     <div id="tab-vendedores">
         <div class="toolbar">
             <div class="toolbar-left">
@@ -423,9 +475,7 @@
         </div>
     </div>
 
-    <!-- ======================== -->
-    <!-- COMPRADORES TAB          -->
-    <!-- ======================== -->
+    <!-- COMPRADORES TAB -->
     <div id="tab-compradores" style="display:none;">
         <div class="toolbar">
             <div class="toolbar-left">
@@ -458,9 +508,7 @@
         </div>
     </div>
 
-    <!-- ======================== -->
-    <!-- MODAL VENDEDOR           -->
-    <!-- ======================== -->
+    <!-- MODAL VENDEDOR -->
     <div class="modal-overlay" id="modal-vendedor">
         <div class="modal">
             <div class="modal-header">
@@ -524,9 +572,7 @@
         </div>
     </div>
 
-    <!-- ======================== -->
-    <!-- MODAL COMPRADOR          -->
-    <!-- ======================== -->
+    <!-- MODAL COMPRADOR -->
     <div class="modal-overlay" id="modal-comprador">
         <div class="modal">
             <div class="modal-header">
@@ -624,22 +670,112 @@
         <span id="notif-text"></span>
     </div>
 
+    <!-- SYNC BADGE -->
+    <div class="sync-badge online" id="sync-badge">
+        <div class="sync-dot"></div>
+        <span id="sync-text">En vivo</span>
+    </div>
+
     <!-- FOOTER -->
     <footer>
-        <p>&copy; 2026 FYRADRIVE CRM &mdash; Sebastian &amp; Mario | Datos guardados localmente</p>
+        <p>&copy; 2026 FYRADRIVE CRM &mdash; Sebastian &amp; Mario | Base de datos en tiempo real</p>
     </footer>
 
     <script>
         // ==========================================
-        // DATA STORE (localStorage for persistence)
+        // CLOUD DATABASE API
         // ==========================================
-        const STORAGE_KEY_V = 'fyra_crm_vendedores';
-        const STORAGE_KEY_C = 'fyra_crm_compradores';
-
-        let vendedores = JSON.parse(localStorage.getItem(STORAGE_KEY_V)) || [];
-        let compradores = JSON.parse(localStorage.getItem(STORAGE_KEY_C)) || [];
+        const API_URL = '/api/db';
+        let vendedores = [];
+        let compradores = [];
         let currentUser = localStorage.getItem('fyra_crm_user') || 'Sebastian';
         let activeFilter = { vendedores: 'todos', compradores: 'todos' };
+        let isConnected = false;
+        let pollInterval = null;
+        let lastDataHash = '';
+
+        // ==========================================
+        // SYNC - Load data from cloud
+        // ==========================================
+        async function loadFromCloud() {
+            try {
+                const resp = await fetch(API_URL);
+                const data = await resp.json();
+                const newHash = JSON.stringify(data);
+
+                if (newHash !== lastDataHash) {
+                    lastDataHash = newHash;
+                    vendedores = data.vendedores || [];
+                    compradores = data.compradores || [];
+                    renderVendedores();
+                    renderCompradores();
+                    updateStats();
+                    flashSync();
+                }
+
+                if (!isConnected) {
+                    isConnected = true;
+                    updateSyncBadge();
+                }
+
+                document.getElementById('loading').classList.add('hidden');
+            } catch (err) {
+                console.error('Error loading:', err);
+                isConnected = false;
+                updateSyncBadge();
+                // Fallback to localStorage
+                vendedores = JSON.parse(localStorage.getItem('fyra_crm_vendedores') || '[]');
+                compradores = JSON.parse(localStorage.getItem('fyra_crm_compradores') || '[]');
+                renderVendedores();
+                renderCompradores();
+                updateStats();
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        async function saveToCloud() {
+            const data = { vendedores, compradores };
+            lastDataHash = JSON.stringify(data);
+
+            // Also save to localStorage as backup
+            localStorage.setItem('fyra_crm_vendedores', JSON.stringify(vendedores));
+            localStorage.setItem('fyra_crm_compradores', JSON.stringify(compradores));
+
+            try {
+                await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                flashSync();
+            } catch (err) {
+                console.error('Error saving:', err);
+                showNotif('Error guardando en la nube', true);
+            }
+        }
+
+        function startPolling() {
+            loadFromCloud();
+            pollInterval = setInterval(loadFromCloud, 3000); // Check every 3 seconds
+        }
+
+        function updateSyncBadge() {
+            const badge = document.getElementById('sync-badge');
+            const text = document.getElementById('sync-text');
+            if (isConnected) {
+                badge.className = 'sync-badge online';
+                text.textContent = 'En vivo';
+            } else {
+                badge.className = 'sync-badge offline';
+                text.textContent = 'Sin conexion';
+            }
+        }
+
+        function flashSync() {
+            const bar = document.getElementById('sync-bar');
+            bar.classList.add('active');
+            setTimeout(() => bar.classList.remove('active'), 500);
+        }
 
         // ==========================================
         // USER TOGGLE
@@ -655,8 +791,10 @@
         // TABS
         // ==========================================
         function switchCRMTab(tab) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+            document.getElementById('tab-btn-vendedores').classList.toggle('active', tab === 'vendedores');
+            document.getElementById('tab-btn-compradores').classList.toggle('active', tab === 'compradores');
+            document.getElementById('nav-vendedores').classList.toggle('active', tab === 'vendedores');
+            document.getElementById('nav-compradores').classList.toggle('active', tab === 'compradores');
             document.getElementById('tab-vendedores').style.display = tab === 'vendedores' ? 'block' : 'none';
             document.getElementById('tab-compradores').style.display = tab === 'compradores' ? 'block' : 'none';
         }
@@ -666,8 +804,7 @@
         // ==========================================
         function filterResp(tab, resp) {
             activeFilter[tab] = resp;
-            // Update filter button UI
-            const toolbar = tab === 'vendedores' ? document.getElementById('tab-vendedores') : document.getElementById('tab-compradores');
+            const toolbar = document.getElementById('tab-' + tab);
             toolbar.querySelectorAll('.filter-btn').forEach(b => {
                 b.classList.toggle('active-filter', b.textContent.trim() === resp || (resp === 'todos' && b.textContent.trim() === 'Todos'));
             });
@@ -736,12 +873,11 @@
 
         function toggleCitaFields() {
             const estado = document.getElementById('c-estado').value;
-            const citaFields = document.getElementById('cita-fields');
-            citaFields.classList.toggle('show', estado === 'Cita Agendada');
+            document.getElementById('cita-fields').classList.toggle('show', estado === 'Cita Agendada');
         }
 
         // ==========================================
-        // SAVE VENDEDOR
+        // SAVE VENDEDOR (Firebase)
         // ==========================================
         function saveVendedor() {
             const nombre = document.getElementById('v-nombre').value.trim();
@@ -758,27 +894,31 @@
                 return;
             }
 
+            const data = { nombre, telefono, auto, seriedad, estado, responsable, notas, updated: Date.now() };
+
             if (editId) {
-                const v = vendedores.find(x => x.id === editId);
-                Object.assign(v, { nombre, telefono, auto, seriedad, estado, responsable, notas, updated: Date.now() });
+                const idx = vendedores.findIndex(x => x.id === editId);
+                if (idx >= 0) {
+                    data.id = editId;
+                    data.created = vendedores[idx].created;
+                    vendedores[idx] = data;
+                }
                 showNotif('Vendedor actualizado');
             } else {
-                vendedores.push({
-                    id: 'V' + Date.now(),
-                    nombre, telefono, auto, seriedad, estado, responsable, notas,
-                    created: Date.now(), updated: Date.now()
-                });
+                data.id = 'V' + Date.now();
+                data.created = Date.now();
+                vendedores.push(data);
                 showNotif('Vendedor agregado');
             }
 
-            saveData();
+            saveToCloud();
             renderVendedores();
             updateStats();
             closeModal('vendedor');
         }
 
         // ==========================================
-        // SAVE COMPRADOR
+        // SAVE COMPRADOR (Firebase)
         // ==========================================
         function saveComprador() {
             const nombre = document.getElementById('c-nombre').value.trim();
@@ -806,14 +946,17 @@
             };
 
             if (editId) {
-                const c = compradores.find(x => x.id === editId);
-                const prevEstado = c.estado;
-                Object.assign(c, data);
+                const idx = compradores.findIndex(x => x.id === editId);
+                const prevEstado = idx >= 0 ? compradores[idx].estado : '';
+                if (idx >= 0) {
+                    data.id = editId;
+                    data.created = compradores[idx].created;
+                    compradores[idx] = data;
+                }
                 showNotif('Comprador actualizado');
 
-                // Send WhatsApp notifications if cita was just agendada
                 if (estado === 'Cita Agendada' && prevEstado !== 'Cita Agendada') {
-                    triggerCitaNotifications(c);
+                    triggerCitaNotifications(data);
                 }
             } else {
                 data.id = 'C' + Date.now();
@@ -826,7 +969,7 @@
                 }
             }
 
-            saveData();
+            saveToCloud();
             renderCompradores();
             updateStats();
             closeModal('comprador');
@@ -847,12 +990,10 @@
                     showNotif('WhatsApp enviado a ' + to);
                 } else {
                     showNotif('Error WhatsApp: ' + (data.error || 'desconocido'), true);
-                    console.error('WhatsApp error:', data);
                 }
                 return data;
             } catch (err) {
                 showNotif('Error de conexion WhatsApp', true);
-                console.error('WhatsApp fetch error:', err);
                 return { success: false };
             }
         }
@@ -861,40 +1002,41 @@
             const fecha = formatDate(c.citaFecha);
             const hora = c.citaHora || 'por confirmar';
 
-            // Message for buyer
             if (c.telComprador || c.telefono) {
                 const tel = c.telComprador || c.telefono;
-                const msg = `Hola ${c.nombre}! Tu cita para ver el ${c.vehiculo} ha sido agendada para el ${fecha} a las ${hora}. Te confirmaremos los detalles. - FYRADRIVE`;
+                const msg = 'Hola ' + c.nombre + '! Tu cita para ver el ' + c.vehiculo + ' ha sido agendada para el ' + fecha + ' a las ' + hora + '. Te confirmaremos los detalles. - FYRADRIVE';
                 await sendWhatsApp(tel, msg);
             }
 
-            // Message for seller/owner
             if (c.telDueno) {
-                const msg = `Hola! Se agendo una cita para tu vehiculo ${c.vehiculo} el ${fecha} a las ${hora}. Un comprador interesado lo visitara. - FYRADRIVE`;
+                const msg = 'Hola! Se agendo una cita para tu vehiculo ' + c.vehiculo + ' el ' + fecha + ' a las ' + hora + '. Un comprador interesado lo visitara. - FYRADRIVE';
                 await sendWhatsApp(c.telDueno, msg);
             }
 
-            // Message for responsable
             if (c.telResponsable) {
-                const msg = `CRM FYRADRIVE: Cita agendada - ${c.nombre} quiere ver ${c.vehiculo} el ${fecha} a las ${hora}. Responsable: ${c.responsable}`;
+                const msg = 'CRM FYRADRIVE: Cita agendada - ' + c.nombre + ' quiere ver ' + c.vehiculo + ' el ' + fecha + ' a las ' + hora + '. Responsable: ' + c.responsable;
                 await sendWhatsApp(c.telResponsable, msg);
             }
         }
 
         // ==========================================
-        // DELETE
+        // DELETE (Firebase)
         // ==========================================
         function deleteVendedor(id) {
             if (!confirm('Eliminar este vendedor?')) return;
             vendedores = vendedores.filter(x => x.id !== id);
-            saveData(); renderVendedores(); updateStats();
+            saveToCloud();
+            renderVendedores();
+            updateStats();
             showNotif('Vendedor eliminado');
         }
 
         function deleteComprador(id) {
             if (!confirm('Eliminar este comprador?')) return;
             compradores = compradores.filter(x => x.id !== id);
-            saveData(); renderCompradores(); updateStats();
+            saveToCloud();
+            renderCompradores();
+            updateStats();
             showNotif('Comprador eliminado');
         }
 
@@ -903,7 +1045,8 @@
         // ==========================================
         function renderVendedores() {
             const tbody = document.getElementById('vendedores-tbody');
-            const search = document.getElementById('search-vendedores').value.toLowerCase();
+            const searchEl = document.getElementById('search-vendedores');
+            const search = searchEl ? searchEl.value.toLowerCase() : '';
             const filter = activeFilter.vendedores;
 
             let data = vendedores.filter(v => {
@@ -914,36 +1057,20 @@
 
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#128203;</div><p>No hay vendedores. Agrega uno nuevo.</p></div></td></tr>';
+                document.getElementById('count-vendedores').textContent = vendedores.length;
                 return;
             }
 
-            tbody.innerHTML = data.map(v => `
-                <tr>
-                    <td>
-                        <div class="client-name">
-                            <div class="client-avatar" style="background:${avatarColor(v.nombre)}">${initials(v.nombre)}</div>
-                            ${v.nombre}
-                        </div>
-                    </td>
-                    <td>
-                        <div class="client-phone">
-                            ${v.telefono || '-'}
-                            ${v.telefono ? `<a href="https://wa.me/52${v.telefono}" target="_blank" title="WhatsApp">&#128172;</a>` : ''}
-                        </div>
-                    </td>
-                    <td style="font-weight:600;">${v.auto}</td>
-                    <td><span class="badge badge-${v.seriedad.toLowerCase()}">${v.seriedad}</span></td>
-                    <td><span class="badge badge-${estadoVClass(v.estado)}">${v.estado}</span></td>
-                    <td><span class="responsable-tag resp-${v.responsable.toLowerCase()}">${v.responsable === 'Sebastian' ? '&#128156;' : '&#128153;'} ${v.responsable}</span></td>
-                    <td><div class="description-cell" title="${v.notas || ''}">${v.notas || '-'}</div></td>
-                    <td>
-                        <div class="actions-cell">
-                            <button class="btn-icon" onclick="openModal('vendedor','${v.id}')" title="Editar">&#9998;</button>
-                            <button class="btn-icon delete" onclick="deleteVendedor('${v.id}')" title="Eliminar">&#128465;</button>
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = data.map(v => '<tr>' +
+                '<td><div class="client-name"><div class="client-avatar" style="background:' + avatarColor(v.nombre) + '">' + initials(v.nombre) + '</div>' + v.nombre + '</div></td>' +
+                '<td><div class="client-phone">' + (v.telefono || '-') + (v.telefono ? ' <a href="https://wa.me/52' + v.telefono + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
+                '<td style="font-weight:600;">' + v.auto + '</td>' +
+                '<td><span class="badge badge-' + v.seriedad.toLowerCase() + '">' + v.seriedad + '</span></td>' +
+                '<td><span class="badge badge-' + estadoVClass(v.estado) + '">' + v.estado + '</span></td>' +
+                '<td><span class="responsable-tag resp-' + v.responsable.toLowerCase() + '">' + (v.responsable === 'Sebastian' ? '&#128156;' : '&#128153;') + ' ' + v.responsable + '</span></td>' +
+                '<td><div class="description-cell" title="' + (v.notas || '') + '">' + (v.notas || '-') + '</div></td>' +
+                '<td><div class="actions-cell"><button class="btn-icon" onclick="openModal(\'vendedor\',\'' + v.id + '\')" title="Editar">&#9998;</button><button class="btn-icon delete" onclick="deleteVendedor(\'' + v.id + '\')" title="Eliminar">&#128465;</button></div></td>' +
+                '</tr>').join('');
 
             document.getElementById('count-vendedores').textContent = vendedores.length;
         }
@@ -953,7 +1080,8 @@
         // ==========================================
         function renderCompradores() {
             const tbody = document.getElementById('compradores-tbody');
-            const search = document.getElementById('search-compradores').value.toLowerCase();
+            const searchEl = document.getElementById('search-compradores');
+            const search = searchEl ? searchEl.value.toLowerCase() : '';
             const filter = activeFilter.compradores;
 
             let data = compradores.filter(c => {
@@ -964,36 +1092,20 @@
 
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">&#128100;</div><p>No hay compradores. Agrega uno nuevo.</p></div></td></tr>';
+                document.getElementById('count-compradores').textContent = compradores.length;
                 return;
             }
 
-            tbody.innerHTML = data.map(c => `
-                <tr>
-                    <td>
-                        <div class="client-name">
-                            <div class="client-avatar" style="background:${avatarColor(c.nombre)}">${initials(c.nombre)}</div>
-                            ${c.nombre}
-                        </div>
-                    </td>
-                    <td>
-                        <div class="client-phone">
-                            ${c.telefono || '-'}
-                            ${c.telefono ? `<a href="https://wa.me/52${c.telefono}" target="_blank" title="WhatsApp">&#128172;</a>` : ''}
-                        </div>
-                    </td>
-                    <td style="font-weight:600;">${c.vehiculo}</td>
-                    <td><span class="badge badge-${estadoCClass(c.estado)}">${c.estado}</span></td>
-                    <td><span class="responsable-tag resp-${c.responsable.toLowerCase()}">${c.responsable === 'Sebastian' ? '&#128156;' : '&#128153;'} ${c.responsable}</span></td>
-                    <td>${c.estado === 'Cita Agendada' && c.citaFecha ? `<span style="font-size:12px;font-weight:600;">&#128197; ${formatDate(c.citaFecha)} ${c.citaHora || ''}</span>` : '<span style="font-size:12px;color:var(--gray);">-</span>'}</td>
-                    <td><div class="description-cell" title="${c.notas || ''}">${c.notas || '-'}</div></td>
-                    <td>
-                        <div class="actions-cell">
-                            <button class="btn-icon" onclick="openModal('comprador','${c.id}')" title="Editar">&#9998;</button>
-                            <button class="btn-icon delete" onclick="deleteComprador('${c.id}')" title="Eliminar">&#128465;</button>
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = data.map(c => '<tr>' +
+                '<td><div class="client-name"><div class="client-avatar" style="background:' + avatarColor(c.nombre) + '">' + initials(c.nombre) + '</div>' + c.nombre + '</div></td>' +
+                '<td><div class="client-phone">' + (c.telefono || '-') + (c.telefono ? ' <a href="https://wa.me/52' + c.telefono + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
+                '<td style="font-weight:600;">' + c.vehiculo + '</td>' +
+                '<td><span class="badge badge-' + estadoCClass(c.estado) + '">' + c.estado + '</span></td>' +
+                '<td><span class="responsable-tag resp-' + c.responsable.toLowerCase() + '">' + (c.responsable === 'Sebastian' ? '&#128156;' : '&#128153;') + ' ' + c.responsable + '</span></td>' +
+                '<td>' + (c.estado === 'Cita Agendada' && c.citaFecha ? '<span style="font-size:12px;font-weight:600;">&#128197; ' + formatDate(c.citaFecha) + ' ' + (c.citaHora || '') + '</span>' : '<span style="font-size:12px;color:var(--gray);">-</span>') + '</td>' +
+                '<td><div class="description-cell" title="' + (c.notas || '') + '">' + (c.notas || '-') + '</div></td>' +
+                '<td><div class="actions-cell"><button class="btn-icon" onclick="openModal(\'comprador\',\'' + c.id + '\')" title="Editar">&#9998;</button><button class="btn-icon delete" onclick="deleteComprador(\'' + c.id + '\')" title="Eliminar">&#128465;</button></div></td>' +
+                '</tr>').join('');
 
             document.getElementById('count-compradores').textContent = compradores.length;
         }
@@ -1009,37 +1121,29 @@
         }
 
         // ==========================================
-        // PERSISTENCE
-        // ==========================================
-        function saveData() {
-            localStorage.setItem(STORAGE_KEY_V, JSON.stringify(vendedores));
-            localStorage.setItem(STORAGE_KEY_C, JSON.stringify(compradores));
-        }
-
-        // ==========================================
         // UTILITIES
         // ==========================================
         function initials(name) {
-            return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+            return name.split(' ').map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
         }
         function avatarColor(name) {
-            const colors = ['#7c3aed','#0891b2','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#8b5cf6','#06b6d4','#84cc16'];
-            let hash = 0;
-            for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            var colors = ['#7c3aed','#0891b2','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#8b5cf6','#06b6d4','#84cc16'];
+            var hash = 0;
+            for (var i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
             return colors[Math.abs(hash) % colors.length];
         }
         function formatDate(dateStr) {
             if (!dateStr) return '';
-            const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-            const d = new Date(dateStr + 'T00:00:00');
+            var months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+            var d = new Date(dateStr + 'T00:00:00');
             return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
         }
         function estadoVClass(estado) {
-            const map = { 'Carece Informacion': 'carece', 'Publicar Fyra': 'publicar', 'Publicado': 'publicado' };
+            var map = { 'Carece Informacion': 'carece', 'Publicar Fyra': 'publicar', 'Publicado': 'publicado' };
             return map[estado] || 'info';
         }
         function estadoCClass(estado) {
-            const map = {
+            var map = {
                 'Previa Agendacion': 'previa', 'Cita Agendada': 'agendada',
                 'Cita Concretada': 'concretada', 'Tramite Bancario': 'tramite',
                 'Separado': 'separado', 'Vendido': 'vendido', 'Venta Fallida': 'fallida'
@@ -1047,21 +1151,19 @@
             return map[estado] || 'info';
         }
         function showNotif(text, isError) {
-            const n = document.getElementById('notification');
+            var n = document.getElementById('notification');
             document.getElementById('notif-icon').innerHTML = isError ? '&#9888;' : '&#9989;';
             document.getElementById('notif-text').textContent = text;
             n.style.background = isError ? '#ef4444' : '#111827';
             n.classList.add('show');
-            setTimeout(() => n.classList.remove('show'), 2500);
+            setTimeout(function() { n.classList.remove('show'); }, 2500);
         }
 
         // ==========================================
         // INIT
         // ==========================================
         document.getElementById('user-name-display').textContent = currentUser;
-        renderVendedores();
-        renderCompradores();
-        updateStats();
+        startPolling();
     </script>
 
 </body>
