@@ -1246,26 +1246,17 @@
 
             if (editId) {
                 const idx = compradores.findIndex(x => x.id === editId);
-                const prevEstado = idx >= 0 ? compradores[idx].estado : '';
                 if (idx >= 0) {
                     data.id = editId;
                     data.created = compradores[idx].created;
                     compradores[idx] = data;
                 }
                 showNotif('Comprador actualizado');
-
-                if (estado === 'Cita Agendada' && prevEstado !== 'Cita Agendada') {
-                    triggerCitaNotifications(data);
-                }
             } else {
                 data.id = 'C' + Date.now();
                 data.created = Date.now();
                 compradores.push(data);
                 showNotif('Comprador agregado');
-
-                if (estado === 'Cita Agendada') {
-                    triggerCitaNotifications(data);
-                }
             }
 
             saveToCloud();
@@ -1274,49 +1265,6 @@
             closeModal('comprador');
         }
 
-        // ==========================================
-        // WHATSAPP NOTIFICATIONS (TWILIO API)
-        // ==========================================
-        async function sendWhatsApp(to, message) {
-            try {
-                const resp = await fetch('/api/whatsapp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: '52' + to.replace(/\D/g, ''), message })
-                });
-                const data = await resp.json();
-                if (data.success) {
-                    showNotif('WhatsApp enviado a ' + to);
-                } else {
-                    showNotif('Error WhatsApp: ' + (data.error || 'desconocido'), true);
-                }
-                return data;
-            } catch (err) {
-                showNotif('Error de conexion WhatsApp', true);
-                return { success: false };
-            }
-        }
-
-        async function triggerCitaNotifications(c) {
-            const fecha = formatDate(c.citaFecha);
-            const hora = c.citaHora || 'por confirmar';
-
-            if (c.telComprador || c.telefono) {
-                const tel = c.telComprador || c.telefono;
-                const msg = 'Hola ' + c.nombre + '! Tu cita para ver el ' + c.vehiculo + ' ha sido agendada para el ' + fecha + ' a las ' + hora + '. Te confirmaremos los detalles. - FYRADRIVE';
-                await sendWhatsApp(tel, msg);
-            }
-
-            if (c.telDueno) {
-                const msg = 'Hola! Se agendo una cita para tu vehiculo ' + c.vehiculo + ' el ' + fecha + ' a las ' + hora + '. Un comprador interesado lo visitara. - FYRADRIVE';
-                await sendWhatsApp(c.telDueno, msg);
-            }
-
-            if (c.telResponsable) {
-                const msg = 'CRM FYRADRIVE: Cita agendada - ' + c.nombre + ' quiere ver ' + c.vehiculo + ' el ' + fecha + ' a las ' + hora + '. Responsable: ' + c.responsable;
-                await sendWhatsApp(c.telResponsable, msg);
-            }
-        }
 
         // ==========================================
         // DELETE (Firebase)
