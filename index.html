@@ -6,6 +6,7 @@
     <title>FYRADRIVE - CRM</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- CRM en tiempo real -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -356,6 +357,134 @@
             font-size: 11px; border-top: 1px solid var(--border); background: var(--white);
         }
 
+        /* ======================== */
+        /* COTIZADOR STYLES        */
+        /* ======================== */
+        .cot-container { padding: 12px 32px 32px; max-width: 560px; margin: 0 auto; }
+        .cot-card {
+            background: var(--white); border-radius: 14px; padding: 14px;
+            margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        .cot-card-title {
+            font-size: 12px; font-weight: 700; color: var(--cyan);
+            margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+        }
+        .cot-card-title::before {
+            content: ''; width: 3px; height: 14px; background: var(--cyan); border-radius: 2px;
+        }
+        .cot-input-group { margin-bottom: 12px; }
+        .cot-input-group label {
+            display: block; font-size: 11px; color: var(--gray); margin-bottom: 4px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .cot-input-group input, .cot-input-group select {
+            width: 100%; padding: 12px 14px; font-size: 16px;
+            border: 2px solid var(--border); border-radius: 10px;
+            background: var(--bg); color: var(--dark); font-weight: 600;
+            font-family: 'Inter', sans-serif;
+        }
+        .cot-input-group input:focus, .cot-input-group select:focus {
+            outline: none; border-color: var(--cyan); background: white;
+        }
+        .cot-input-group select {
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6,9 12,15 18,9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px;
+        }
+        .cot-input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .cot-enganche-box {
+            background: linear-gradient(135deg, rgba(8,145,178,0.08), rgba(6,182,212,0.08));
+            border-radius: 10px; padding: 12px; margin-top: 6px;
+        }
+        .cot-enganche-label { font-size: 11px; font-weight: 600; color: var(--cyan); margin-bottom: 10px; }
+        .cot-enganche-display {
+            display: flex; justify-content: space-between; align-items: center;
+            background: white; padding: 10px 14px; border-radius: 8px; margin-top: 10px;
+        }
+        .cot-enganche-display .pct { font-size: 18px; font-weight: 700; color: var(--cyan); }
+        .cot-enganche-display .amount { font-size: 15px; font-weight: 600; }
+        .cot-plazo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+        .cot-plazo-btn {
+            padding: 14px 6px; background: var(--bg); border: 2px solid var(--border);
+            border-radius: 10px; font-size: 14px; font-weight: 700; color: var(--dark);
+            cursor: pointer; text-align: center; font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+        .cot-plazo-btn:active { transform: scale(0.95); }
+        .cot-plazo-btn.active {
+            background: linear-gradient(135deg, var(--cyan), #06b6d4);
+            border-color: var(--cyan); color: white;
+        }
+        .cot-plazo-btn.disabled { opacity: 0.3; pointer-events: none; }
+        .cot-resultado {
+            background: linear-gradient(135deg, var(--green), #34d399);
+            border-radius: 16px; padding: 20px; text-align: center; color: white;
+            box-shadow: 0 6px 20px rgba(16,185,129,0.25); margin-bottom: 12px;
+        }
+        .cot-resultado-header {
+            display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px;
+        }
+        .cot-check {
+            width: 28px; height: 28px; background: white; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .cot-check svg { width: 18px; height: 18px; stroke: var(--green); }
+        .cot-resultado-label {
+            font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .cot-resultado-monto { font-size: 38px; font-weight: 800; margin: 6px 0; }
+        .cot-resultado-nota { font-size: 11px; opacity: 0.9; }
+        .cot-desglose-item {
+            display: flex; justify-content: space-between; padding: 8px 0;
+            border-bottom: 1px solid var(--border); font-size: 13px;
+        }
+        .cot-desglose-item:last-child { border-bottom: none; }
+        .cot-desglose-item .label { color: var(--gray); }
+        .cot-desglose-item .value { font-weight: 600; }
+        .cot-desglose-item.total {
+            background: linear-gradient(135deg, rgba(8,145,178,0.1), rgba(6,182,212,0.1));
+            margin: 10px -14px -14px; padding: 12px 14px;
+            border-radius: 0 0 14px 14px; border-bottom: none;
+        }
+        .cot-desglose-item.total .label { font-weight: 700; color: var(--cyan); }
+        .cot-desglose-item.total .value { font-size: 16px; color: var(--cyan); }
+        .cot-resumen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .cot-resumen-box {
+            background: var(--bg); border-radius: 10px; padding: 12px; text-align: center;
+        }
+        .cot-resumen-box .label {
+            font-size: 9px; color: var(--gray); text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 3px;
+        }
+        .cot-resumen-box .value { font-size: 14px; font-weight: 700; }
+        .cot-resumen-box .value.accent { color: var(--cyan); }
+        .cot-reglas-info {
+            background: #fef3c7; border-radius: 8px; padding: 8px 12px;
+            font-size: 10px; color: #92400e; margin-bottom: 12px;
+        }
+        .cot-warning {
+            background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+            padding: 8px 12px; font-size: 11px; color: #dc2626; margin-top: 8px; display: none;
+        }
+        .cot-warning.show { display: block; }
+        .cot-btn-pdf {
+            width: 100%; padding: 16px;
+            background: linear-gradient(135deg, var(--green), #34d399);
+            border: none; border-radius: 12px; color: white; font-size: 15px; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            gap: 10px; box-shadow: 0 4px 12px rgba(16,185,129,0.3); margin-bottom: 12px;
+            font-family: 'Inter', sans-serif;
+        }
+        .cot-btn-pdf:active { transform: scale(0.98); }
+        .cot-btn-pdf svg { width: 20px; height: 20px; }
+        .cot-header-bar {
+            background: linear-gradient(135deg, var(--cyan), #06b6d4);
+            padding: 16px 32px; text-align: center; display: none;
+        }
+        .cot-header-bar h2 { color: white; font-size: 20px; font-weight: 800; letter-spacing: 2px; }
+        .cot-header-bar p { color: rgba(255,255,255,0.9); font-size: 11px; margin-top: 2px; }
+
         /* RESPONSIVE */
         @media (max-width: 768px) {
             nav { padding: 12px 16px; }
@@ -388,6 +517,7 @@
         <div class="nav-links">
             <a class="active" id="nav-vendedores" onclick="switchCRMTab('vendedores')">VENDEDORES</a>
             <a id="nav-compradores" onclick="switchCRMTab('compradores')">COMPRADORES</a>
+            <a id="nav-cotizador" onclick="switchCRMTab('cotizador')">COTIZADOR</a>
         </div>
         <div class="user-badge" id="user-badge" onclick="toggleUser()">
             <span id="user-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
@@ -439,6 +569,9 @@
         </button>
         <button class="tab-btn" id="tab-btn-compradores" onclick="switchCRMTab('compradores')">
             Compradores <span class="tab-count" id="count-compradores">0</span>
+        </button>
+        <button class="tab-btn" id="tab-btn-cotizador" onclick="switchCRMTab('cotizador')">
+            Cotizador
         </button>
     </div>
 
@@ -505,6 +638,164 @@
                 </thead>
                 <tbody id="compradores-tbody"></tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- ======================== -->
+    <!-- COTIZADOR TAB            -->
+    <!-- ======================== -->
+    <div id="tab-cotizador" style="display:none;">
+        <div class="cot-header-bar" id="cot-pdf-header">
+            <h2>FYRADRIVE</h2>
+            <p>Cotizador de Financiamiento &bull; Tasa 15.99%</p>
+        </div>
+        <div class="cot-container" id="cot-content">
+            <div class="cot-card">
+                <div class="cot-card-title">DATOS DEL VEHICULO</div>
+                <div class="cot-reglas-info">
+                    &#128203; <b>2021+:</b> Min 25%, Max 60m | <b>2018-20:</b> Min 35%, Max 48m
+                </div>
+                <div class="cot-input-group cot-no-pdf">
+                    <label>Marca y Modelo</label>
+                    <input type="text" id="cot-carName" value="Tesla Model Y Performance">
+                </div>
+                <div class="cot-desglose-item" id="cot-carNameDisplay" style="display:none; padding: 12px 0;">
+                    <span class="label">Vehiculo</span>
+                    <span class="value" id="cot-carNamePDF">Tesla Model Y Performance</span>
+                </div>
+                <div class="cot-input-row cot-no-pdf">
+                    <div class="cot-input-group">
+                        <label>Ano</label>
+                        <select id="cot-carYear">
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                            <option value="2023" selected>2023</option>
+                            <option value="2022">2022</option>
+                            <option value="2021">2021</option>
+                            <option value="2020">2020</option>
+                            <option value="2019">2019</option>
+                            <option value="2018">2018</option>
+                        </select>
+                    </div>
+                    <div class="cot-input-group">
+                        <label>Precio ($)</label>
+                        <input type="tel" id="cot-carPrice" value="590000" inputmode="numeric">
+                    </div>
+                </div>
+                <div class="cot-enganche-box cot-no-pdf">
+                    <div class="cot-enganche-label">&#128179; Enganche — <span id="cot-engancheRule">Minimo 25%</span></div>
+                    <div class="cot-input-row">
+                        <div class="cot-input-group" style="margin-bottom:0">
+                            <label>Monto ($)</label>
+                            <input type="tel" id="cot-enganchePesos" inputmode="numeric" value="147500">
+                        </div>
+                        <div class="cot-input-group" style="margin-bottom:0">
+                            <label>Porcentaje (%)</label>
+                            <input type="tel" id="cot-enganchePct" inputmode="decimal" value="25">
+                        </div>
+                    </div>
+                    <div class="cot-enganche-display">
+                        <span class="pct" id="cot-engancheDisplayPct">25.00%</span>
+                        <span class="amount" id="cot-engancheDisplayAmount">$147,500</span>
+                    </div>
+                    <div class="cot-warning" id="cot-engancheWarning">
+                        &#9888;&#65039; El enganche minimo es <b id="cot-minEnganche">25%</b>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cot-card cot-no-pdf">
+                <div class="cot-card-title">PLAZO (MESES)</div>
+                <div class="cot-plazo-grid">
+                    <div class="cot-plazo-btn" data-plazo="12" onclick="cotSetPlazo(12)">12</div>
+                    <div class="cot-plazo-btn" data-plazo="24" onclick="cotSetPlazo(24)">24</div>
+                    <div class="cot-plazo-btn" data-plazo="36" onclick="cotSetPlazo(36)">36</div>
+                    <div class="cot-plazo-btn" data-plazo="48" onclick="cotSetPlazo(48)">48</div>
+                    <div class="cot-plazo-btn active" data-plazo="60" onclick="cotSetPlazo(60)">60</div>
+                </div>
+            </div>
+
+            <div class="cot-resultado">
+                <div class="cot-resultado-header">
+                    <div class="cot-check">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <span class="cot-resultado-label">Mensualidad</span>
+                </div>
+                <div class="cot-resultado-monto" id="cot-mensualidad">$0</div>
+                <div class="cot-resultado-nota">Pago mensual fijo a <span id="cot-plazoTexto">60</span> meses</div>
+            </div>
+
+            <div class="cot-card">
+                <div class="cot-resumen-grid">
+                    <div class="cot-resumen-box">
+                        <div class="label">Precio Vehiculo</div>
+                        <div class="value" id="cot-precioDisplay">$590,000</div>
+                    </div>
+                    <div class="cot-resumen-box">
+                        <div class="label">Enganche</div>
+                        <div class="value accent" id="cot-engancheResumen">$147,500</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cot-card">
+                <div class="cot-card-title">DESGLOSE</div>
+                <div class="cot-desglose-item">
+                    <span class="label">Financiamiento Vehiculo</span>
+                    <span class="value" id="cot-financiamiento">$0</span>
+                </div>
+                <div class="cot-desglose-item">
+                    <span class="label">+ Seguro Vida/Desempleo</span>
+                    <span class="value">$1,800</span>
+                </div>
+                <div class="cot-desglose-item">
+                    <span class="label">+ IVA 16%</span>
+                    <span class="value" id="cot-iva">$0</span>
+                </div>
+                <div class="cot-desglose-item total">
+                    <span class="label">Monto a Financiar</span>
+                    <span class="value" id="cot-montoFinanciar">$0</span>
+                </div>
+            </div>
+
+            <div class="cot-card">
+                <div class="cot-resumen-grid">
+                    <div class="cot-resumen-box">
+                        <div class="label">Comision Apertura</div>
+                        <div class="value" id="cot-comision">$0</div>
+                    </div>
+                    <div class="cot-resumen-box">
+                        <div class="label">Desembolso Inicial</div>
+                        <div class="value accent" id="cot-desembolso">$0</div>
+                    </div>
+                </div>
+                <div class="cot-resumen-grid" style="margin-top:10px">
+                    <div class="cot-resumen-box">
+                        <div class="label">Tasa Anual</div>
+                        <div class="value">15.99%</div>
+                    </div>
+                    <div class="cot-resumen-box">
+                        <div class="label">Total a Pagar</div>
+                        <div class="value" id="cot-totalPagar">$0</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="cot-btn-pdf cot-no-pdf" onclick="cotDescargarPDF()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 10v6m0 0l-3-3m3 3l3-3"></path>
+                    <path d="M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"></path>
+                </svg>
+                Descargar PDF
+            </button>
+
+            <div style="text-align:center;padding:12px;font-size:10px;color:var(--gray);">
+                CAT 25.6% sin IVA &bull; Cotizacion informativa<br>
+                Fyradrive &copy; 2026 | Monterrey, N.L.
+            </div>
         </div>
     </div>
 
@@ -793,10 +1084,18 @@
         function switchCRMTab(tab) {
             document.getElementById('tab-btn-vendedores').classList.toggle('active', tab === 'vendedores');
             document.getElementById('tab-btn-compradores').classList.toggle('active', tab === 'compradores');
+            document.getElementById('tab-btn-cotizador').classList.toggle('active', tab === 'cotizador');
             document.getElementById('nav-vendedores').classList.toggle('active', tab === 'vendedores');
             document.getElementById('nav-compradores').classList.toggle('active', tab === 'compradores');
+            document.getElementById('nav-cotizador').classList.toggle('active', tab === 'cotizador');
             document.getElementById('tab-vendedores').style.display = tab === 'vendedores' ? 'block' : 'none';
             document.getElementById('tab-compradores').style.display = tab === 'compradores' ? 'block' : 'none';
+            document.getElementById('tab-cotizador').style.display = tab === 'cotizador' ? 'block' : 'none';
+
+            // Show/hide CRM-only sections
+            var isCot = tab === 'cotizador';
+            document.querySelector('.crm-header').style.display = isCot ? 'none' : 'flex';
+            document.querySelector('.stats-row').style.display = isCot ? 'none' : 'flex';
         }
 
         // ==========================================
@@ -1158,6 +1457,174 @@
             n.classList.add('show');
             setTimeout(function() { n.classList.remove('show'); }, 2500);
         }
+
+        // ==========================================
+        // COTIZADOR - FORMULAS IDENTICAS
+        // ==========================================
+        var COT_TASA_ANUAL = 0.1599;
+        var COT_TASA_MENSUAL = COT_TASA_ANUAL / 12;
+        var COT_SEGURO_VIDA = 1800;
+        var COT_COMISION = 0.0201;
+        var COT_IVA = 0.16;
+        var COT_DESCUENTO = 400;
+
+        var cotReglas = {
+            2025: { min: 25, max: 60 },
+            2024: { min: 25, max: 60 },
+            2023: { min: 25, max: 60 },
+            2022: { min: 25, max: 60 },
+            2021: { min: 25, max: 60 },
+            2020: { min: 35, max: 48 },
+            2019: { min: 35, max: 48 },
+            2018: { min: 35, max: 48 }
+        };
+
+        var cotState = {
+            precio: 590000,
+            enganche: 147500,
+            plazo: 60,
+            year: 2023
+        };
+
+        function cotFormatMoney(n) {
+            return '$' + Math.round(n).toLocaleString('en-US');
+        }
+
+        function cotFormatMoney2(n) {
+            return '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        function cotSetPlazo(p) {
+            var r = cotReglas[cotState.year];
+            if (p > r.max) return;
+            cotState.plazo = p;
+            cotUpdatePlazoBtns();
+            cotCalcular();
+        }
+
+        function cotUpdatePlazoBtns() {
+            var r = cotReglas[cotState.year];
+            document.querySelectorAll('.cot-plazo-btn').forEach(function(btn) {
+                var p = parseInt(btn.dataset.plazo);
+                btn.classList.remove('active', 'disabled');
+                if (p > r.max) {
+                    btn.classList.add('disabled');
+                } else if (p === cotState.plazo) {
+                    btn.classList.add('active');
+                }
+            });
+        }
+
+        function cotUpdateEngancheDisplay() {
+            var pct = (cotState.enganche / cotState.precio) * 100;
+            document.getElementById('cot-engancheDisplayPct').textContent = pct.toFixed(2) + '%';
+            document.getElementById('cot-engancheDisplayAmount').textContent = cotFormatMoney(cotState.enganche);
+            document.getElementById('cot-engancheResumen').textContent = cotFormatMoney(cotState.enganche);
+
+            var r = cotReglas[cotState.year];
+            var warning = document.getElementById('cot-engancheWarning');
+            document.getElementById('cot-minEnganche').textContent = r.min + '%';
+
+            if (pct < r.min) {
+                warning.classList.add('show');
+            } else {
+                warning.classList.remove('show');
+            }
+        }
+
+        function cotCalcular() {
+            var precio = cotState.precio;
+            var enganche = cotState.enganche;
+            var plazo = cotState.plazo;
+
+            var financiamiento = precio - enganche;
+            var subtotal = financiamiento + COT_SEGURO_VIDA;
+            var iva = subtotal * COT_IVA;
+            var montoFinanciar = subtotal + iva;
+
+            var r = COT_TASA_MENSUAL;
+            var n = plazo;
+            var mensualidad = montoFinanciar * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+            mensualidad = mensualidad - COT_DESCUENTO;
+
+            var comision = precio * COT_COMISION;
+            var desembolso = enganche + comision;
+            var total = mensualidad * plazo;
+
+            document.getElementById('cot-mensualidad').textContent = cotFormatMoney2(mensualidad);
+            document.getElementById('cot-plazoTexto').textContent = plazo;
+            document.getElementById('cot-precioDisplay').textContent = cotFormatMoney(precio);
+            document.getElementById('cot-financiamiento').textContent = cotFormatMoney(financiamiento);
+            document.getElementById('cot-iva').textContent = cotFormatMoney(iva);
+            document.getElementById('cot-montoFinanciar').textContent = cotFormatMoney(montoFinanciar);
+            document.getElementById('cot-comision').textContent = cotFormatMoney(comision);
+            document.getElementById('cot-desembolso').textContent = cotFormatMoney(desembolso);
+            document.getElementById('cot-totalPagar').textContent = cotFormatMoney(total);
+
+            document.getElementById('cot-carNamePDF').textContent = document.getElementById('cot-carName').value + ' ' + cotState.year;
+
+            cotUpdateEngancheDisplay();
+        }
+
+        function cotDescargarPDF() {
+            var elemento = document.getElementById('tab-cotizador');
+            var nombre = document.getElementById('cot-carName').value.replace(/[^a-zA-Z0-9]/g, '_');
+
+            document.querySelectorAll('.cot-no-pdf').forEach(function(el) { el.style.display = 'none'; });
+            document.getElementById('cot-carNameDisplay').style.display = 'flex';
+            document.getElementById('cot-pdf-header').style.display = 'block';
+
+            var opciones = {
+                margin: 5,
+                filename: 'Cotizacion_' + nombre + '.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opciones).from(elemento).save().then(function() {
+                document.querySelectorAll('.cot-no-pdf').forEach(function(el) { el.style.display = ''; });
+                document.getElementById('cot-carNameDisplay').style.display = 'none';
+                document.getElementById('cot-pdf-header').style.display = 'none';
+            });
+        }
+
+        // Cotizador Events
+        document.getElementById('cot-carPrice').addEventListener('input', function() {
+            cotState.precio = parseInt(this.value.replace(/\D/g, '')) || 0;
+            var pct = parseFloat(document.getElementById('cot-enganchePct').value) || 25;
+            cotState.enganche = cotState.precio * (pct / 100);
+            document.getElementById('cot-enganchePesos').value = Math.round(cotState.enganche);
+            cotCalcular();
+        });
+
+        document.getElementById('cot-enganchePesos').addEventListener('input', function() {
+            cotState.enganche = parseInt(this.value.replace(/\D/g, '')) || 0;
+            var pct = (cotState.enganche / cotState.precio) * 100;
+            document.getElementById('cot-enganchePct').value = pct.toFixed(1);
+            cotCalcular();
+        });
+
+        document.getElementById('cot-enganchePct').addEventListener('input', function() {
+            var pct = parseFloat(this.value) || 0;
+            cotState.enganche = cotState.precio * (pct / 100);
+            document.getElementById('cot-enganchePesos').value = Math.round(cotState.enganche);
+            cotCalcular();
+        });
+
+        document.getElementById('cot-carYear').addEventListener('change', function() {
+            cotState.year = parseInt(this.value);
+            var r = cotReglas[cotState.year];
+            document.getElementById('cot-engancheRule').textContent = 'Minimo ' + r.min + '%';
+            if (cotState.plazo > r.max) cotState.plazo = r.max;
+            cotUpdatePlazoBtns();
+            cotCalcular();
+        });
+
+        document.getElementById('cot-carName').addEventListener('input', cotCalcular);
+
+        // Init cotizador
+        cotCalcular();
 
         // ==========================================
         // INIT
