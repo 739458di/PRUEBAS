@@ -553,8 +553,88 @@
         .cal-day-col:last-child { border-right: none; }
         .cal-hour-slot {
             height: 60px; border-bottom: 1px solid #f5f5f4; position: relative;
+            cursor: pointer;
         }
-        .cal-hour-slot:hover { background: rgba(8,145,178,0.03); }
+        .cal-hour-slot:hover { background: rgba(8,145,178,0.06); }
+        .cal-hour-slot:active { background: rgba(8,145,178,0.12); }
+        /* Quick-create popup */
+        .cal-popup {
+            position: fixed; background: var(--white); border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.2); z-index: 1100;
+            width: 320px; overflow: hidden; display: none;
+            animation: calPopIn 0.15s ease-out;
+        }
+        @keyframes calPopIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .cal-popup.show { display: block; }
+        .cal-popup-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 16px; border-bottom: 1px solid var(--border);
+        }
+        .cal-popup-close {
+            width: 28px; height: 28px; border: none; background: #f3f4f6;
+            border-radius: 6px; cursor: pointer; font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .cal-popup-body { padding: 14px 16px; }
+        .cal-popup-title-input {
+            width: 100%; border: none; outline: none; font-size: 18px;
+            font-weight: 700; font-family: 'Inter', sans-serif;
+            color: var(--dark); padding: 0; margin-bottom: 14px;
+        }
+        .cal-popup-title-input::placeholder { color: var(--gray-light); }
+        .cal-popup-row {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+            font-size: 12px; color: var(--gray);
+        }
+        .cal-popup-row .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+        .cal-popup-row input, .cal-popup-row select {
+            padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+            font-size: 12px; font-family: 'Inter', sans-serif; font-weight: 600;
+            background: var(--white);
+        }
+        .cal-popup-row input:focus, .cal-popup-row select:focus {
+            outline: none; border-color: var(--cyan);
+        }
+        .cal-popup-types {
+            display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: 8px;
+            overflow: hidden; margin-bottom: 14px;
+        }
+        .cal-popup-type {
+            flex: 1; padding: 8px; text-align: center; font-size: 11px; font-weight: 700;
+            cursor: pointer; background: var(--white); color: var(--gray);
+            border: none; font-family: 'Inter', sans-serif; transition: all 0.2s;
+            border-right: 1px solid var(--border);
+        }
+        .cal-popup-type:last-child { border-right: none; }
+        .cal-popup-type:hover { background: #f9fafb; }
+        .cal-popup-type.active-ev { background: var(--cyan); color: white; }
+        .cal-popup-type.active-cita { background: #3b82f6; color: white; }
+        .cal-popup-type.active-pend { background: #8b5cf6; color: white; }
+        .cal-popup-footer {
+            padding: 10px 16px; border-top: 1px solid var(--border);
+            display: flex; justify-content: flex-end; gap: 8px;
+        }
+        .cal-popup-save {
+            padding: 8px 20px; background: var(--cyan); color: white;
+            border: none; border-radius: 8px; font-size: 12px; font-weight: 700;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+        }
+        .cal-popup-save:hover { background: #0e7490; }
+        .cal-popup-cancel {
+            padding: 8px 16px; background: #f3f4f6; color: var(--dark);
+            border: none; border-radius: 8px; font-size: 12px; font-weight: 700;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+        }
+        /* Current time line */
+        .cal-now-line {
+            position: absolute; left: 0; right: 0; height: 2px;
+            background: #ef4444; z-index: 8; pointer-events: none;
+        }
+        .cal-now-dot {
+            position: absolute; left: -5px; top: -4px;
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #ef4444;
+        }
         .cal-event {
             position: absolute; left: 3px; right: 3px;
             border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600;
@@ -905,6 +985,48 @@
             <div id="cal-header" class="cal-week-header"></div>
             <div class="cal-grid-scroll" id="cal-scroll">
                 <div id="cal-grid" class="cal-week"></div>
+            </div>
+        </div>
+
+        <!-- Quick-create popup -->
+        <div class="cal-popup" id="cal-popup">
+            <div class="cal-popup-header">
+                <span style="font-size:16px;">&#9776;</span>
+                <button class="cal-popup-close" onclick="calClosePopup()">&times;</button>
+            </div>
+            <div class="cal-popup-body">
+                <input type="text" class="cal-popup-title-input" id="calev-titulo" placeholder="Anade un titulo" autofocus>
+                <div class="cal-popup-types">
+                    <button class="cal-popup-type active-ev" data-type="evento" onclick="calSetType('evento')">Evento</button>
+                    <button class="cal-popup-type" data-type="cita" onclick="calSetType('cita')">Cita</button>
+                    <button class="cal-popup-type" data-type="pendiente" onclick="calSetType('pendiente')">Pendiente</button>
+                </div>
+                <div class="cal-popup-row">
+                    <span class="icon">&#128339;</span>
+                    <span id="calev-fecha-display" style="font-weight:600;color:var(--dark);"></span>
+                </div>
+                <div class="cal-popup-row">
+                    <span class="icon">&#128339;</span>
+                    <input type="time" id="calev-hora-inicio" style="width:110px;">
+                    <span>&ndash;</span>
+                    <input type="time" id="calev-hora-fin" style="width:110px;">
+                </div>
+                <div class="cal-popup-row">
+                    <span class="icon">&#128100;</span>
+                    <select id="calev-responsable">
+                        <option value="Sebastian">Sebastian</option>
+                        <option value="Mario">Mario</option>
+                        <option value="Ambos">Ambos</option>
+                    </select>
+                </div>
+                <div class="cal-popup-row" id="calev-desc-row">
+                    <span class="icon">&#128221;</span>
+                    <input type="text" id="calev-descripcion" placeholder="Descripcion (opcional)" style="flex:1;">
+                </div>
+            </div>
+            <div class="cal-popup-footer">
+                <button class="cal-popup-cancel" onclick="calClosePopup()">Cancelar</button>
+                <button class="cal-popup-save" id="calev-save-btn" onclick="calSaveEvent()">Guardar</button>
             </div>
         </div>
     </div>
@@ -1327,6 +1449,7 @@
         let vendedores = [];
         let compradores = [];
         let proyectos = [];
+        let eventos = [];
         let currentUser = localStorage.getItem('fyra_crm_user') || 'Sebastian';
         let activeFilter = { vendedores: 'todos', compradores: 'todos' };
         let isConnected = false;
@@ -1347,9 +1470,11 @@
                     vendedores = data.vendedores || [];
                     compradores = data.compradores || [];
                     proyectos = data.proyectos || [];
+                    eventos = data.eventos || [];
                     renderVendedores();
                     renderCompradores();
                     renderProyectos();
+                    renderCalendar();
                     updateStats();
                     flashSync();
                 }
@@ -1368,22 +1493,25 @@
                 vendedores = JSON.parse(localStorage.getItem('fyra_crm_vendedores') || '[]');
                 compradores = JSON.parse(localStorage.getItem('fyra_crm_compradores') || '[]');
                 proyectos = JSON.parse(localStorage.getItem('fyra_crm_proyectos') || '[]');
+                eventos = JSON.parse(localStorage.getItem('fyra_crm_eventos') || '[]');
                 renderVendedores();
                 renderCompradores();
                 renderProyectos();
+                renderCalendar();
                 updateStats();
                 document.getElementById('loading').classList.add('hidden');
             }
         }
 
         async function saveToCloud() {
-            const data = { vendedores, compradores, proyectos };
+            const data = { vendedores, compradores, proyectos, eventos };
             lastDataHash = JSON.stringify(data);
 
             // Also save to localStorage as backup
             localStorage.setItem('fyra_crm_vendedores', JSON.stringify(vendedores));
             localStorage.setItem('fyra_crm_compradores', JSON.stringify(compradores));
             localStorage.setItem('fyra_crm_proyectos', JSON.stringify(proyectos));
+            localStorage.setItem('fyra_crm_eventos', JSON.stringify(eventos));
 
             try {
                 await fetch(API_URL, {
@@ -1996,47 +2124,43 @@
         // CALENDARIO SEMANAL
         // ==========================================
         var calCurrentDate = new Date();
-        var calHours = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
+        var calHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
         var calMonths = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
         var calDays = ['DOM','LUN','MAR','MIE','JUE','VIE','SAB'];
+        var calWeekStart = null;
+        var calPopupData = { day: 0, hour: 10, type: 'evento' };
 
         function calGetWeekStart(date) {
-            var d = new Date(date);
-            var day = d.getDay();
-            d.setDate(d.getDate() - day);
-            d.setHours(0,0,0,0);
-            return d;
+            var d = new Date(date); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d;
         }
-
         function calGoToday() { calCurrentDate = new Date(); renderCalendar(); }
         function calPrev() { calCurrentDate.setDate(calCurrentDate.getDate() - 7); renderCalendar(); }
         function calNext() { calCurrentDate.setDate(calCurrentDate.getDate() + 7); renderCalendar(); }
-
         function calSameDay(a, b) {
             return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
         }
+        function calFormatTime12(h, m) {
+            var suffix = h >= 12 ? 'pm' : 'am';
+            var h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+            return h12 + ':' + (m < 10 ? '0' : '') + m + suffix;
+        }
+        function calTimeToStr(h, m) {
+            return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+        }
 
-        // Parse time from text like "3pm", "14:00", "2:30pm", "a las 10"
+        // Parse time from text
         function parseTimeFromText(text) {
             if (!text) return null;
-            text = text.toLowerCase().trim();
-
-            // Match patterns: "3pm", "3:30pm", "15:00", "3 pm", "a las 3"
+            var t = text.toLowerCase().trim();
             var patterns = [
-                /(\d{1,2}):(\d{2})\s*(am|pm)/i,       // 3:30pm
-                /(\d{1,2})\s*(am|pm)/i,                // 3pm
-                /(\d{1,2}):(\d{2})/,                   // 15:00 or 3:00
-                /a\s*las\s*(\d{1,2}):?(\d{2})?/i,     // a las 3, a las 3:30
-                /(\d{1,2})\s*hrs?/i,                   // 3hrs, 15hr
+                /(\d{1,2}):(\d{2})\s*(am|pm)/i, /(\d{1,2})\s*(am|pm)/i,
+                /(\d{1,2}):(\d{2})/, /a\s*las\s*(\d{1,2}):?(\d{2})?/i, /(\d{1,2})\s*hrs?/i
             ];
-
             for (var i = 0; i < patterns.length; i++) {
-                var m = text.match(patterns[i]);
+                var m = t.match(patterns[i]);
                 if (m) {
-                    var hour = parseInt(m[1]);
-                    var min = m[2] && !isNaN(parseInt(m[2])) ? parseInt(m[2]) : 0;
+                    var hour = parseInt(m[1]), min = m[2] && !isNaN(parseInt(m[2])) ? parseInt(m[2]) : 0;
                     var ampm = m[3] ? m[3].toLowerCase() : null;
-
                     if (ampm === 'pm' && hour < 12) hour += 12;
                     if (ampm === 'am' && hour === 12) hour = 0;
                     if (hour >= 0 && hour <= 23) return { hour: hour, min: min };
@@ -2045,201 +2169,284 @@
             return null;
         }
 
-        // Parse date from text like "mañana", "lunes", "11 feb", "2026-02-14"
         function parseDateFromText(text) {
             if (!text) return null;
-            text = text.toLowerCase().trim();
+            var t = text.toLowerCase().trim();
             var today = new Date();
-
-            if (text.indexOf('hoy') >= 0) return today;
-            if (text.indexOf('mana') >= 0 || text.indexOf('mañana') >= 0) {
-                var t = new Date(today);
-                t.setDate(t.getDate() + 1);
-                return t;
-            }
-
-            var dayNames = { 'lun': 1, 'mar': 2, 'mie': 3, 'mié': 3, 'jue': 4, 'vie': 5, 'sab': 6, 'sáb': 6, 'dom': 0 };
-            for (var dn in dayNames) {
-                if (text.indexOf(dn) >= 0) {
-                    var target = dayNames[dn];
-                    var curr = today.getDay();
-                    var diff = target - curr;
-                    if (diff <= 0) diff += 7;
-                    var d = new Date(today);
-                    d.setDate(d.getDate() + diff);
-                    return d;
-                }
-            }
-
-            // Try ISO date
-            var isoMatch = text.match(/(\d{4})-(\d{2})-(\d{2})/);
-            if (isoMatch) return new Date(isoMatch[1], parseInt(isoMatch[2])-1, isoMatch[3]);
-
+            if (t.indexOf('hoy') >= 0) return today;
+            if (t.indexOf('mana') >= 0 || t.indexOf('mañana') >= 0) { var d = new Date(today); d.setDate(d.getDate()+1); return d; }
+            var dn = {'lun':1,'mar':2,'mie':3,'mié':3,'jue':4,'vie':5,'sab':6,'sáb':6,'dom':0};
+            for (var k in dn) { if (t.indexOf(k) >= 0) { var diff = dn[k]-today.getDay(); if(diff<=0) diff+=7; var d=new Date(today); d.setDate(d.getDate()+diff); return d; } }
+            var iso = t.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (iso) return new Date(iso[1], parseInt(iso[2])-1, iso[3]);
             return null;
         }
 
+        // Collect all events
         function getCalendarEvents() {
-            var events = [];
+            var evs = [];
 
-            // 1) CITAS from compradores (Cita Agendada with fecha/hora)
+            // 1) Citas CRM
             compradores.forEach(function(c) {
                 if (c.estado === 'Cita Agendada' && c.citaFecha) {
                     var date = new Date(c.citaFecha + 'T00:00:00');
-                    var hour = 10, min = 0; // default 10am
-                    if (c.citaHora) {
-                        var parts = c.citaHora.split(':');
-                        hour = parseInt(parts[0]) || 10;
-                        min = parseInt(parts[1]) || 0;
-                    }
-                    events.push({
-                        type: 'cita',
-                        title: 'Cita: ' + c.nombre,
-                        subtitle: c.vehiculo,
-                        date: date,
-                        hour: hour,
-                        min: min,
-                        duration: 60,
-                        responsable: c.responsable
-                    });
+                    var hour = 10, min = 0;
+                    if (c.citaHora) { var p = c.citaHora.split(':'); hour = parseInt(p[0])||10; min = parseInt(p[1])||0; }
+                    evs.push({ type:'cita', title:'Cita: '+c.nombre, subtitle:c.vehiculo, date:date, hour:hour, min:min, duration:60, responsable:c.responsable });
                 }
             });
 
-            // 2) PENDIENTES from proyectos that have time info
+            // 2) Pendientes con hora
             proyectos.forEach(function(p) {
                 if (!p.pendientes) return;
                 p.pendientes.forEach(function(t) {
                     if (t.done) return;
                     var time = parseTimeFromText(t.texto);
                     if (!time) return;
-
-                    // Try to find date in text, or use project fecha, or today
                     var date = parseDateFromText(t.texto);
-                    if (!date && p.fecha) {
-                        date = new Date(p.fecha + 'T00:00:00');
-                    }
+                    if (!date && p.fecha) date = new Date(p.fecha+'T00:00:00');
                     if (!date) date = new Date();
-
-                    events.push({
-                        type: 'pendiente',
-                        title: t.texto.replace(/\d{1,2}:\d{2}\s*(am|pm)?/gi, '').replace(/\d{1,2}\s*(am|pm)/gi, '').replace(/a\s*las\s*\d+/gi, '').trim() || t.texto,
-                        subtitle: p.nombre,
-                        date: date,
-                        hour: time.hour,
-                        min: time.min,
-                        duration: 45,
-                        responsable: p.responsable
-                    });
+                    var cleanTitle = t.texto.replace(/\d{1,2}:\d{2}\s*(am|pm)?/gi,'').replace(/\d{1,2}\s*(am|pm)/gi,'').replace(/a\s*las\s*\d+/gi,'').trim() || t.texto;
+                    evs.push({ type:'pendiente', title:cleanTitle, subtitle:p.nombre, date:date, hour:time.hour, min:time.min, duration:45, responsable:p.responsable });
                 });
             });
 
-            return events;
+            // 3) Eventos manuales
+            eventos.forEach(function(ev) {
+                var date = new Date(ev.fecha + 'T00:00:00');
+                var startParts = ev.horaInicio.split(':');
+                var endParts = ev.horaFin.split(':');
+                var h1 = parseInt(startParts[0])||10, m1 = parseInt(startParts[1])||0;
+                var h2 = parseInt(endParts[0])||11, m2 = parseInt(endParts[1])||0;
+                var dur = (h2*60+m2) - (h1*60+m1);
+                if (dur <= 0) dur = 60;
+                evs.push({ type:ev.tipo||'evento', title:ev.titulo, subtitle:ev.descripcion||'', date:date, hour:h1, min:m1, duration:dur, responsable:ev.responsable, evId:ev.id });
+            });
+
+            return evs;
         }
 
-        function renderCalendar() {
-            var weekStart = calGetWeekStart(calCurrentDate);
-            var today = new Date();
-            today.setHours(0,0,0,0);
+        // Click on slot → open popup
+        function calSlotClick(dayIdx, hour, e) {
+            var weekS = calGetWeekStart(calCurrentDate);
+            var clickDate = new Date(weekS);
+            clickDate.setDate(weekS.getDate() + dayIdx);
 
-            // Title
-            var titleEl = document.getElementById('cal-month-title');
-            if (titleEl) {
-                titleEl.textContent = calMonths[calCurrentDate.getMonth()] + ' de ' + calCurrentDate.getFullYear();
+            calPopupData.day = dayIdx;
+            calPopupData.hour = hour;
+            calPopupData.date = clickDate;
+            calPopupData.type = 'evento';
+
+            // Fill popup
+            document.getElementById('calev-titulo').value = '';
+            document.getElementById('calev-hora-inicio').value = calTimeToStr(hour, 0);
+            document.getElementById('calev-hora-fin').value = calTimeToStr(hour + 1, 0);
+            document.getElementById('calev-responsable').value = currentUser;
+            document.getElementById('calev-descripcion').value = '';
+
+            var dayNames = ['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
+            var mNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+            document.getElementById('calev-fecha-display').textContent =
+                dayNames[clickDate.getDay()] + ', ' + clickDate.getDate() + ' de ' + mNames[clickDate.getMonth()];
+
+            // Type buttons reset
+            calSetType('evento');
+
+            // Position popup near click
+            var popup = document.getElementById('cal-popup');
+            var rect = e.target.getBoundingClientRect();
+            var left = Math.min(rect.left + 10, window.innerWidth - 340);
+            var top = Math.min(rect.top, window.innerHeight - 400);
+            popup.style.left = Math.max(10, left) + 'px';
+            popup.style.top = Math.max(10, top) + 'px';
+            popup.classList.add('show');
+
+            setTimeout(function() { document.getElementById('calev-titulo').focus(); }, 100);
+        }
+
+        function calClosePopup() {
+            document.getElementById('cal-popup').classList.remove('show');
+        }
+
+        function calSetType(type) {
+            calPopupData.type = type;
+            document.querySelectorAll('.cal-popup-type').forEach(function(btn) {
+                btn.className = 'cal-popup-type';
+                if (btn.dataset.type === type) {
+                    if (type === 'evento') btn.classList.add('active-ev');
+                    else if (type === 'cita') btn.classList.add('active-cita');
+                    else btn.classList.add('active-pend');
+                }
+            });
+            // Change save button color
+            var saveBtn = document.getElementById('calev-save-btn');
+            if (type === 'cita') saveBtn.style.background = '#3b82f6';
+            else if (type === 'pendiente') saveBtn.style.background = '#8b5cf6';
+            else saveBtn.style.background = 'var(--cyan)';
+        }
+
+        function calSaveEvent() {
+            var titulo = document.getElementById('calev-titulo').value.trim();
+            if (!titulo) { showNotif('Escribe un titulo', true); return; }
+
+            var horaInicio = document.getElementById('calev-hora-inicio').value;
+            var horaFin = document.getElementById('calev-hora-fin').value;
+            var responsable = document.getElementById('calev-responsable').value;
+            var descripcion = document.getElementById('calev-descripcion').value.trim();
+
+            var clickDate = calPopupData.date;
+            var fecha = clickDate.getFullYear() + '-' +
+                (clickDate.getMonth() + 1 < 10 ? '0' : '') + (clickDate.getMonth() + 1) + '-' +
+                (clickDate.getDate() < 10 ? '0' : '') + clickDate.getDate();
+
+            eventos.push({
+                id: 'EV' + Date.now(),
+                titulo: titulo,
+                tipo: calPopupData.type,
+                fecha: fecha,
+                horaInicio: horaInicio,
+                horaFin: horaFin,
+                responsable: responsable,
+                descripcion: descripcion,
+                created: Date.now()
+            });
+
+            saveToCloud();
+            renderCalendar();
+            calClosePopup();
+            showNotif('Evento creado: ' + titulo);
+        }
+
+        // Delete manual event
+        function calDeleteEvent(evId) {
+            if (!confirm('Eliminar este evento?')) return;
+            eventos = eventos.filter(function(e) { return e.id !== evId; });
+            saveToCloud();
+            renderCalendar();
+            showNotif('Evento eliminado');
+        }
+
+        // Close popup on outside click
+        document.addEventListener('click', function(e) {
+            var popup = document.getElementById('cal-popup');
+            if (!popup || !popup.classList.contains('show')) return;
+            if (!popup.contains(e.target) && !e.target.classList.contains('cal-hour-slot')) {
+                calClosePopup();
             }
+        });
 
-            // Header
+        function renderCalendar() {
+            calWeekStart = calGetWeekStart(calCurrentDate);
+            var today = new Date(); today.setHours(0,0,0,0);
+
+            var titleEl = document.getElementById('cal-month-title');
+            if (titleEl) titleEl.textContent = calMonths[calCurrentDate.getMonth()] + ' de ' + calCurrentDate.getFullYear();
+
             var header = document.getElementById('cal-header');
             if (!header) return;
-            var headerHTML = '<div class="cal-gmt">GMT-06</div>';
+            var hHTML = '<div class="cal-gmt">GMT-06</div>';
             for (var d = 0; d < 7; d++) {
-                var dayDate = new Date(weekStart);
-                dayDate.setDate(weekStart.getDate() + d);
-                var isToday = calSameDay(dayDate, today);
-                headerHTML += '<div class="cal-day-header">' + calDays[d] +
-                    '<div class="cal-day-num ' + (isToday ? 'today' : '') + '">' + dayDate.getDate() + '</div></div>';
+                var dd = new Date(calWeekStart); dd.setDate(calWeekStart.getDate() + d);
+                var isT = calSameDay(dd, today);
+                hHTML += '<div class="cal-day-header">' + calDays[d] +
+                    '<div class="cal-day-num ' + (isT ? 'today' : '') + '">' + dd.getDate() + '</div></div>';
             }
-            header.innerHTML = headerHTML;
+            header.innerHTML = hHTML;
 
             // Grid
             var grid = document.getElementById('cal-grid');
-            var gridHTML = '';
-
-            // Time column + day columns
+            var gHTML = '';
             for (var h = 0; h < calHours.length; h++) {
                 var hr = calHours[h];
-                var label = hr === 0 ? '12 AM' : hr < 12 ? hr + ' AM' : hr === 12 ? '12 PM' : (hr - 12) + ' PM';
-                gridHTML += '<div class="cal-time-col"><div class="cal-time-label">' + label + '</div></div>';
-
-                for (var dd = 0; dd < 7; dd++) {
-                    gridHTML += '<div class="cal-day-col"><div class="cal-hour-slot" data-hour="' + hr + '" data-day="' + dd + '"></div></div>';
+                var lbl = hr < 12 ? hr + ' AM' : hr === 12 ? '12 PM' : (hr-12) + ' PM';
+                gHTML += '<div class="cal-time-col"><div class="cal-time-label">' + lbl + '</div></div>';
+                for (var di = 0; di < 7; di++) {
+                    gHTML += '<div class="cal-day-col" data-dayidx="'+di+'" data-houridx="'+h+'">' +
+                        '<div class="cal-hour-slot" data-hour="'+hr+'" data-day="'+di+'" onclick="calSlotClick('+di+','+hr+',event)"></div></div>';
                 }
             }
-            grid.innerHTML = gridHTML;
+            grid.innerHTML = gHTML;
 
-            // Events
-            var events = getCalendarEvents();
-            events.forEach(function(ev) {
-                var evDate = new Date(ev.date);
-                evDate.setHours(0,0,0,0);
+            // Place events
+            var allEvents = getCalendarEvents();
+            allEvents.forEach(function(ev) {
+                var evDate = new Date(ev.date); evDate.setHours(0,0,0,0);
+                for (var di = 0; di < 7; di++) {
+                    var colDate = new Date(calWeekStart); colDate.setDate(calWeekStart.getDate() + di); colDate.setHours(0,0,0,0);
+                    if (!calSameDay(evDate, colDate)) continue;
+                    if (ev.hour < calHours[0] || ev.hour > calHours[calHours.length-1]) break;
 
-                // Find which day column (0-6)
-                for (var dd = 0; dd < 7; dd++) {
-                    var colDate = new Date(weekStart);
-                    colDate.setDate(weekStart.getDate() + dd);
-                    colDate.setHours(0,0,0,0);
+                    // Find hour row index
+                    var hIdx = -1;
+                    for (var hi = 0; hi < calHours.length; hi++) { if (calHours[hi] === ev.hour) { hIdx = hi; break; } }
+                    if (hIdx < 0) { for (var hi2 = 0; hi2 < calHours.length; hi2++) { if (calHours[hi2] >= ev.hour) { hIdx = hi2; break; } } }
+                    if (hIdx < 0) break;
 
-                    if (calSameDay(evDate, colDate)) {
-                        // Find the slot
-                        if (ev.hour < calHours[0] || ev.hour > calHours[calHours.length - 1]) return;
+                    var colIdx = hIdx * 7 + di;
+                    var dayCols = grid.querySelectorAll('.cal-day-col');
+                    var col = dayCols[colIdx];
+                    if (!col) break;
 
-                        var hourIndex = calHours.indexOf(ev.hour);
-                        if (hourIndex < 0) {
-                            // Find closest
-                            for (var hi = 0; hi < calHours.length; hi++) {
-                                if (calHours[hi] >= ev.hour) { hourIndex = hi; break; }
+                    var topPx = (ev.min / 60) * 60;
+                    var heightPx = Math.max((ev.duration / 60) * 60, 26);
+                    var cls = ev.type === 'cita' ? 'cal-event-cita' : ev.type === 'pendiente' ? 'cal-event-pendiente' : 'cal-event-manual';
+                    var timeS = calFormatTime12(ev.hour, ev.min);
+                    var endH = ev.hour + Math.floor((ev.min + ev.duration)/60);
+                    var endM = (ev.min + ev.duration) % 60;
+                    var timeE = calFormatTime12(endH, endM);
+
+                    var el = document.createElement('div');
+                    el.className = 'cal-event ' + cls;
+                    el.style.top = topPx + 'px';
+                    el.style.height = heightPx + 'px';
+                    el.innerHTML = '<div class="cal-event-title">' + ev.title + '</div>' +
+                        '<div class="cal-event-time">' + timeS + ' – ' + timeE + '</div>';
+                    el.title = ev.title + (ev.subtitle ? '\n' + ev.subtitle : '') + '\n' + (ev.responsable || '');
+
+                    // Right-click to delete manual events
+                    if (ev.evId) {
+                        el.style.cursor = 'pointer';
+                        el.onclick = function(e) { e.stopPropagation(); calDeleteEvent(ev.evId); };
+                    } else {
+                        el.onclick = function(e) { e.stopPropagation(); };
+                    }
+
+                    col.style.position = 'relative';
+                    col.appendChild(el);
+                    break;
+                }
+            });
+
+            // Current time red line
+            var now = new Date();
+            if (now.getHours() >= calHours[0] && now.getHours() <= calHours[calHours.length-1]) {
+                for (var di2 = 0; di2 < 7; di2++) {
+                    var dayD = new Date(calWeekStart); dayD.setDate(calWeekStart.getDate() + di2); dayD.setHours(0,0,0,0);
+                    if (calSameDay(dayD, today)) {
+                        var nowHIdx = -1;
+                        for (var nhi = 0; nhi < calHours.length; nhi++) { if (calHours[nhi] === now.getHours()) { nowHIdx = nhi; break; } }
+                        if (nowHIdx >= 0) {
+                            var nowCol = grid.querySelectorAll('.cal-day-col')[nowHIdx * 7 + di2];
+                            if (nowCol) {
+                                nowCol.style.position = 'relative';
+                                var line = document.createElement('div');
+                                line.className = 'cal-now-line';
+                                line.style.top = (now.getMinutes() / 60 * 60) + 'px';
+                                line.innerHTML = '<div class="cal-now-dot"></div>';
+                                nowCol.appendChild(line);
                             }
-                        }
-                        if (hourIndex < 0) return;
-
-                        // Calculate position within the day column
-                        var slotIndex = hourIndex * 8 + dd + 1; // 8 cols per row (1 time + 7 days)
-                        var dayCols = grid.querySelectorAll('.cal-day-col');
-                        var targetCol = dayCols[hourIndex * 7 + dd];
-
-                        if (targetCol) {
-                            var topOffset = (ev.min / 60) * 60; // pixels
-                            var height = Math.max((ev.duration / 60) * 60, 28);
-                            var typeClass = ev.type === 'cita' ? 'cal-event-cita' :
-                                            ev.type === 'pendiente' ? 'cal-event-pendiente' : 'cal-event-manual';
-
-                            var timeStr = (ev.hour > 12 ? ev.hour - 12 : ev.hour) + ':' + (ev.min < 10 ? '0' : '') + ev.min + (ev.hour >= 12 ? 'pm' : 'am');
-                            var endHour = ev.hour + Math.floor((ev.min + ev.duration) / 60);
-                            var endMin = (ev.min + ev.duration) % 60;
-                            var endStr = (endHour > 12 ? endHour - 12 : endHour) + ':' + (endMin < 10 ? '0' : '') + endMin + (endHour >= 12 ? 'pm' : 'am');
-
-                            var evEl = document.createElement('div');
-                            evEl.className = 'cal-event ' + typeClass;
-                            evEl.style.top = topOffset + 'px';
-                            evEl.style.height = height + 'px';
-                            evEl.innerHTML = '<div class="cal-event-title">' + ev.title + '</div>' +
-                                '<div class="cal-event-time">' + timeStr + ' - ' + endStr + '</div>';
-                            evEl.title = ev.title + '\n' + (ev.subtitle || '') + '\n' + ev.responsable;
-                            targetCol.querySelector('.cal-hour-slot').parentElement.appendChild(evEl);
-
-                            // Actually position relative to slot
-                            evEl.style.position = 'absolute';
-                            evEl.style.top = topOffset + 'px';
                         }
                         break;
                     }
                 }
-            });
+            }
 
-            // Scroll to current hour
+            // Scroll to now
             var scrollEl = document.getElementById('cal-scroll');
-            if (scrollEl) {
-                var nowHour = new Date().getHours();
-                var scrollTo = Math.max(0, (nowHour - calHours[0]) * 60 - 60);
+            if (scrollEl && !scrollEl.dataset.scrolled) {
+                var scrollTo = Math.max(0, (now.getHours() - calHours[0]) * 60 - 60);
                 scrollEl.scrollTop = scrollTo;
+                scrollEl.dataset.scrolled = '1';
             }
         }
 
