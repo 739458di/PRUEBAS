@@ -833,31 +833,51 @@
         }
 
         // ==========================================
-        // WHATSAPP NOTIFICATIONS
+        // WHATSAPP NOTIFICATIONS (TWILIO API)
         // ==========================================
-        function triggerCitaNotifications(c) {
+        async function sendWhatsApp(to, message) {
+            try {
+                const resp = await fetch('/api/whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: '52' + to.replace(/\D/g, ''), message })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showNotif('WhatsApp enviado a ' + to);
+                } else {
+                    showNotif('Error WhatsApp: ' + (data.error || 'desconocido'), true);
+                    console.error('WhatsApp error:', data);
+                }
+                return data;
+            } catch (err) {
+                showNotif('Error de conexion WhatsApp', true);
+                console.error('WhatsApp fetch error:', err);
+                return { success: false };
+            }
+        }
+
+        async function triggerCitaNotifications(c) {
             const fecha = formatDate(c.citaFecha);
             const hora = c.citaHora || 'por confirmar';
 
             // Message for buyer
             if (c.telComprador || c.telefono) {
                 const tel = c.telComprador || c.telefono;
-                const msgComprador = `Hola ${c.nombre}! Tu cita para ver el ${c.vehiculo} ha sido agendada para el ${fecha} a las ${hora}. Te confirmaremos los detalles. - FYRADRIVE`;
-                setTimeout(() => {
-                    if (confirm('Enviar WhatsApp al COMPRADOR (' + tel + ')?\n\n' + msgComprador)) {
-                        window.open('https://wa.me/52' + tel + '?text=' + encodeURIComponent(msgComprador), '_blank');
-                    }
-                }, 300);
+                const msg = `Hola ${c.nombre}! Tu cita para ver el ${c.vehiculo} ha sido agendada para el ${fecha} a las ${hora}. Te confirmaremos los detalles. - FYRADRIVE`;
+                await sendWhatsApp(tel, msg);
             }
 
             // Message for seller/owner
             if (c.telDueno) {
-                const msgVendedor = `Hola! Se agendo una cita para tu vehiculo ${c.vehiculo} el ${fecha} a las ${hora}. Un comprador interesado lo visitara. - FYRADRIVE`;
-                setTimeout(() => {
-                    if (confirm('Enviar WhatsApp al VENDEDOR/DUENO (' + c.telDueno + ')?\n\n' + msgVendedor)) {
-                        window.open('https://wa.me/52' + c.telDueno + '?text=' + encodeURIComponent(msgVendedor), '_blank');
-                    }
-                }, 600);
+                const msg = `Hola! Se agendo una cita para tu vehiculo ${c.vehiculo} el ${fecha} a las ${hora}. Un comprador interesado lo visitara. - FYRADRIVE`;
+                await sendWhatsApp(c.telDueno, msg);
+            }
+
+            // Message for responsable
+            if (c.telResponsable) {
+                const msg = `CRM FYRADRIVE: Cita agendada - ${c.nombre} quiere ver ${c.vehiculo} el ${fecha} a las ${hora}. Responsable: ${c.responsable}`;
+                await sendWhatsApp(c.telResponsable, msg);
             }
         }
 
