@@ -486,6 +486,120 @@
         .cot-header-bar p { color: rgba(255,255,255,0.9); font-size: 11px; margin-top: 2px; }
 
         /* ======================== */
+        /* CALENDARIO STYLES       */
+        /* ======================== */
+        .cal-container { padding: 0 0 32px; }
+        .cal-toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 32px; background: var(--white); border-bottom: 1px solid var(--border);
+        }
+        .cal-toolbar-left { display: flex; align-items: center; gap: 12px; }
+        .cal-toolbar h2 { font-size: 20px; font-weight: 800; }
+        .cal-nav-btn {
+            width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--white); cursor: pointer; font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Inter', sans-serif; transition: all 0.2s;
+        }
+        .cal-nav-btn:hover { background: #f3f4f6; border-color: var(--cyan); }
+        .cal-today-btn {
+            padding: 6px 16px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--white); cursor: pointer; font-size: 12px; font-weight: 700;
+            font-family: 'Inter', sans-serif; transition: all 0.2s;
+        }
+        .cal-today-btn:hover { background: var(--cyan); color: white; border-color: var(--cyan); }
+        .cal-legend {
+            display: flex; gap: 14px; align-items: center;
+        }
+        .cal-legend-item {
+            display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--gray);
+        }
+        .cal-legend-dot {
+            width: 10px; height: 10px; border-radius: 3px;
+        }
+        .cal-week {
+            display: grid; grid-template-columns: 60px repeat(7, 1fr);
+            border-bottom: 1px solid var(--border);
+        }
+        .cal-week-header {
+            display: grid; grid-template-columns: 60px repeat(7, 1fr);
+            background: var(--white); border-bottom: 1px solid var(--border);
+            position: sticky; top: 56px; z-index: 10;
+        }
+        .cal-day-header {
+            padding: 12px 8px; text-align: center;
+            font-size: 11px; font-weight: 700; color: var(--gray);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .cal-day-header .cal-day-num {
+            display: flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 50%; margin: 4px auto 0;
+            font-size: 16px; font-weight: 800; color: var(--dark);
+        }
+        .cal-day-header .cal-day-num.today {
+            background: var(--cyan); color: white;
+        }
+        .cal-time-col {
+            border-right: 1px solid var(--border); background: #fafafa;
+        }
+        .cal-time-label {
+            height: 60px; display: flex; align-items: flex-start; justify-content: center;
+            font-size: 10px; font-weight: 600; color: var(--gray-light);
+            padding-top: 0; position: relative; top: -6px;
+        }
+        .cal-day-col {
+            border-right: 1px solid #f3f4f6; position: relative; min-height: 0;
+        }
+        .cal-day-col:last-child { border-right: none; }
+        .cal-hour-slot {
+            height: 60px; border-bottom: 1px solid #f5f5f4; position: relative;
+        }
+        .cal-hour-slot:hover { background: rgba(8,145,178,0.03); }
+        .cal-event {
+            position: absolute; left: 3px; right: 3px;
+            border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600;
+            overflow: hidden; cursor: default; z-index: 5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+        }
+        .cal-event:hover { transform: scale(1.02); z-index: 10; }
+        .cal-event-title {
+            font-weight: 700; font-size: 11px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .cal-event-time { font-size: 9px; opacity: 0.8; font-weight: 600; }
+        .cal-event-cita {
+            background: linear-gradient(135deg, #3b82f6, #60a5fa);
+            color: white; border-left: 3px solid #1d4ed8;
+        }
+        .cal-event-pendiente {
+            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+            color: white; border-left: 3px solid #6d28d9;
+        }
+        .cal-event-manual {
+            background: linear-gradient(135deg, var(--cyan), #22d3ee);
+            color: white; border-left: 3px solid #0e7490;
+        }
+        .cal-grid-scroll {
+            max-height: calc(100vh - 200px); overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .cal-gmt {
+            padding: 12px 0; text-align: center;
+            font-size: 9px; font-weight: 600; color: var(--gray-light);
+            border-right: 1px solid var(--border); background: #fafafa;
+        }
+        .cal-allday {
+            padding: 6px 8px; min-height: 32px; border-right: 1px solid #f3f4f6;
+            border-bottom: 1px solid var(--border);
+        }
+        .cal-allday-label {
+            padding: 6px 0; text-align: center; font-size: 9px; font-weight: 600;
+            color: var(--gray-light); border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border); background: #fafafa;
+        }
+
+        /* ======================== */
         /* PROYECTOS STYLES        */
         /* ======================== */
         .proy-container { padding: 20px 32px 32px; }
@@ -614,6 +728,10 @@
             .proy-container { padding: 16px; }
             .proy-grid { grid-template-columns: 1fr; }
             .proy-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .cal-toolbar { padding: 12px 16px; flex-direction: column; gap: 10px; }
+            .cal-event { font-size: 9px; padding: 2px 4px; }
+            .cal-event-time { display: none; }
+            .cal-legend { display: none; }
         }
     </style>
 </head>
@@ -636,6 +754,7 @@
             <a id="nav-compradores" onclick="switchCRMTab('compradores')">COMPRADORES</a>
             <a id="nav-cotizador" onclick="switchCRMTab('cotizador')">COTIZADOR</a>
             <a id="nav-proyectos" onclick="switchCRMTab('proyectos')">PROYECTOS</a>
+            <a id="nav-calendario" onclick="switchCRMTab('calendario')">CALENDARIO</a>
         </div>
         <div class="user-badge" id="user-badge" onclick="toggleUser()">
             <span id="user-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
@@ -693,6 +812,9 @@
         </button>
         <button class="tab-btn" id="tab-btn-proyectos" onclick="switchCRMTab('proyectos')">
             Proyectos <span class="tab-count" id="count-proyectos">0</span>
+        </button>
+        <button class="tab-btn" id="tab-btn-calendario" onclick="switchCRMTab('calendario')">
+            Calendario
         </button>
     </div>
 
@@ -759,6 +881,31 @@
                 </thead>
                 <tbody id="compradores-tbody"></tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- ======================== -->
+    <!-- CALENDARIO TAB           -->
+    <!-- ======================== -->
+    <div id="tab-calendario" style="display:none;">
+        <div class="cal-container">
+            <div class="cal-toolbar">
+                <div class="cal-toolbar-left">
+                    <button class="cal-today-btn" onclick="calGoToday()">Hoy</button>
+                    <button class="cal-nav-btn" onclick="calPrev()">&#8249;</button>
+                    <button class="cal-nav-btn" onclick="calNext()">&#8250;</button>
+                    <h2 id="cal-month-title">Febrero de 2026</h2>
+                </div>
+                <div class="cal-legend">
+                    <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#3b82f6;"></div> Citas CRM</div>
+                    <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#8b5cf6;"></div> Pendientes Proyectos</div>
+                    <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--cyan);"></div> Eventos Manuales</div>
+                </div>
+            </div>
+            <div id="cal-header" class="cal-week-header"></div>
+            <div class="cal-grid-scroll" id="cal-scroll">
+                <div id="cal-grid" class="cal-week"></div>
+            </div>
         </div>
     </div>
 
@@ -1288,7 +1435,7 @@
         // TABS
         // ==========================================
         function switchCRMTab(tab) {
-            var tabs = ['vendedores','compradores','cotizador','proyectos'];
+            var tabs = ['vendedores','compradores','cotizador','proyectos','calendario'];
             tabs.forEach(function(t) {
                 var btn = document.getElementById('tab-btn-' + t);
                 var nav = document.getElementById('nav-' + t);
@@ -1304,6 +1451,7 @@
             document.querySelector('.stats-row').style.display = isCRM ? 'flex' : 'none';
 
             if (tab === 'proyectos') renderProyectos();
+            if (tab === 'calendario') renderCalendar();
         }
 
         // ==========================================
@@ -1842,6 +1990,257 @@
                     '</div>' +
                 '</div>';
             }).join('');
+        }
+
+        // ==========================================
+        // CALENDARIO SEMANAL
+        // ==========================================
+        var calCurrentDate = new Date();
+        var calHours = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
+        var calMonths = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        var calDays = ['DOM','LUN','MAR','MIE','JUE','VIE','SAB'];
+
+        function calGetWeekStart(date) {
+            var d = new Date(date);
+            var day = d.getDay();
+            d.setDate(d.getDate() - day);
+            d.setHours(0,0,0,0);
+            return d;
+        }
+
+        function calGoToday() { calCurrentDate = new Date(); renderCalendar(); }
+        function calPrev() { calCurrentDate.setDate(calCurrentDate.getDate() - 7); renderCalendar(); }
+        function calNext() { calCurrentDate.setDate(calCurrentDate.getDate() + 7); renderCalendar(); }
+
+        function calSameDay(a, b) {
+            return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+        }
+
+        // Parse time from text like "3pm", "14:00", "2:30pm", "a las 10"
+        function parseTimeFromText(text) {
+            if (!text) return null;
+            text = text.toLowerCase().trim();
+
+            // Match patterns: "3pm", "3:30pm", "15:00", "3 pm", "a las 3"
+            var patterns = [
+                /(\d{1,2}):(\d{2})\s*(am|pm)/i,       // 3:30pm
+                /(\d{1,2})\s*(am|pm)/i,                // 3pm
+                /(\d{1,2}):(\d{2})/,                   // 15:00 or 3:00
+                /a\s*las\s*(\d{1,2}):?(\d{2})?/i,     // a las 3, a las 3:30
+                /(\d{1,2})\s*hrs?/i,                   // 3hrs, 15hr
+            ];
+
+            for (var i = 0; i < patterns.length; i++) {
+                var m = text.match(patterns[i]);
+                if (m) {
+                    var hour = parseInt(m[1]);
+                    var min = m[2] && !isNaN(parseInt(m[2])) ? parseInt(m[2]) : 0;
+                    var ampm = m[3] ? m[3].toLowerCase() : null;
+
+                    if (ampm === 'pm' && hour < 12) hour += 12;
+                    if (ampm === 'am' && hour === 12) hour = 0;
+                    if (hour >= 0 && hour <= 23) return { hour: hour, min: min };
+                }
+            }
+            return null;
+        }
+
+        // Parse date from text like "mañana", "lunes", "11 feb", "2026-02-14"
+        function parseDateFromText(text) {
+            if (!text) return null;
+            text = text.toLowerCase().trim();
+            var today = new Date();
+
+            if (text.indexOf('hoy') >= 0) return today;
+            if (text.indexOf('mana') >= 0 || text.indexOf('mañana') >= 0) {
+                var t = new Date(today);
+                t.setDate(t.getDate() + 1);
+                return t;
+            }
+
+            var dayNames = { 'lun': 1, 'mar': 2, 'mie': 3, 'mié': 3, 'jue': 4, 'vie': 5, 'sab': 6, 'sáb': 6, 'dom': 0 };
+            for (var dn in dayNames) {
+                if (text.indexOf(dn) >= 0) {
+                    var target = dayNames[dn];
+                    var curr = today.getDay();
+                    var diff = target - curr;
+                    if (diff <= 0) diff += 7;
+                    var d = new Date(today);
+                    d.setDate(d.getDate() + diff);
+                    return d;
+                }
+            }
+
+            // Try ISO date
+            var isoMatch = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (isoMatch) return new Date(isoMatch[1], parseInt(isoMatch[2])-1, isoMatch[3]);
+
+            return null;
+        }
+
+        function getCalendarEvents() {
+            var events = [];
+
+            // 1) CITAS from compradores (Cita Agendada with fecha/hora)
+            compradores.forEach(function(c) {
+                if (c.estado === 'Cita Agendada' && c.citaFecha) {
+                    var date = new Date(c.citaFecha + 'T00:00:00');
+                    var hour = 10, min = 0; // default 10am
+                    if (c.citaHora) {
+                        var parts = c.citaHora.split(':');
+                        hour = parseInt(parts[0]) || 10;
+                        min = parseInt(parts[1]) || 0;
+                    }
+                    events.push({
+                        type: 'cita',
+                        title: 'Cita: ' + c.nombre,
+                        subtitle: c.vehiculo,
+                        date: date,
+                        hour: hour,
+                        min: min,
+                        duration: 60,
+                        responsable: c.responsable
+                    });
+                }
+            });
+
+            // 2) PENDIENTES from proyectos that have time info
+            proyectos.forEach(function(p) {
+                if (!p.pendientes) return;
+                p.pendientes.forEach(function(t) {
+                    if (t.done) return;
+                    var time = parseTimeFromText(t.texto);
+                    if (!time) return;
+
+                    // Try to find date in text, or use project fecha, or today
+                    var date = parseDateFromText(t.texto);
+                    if (!date && p.fecha) {
+                        date = new Date(p.fecha + 'T00:00:00');
+                    }
+                    if (!date) date = new Date();
+
+                    events.push({
+                        type: 'pendiente',
+                        title: t.texto.replace(/\d{1,2}:\d{2}\s*(am|pm)?/gi, '').replace(/\d{1,2}\s*(am|pm)/gi, '').replace(/a\s*las\s*\d+/gi, '').trim() || t.texto,
+                        subtitle: p.nombre,
+                        date: date,
+                        hour: time.hour,
+                        min: time.min,
+                        duration: 45,
+                        responsable: p.responsable
+                    });
+                });
+            });
+
+            return events;
+        }
+
+        function renderCalendar() {
+            var weekStart = calGetWeekStart(calCurrentDate);
+            var today = new Date();
+            today.setHours(0,0,0,0);
+
+            // Title
+            var titleEl = document.getElementById('cal-month-title');
+            if (titleEl) {
+                titleEl.textContent = calMonths[calCurrentDate.getMonth()] + ' de ' + calCurrentDate.getFullYear();
+            }
+
+            // Header
+            var header = document.getElementById('cal-header');
+            if (!header) return;
+            var headerHTML = '<div class="cal-gmt">GMT-06</div>';
+            for (var d = 0; d < 7; d++) {
+                var dayDate = new Date(weekStart);
+                dayDate.setDate(weekStart.getDate() + d);
+                var isToday = calSameDay(dayDate, today);
+                headerHTML += '<div class="cal-day-header">' + calDays[d] +
+                    '<div class="cal-day-num ' + (isToday ? 'today' : '') + '">' + dayDate.getDate() + '</div></div>';
+            }
+            header.innerHTML = headerHTML;
+
+            // Grid
+            var grid = document.getElementById('cal-grid');
+            var gridHTML = '';
+
+            // Time column + day columns
+            for (var h = 0; h < calHours.length; h++) {
+                var hr = calHours[h];
+                var label = hr === 0 ? '12 AM' : hr < 12 ? hr + ' AM' : hr === 12 ? '12 PM' : (hr - 12) + ' PM';
+                gridHTML += '<div class="cal-time-col"><div class="cal-time-label">' + label + '</div></div>';
+
+                for (var dd = 0; dd < 7; dd++) {
+                    gridHTML += '<div class="cal-day-col"><div class="cal-hour-slot" data-hour="' + hr + '" data-day="' + dd + '"></div></div>';
+                }
+            }
+            grid.innerHTML = gridHTML;
+
+            // Events
+            var events = getCalendarEvents();
+            events.forEach(function(ev) {
+                var evDate = new Date(ev.date);
+                evDate.setHours(0,0,0,0);
+
+                // Find which day column (0-6)
+                for (var dd = 0; dd < 7; dd++) {
+                    var colDate = new Date(weekStart);
+                    colDate.setDate(weekStart.getDate() + dd);
+                    colDate.setHours(0,0,0,0);
+
+                    if (calSameDay(evDate, colDate)) {
+                        // Find the slot
+                        if (ev.hour < calHours[0] || ev.hour > calHours[calHours.length - 1]) return;
+
+                        var hourIndex = calHours.indexOf(ev.hour);
+                        if (hourIndex < 0) {
+                            // Find closest
+                            for (var hi = 0; hi < calHours.length; hi++) {
+                                if (calHours[hi] >= ev.hour) { hourIndex = hi; break; }
+                            }
+                        }
+                        if (hourIndex < 0) return;
+
+                        // Calculate position within the day column
+                        var slotIndex = hourIndex * 8 + dd + 1; // 8 cols per row (1 time + 7 days)
+                        var dayCols = grid.querySelectorAll('.cal-day-col');
+                        var targetCol = dayCols[hourIndex * 7 + dd];
+
+                        if (targetCol) {
+                            var topOffset = (ev.min / 60) * 60; // pixels
+                            var height = Math.max((ev.duration / 60) * 60, 28);
+                            var typeClass = ev.type === 'cita' ? 'cal-event-cita' :
+                                            ev.type === 'pendiente' ? 'cal-event-pendiente' : 'cal-event-manual';
+
+                            var timeStr = (ev.hour > 12 ? ev.hour - 12 : ev.hour) + ':' + (ev.min < 10 ? '0' : '') + ev.min + (ev.hour >= 12 ? 'pm' : 'am');
+                            var endHour = ev.hour + Math.floor((ev.min + ev.duration) / 60);
+                            var endMin = (ev.min + ev.duration) % 60;
+                            var endStr = (endHour > 12 ? endHour - 12 : endHour) + ':' + (endMin < 10 ? '0' : '') + endMin + (endHour >= 12 ? 'pm' : 'am');
+
+                            var evEl = document.createElement('div');
+                            evEl.className = 'cal-event ' + typeClass;
+                            evEl.style.top = topOffset + 'px';
+                            evEl.style.height = height + 'px';
+                            evEl.innerHTML = '<div class="cal-event-title">' + ev.title + '</div>' +
+                                '<div class="cal-event-time">' + timeStr + ' - ' + endStr + '</div>';
+                            evEl.title = ev.title + '\n' + (ev.subtitle || '') + '\n' + ev.responsable;
+                            targetCol.querySelector('.cal-hour-slot').parentElement.appendChild(evEl);
+
+                            // Actually position relative to slot
+                            evEl.style.position = 'absolute';
+                            evEl.style.top = topOffset + 'px';
+                        }
+                        break;
+                    }
+                }
+            });
+
+            // Scroll to current hour
+            var scrollEl = document.getElementById('cal-scroll');
+            if (scrollEl) {
+                var nowHour = new Date().getHours();
+                var scrollTo = Math.max(0, (nowHour - calHours[0]) * 60 - 60);
+                scrollEl.scrollTop = scrollTo;
+            }
         }
 
         // ==========================================
