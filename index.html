@@ -2123,6 +2123,40 @@
         // ==========================================
         // DELETE (Firebase)
         // ==========================================
+        // ==========================================
+        // WHATSAPP NUMBER FORMATTER
+        // Handles ANY format: 8112345678, 528112345678, +528112345678,
+        // 81-1234-5678, +52 1 81 1234 5678, etc.
+        // Returns clean number for wa.me link
+        // ==========================================
+        function formatWA(tel) {
+            if (!tel) return '';
+            // Remove everything except digits
+            var clean = tel.replace(/\D/g, '');
+            // If starts with '+' it was international format, already handled by removing +
+
+            // If 10 digits (local MX: 8112345678) -> add 52
+            if (clean.length === 10) return '52' + clean;
+            // If 12 digits starting with 52 (528112345678) -> use as is
+            if (clean.length === 12 && clean.startsWith('52')) return clean;
+            // If 13 digits starting with 521 (5218112345678) -> use as is
+            if (clean.length === 13 && clean.startsWith('521')) return clean;
+            // If 11 digits starting with 1 (18112345678, old MX mobile format) -> add 52
+            if (clean.length === 11 && clean.startsWith('1')) return '52' + clean;
+            // If already looks international (starts with country code), use as is
+            if (clean.length >= 11) return clean;
+            // Fallback: assume MX, add 52
+            return '52' + clean;
+        }
+
+        function waLink(tel, text) {
+            var num = formatWA(tel);
+            if (!num) return '#';
+            var url = 'https://wa.me/' + num;
+            if (text) url += '?text=' + encodeURIComponent(text);
+            return url;
+        }
+
         function deleteVendedor(id) {
             if (!confirm('Eliminar este vendedor?')) return;
             vendedores = vendedores.filter(x => x.id !== id);
@@ -2164,7 +2198,7 @@
 
             tbody.innerHTML = data.map(v => '<tr>' +
                 '<td><div class="client-name"><div class="client-avatar" style="background:' + avatarColor(v.nombre) + '">' + initials(v.nombre) + '</div>' + v.nombre + '</div></td>' +
-                '<td><div class="client-phone">' + (v.telefono || '-') + (v.telefono ? ' <a href="https://wa.me/52' + v.telefono + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
+                '<td><div class="client-phone">' + (v.telefono || '-') + (v.telefono ? ' <a href="' + waLink(v.telefono) + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
                 '<td style="font-weight:600;">' + v.auto + '</td>' +
                 '<td><span class="badge badge-' + v.seriedad.toLowerCase() + '">' + v.seriedad + '</span></td>' +
                 '<td><span class="badge badge-' + estadoVClass(v.estado) + '">' + v.estado + '</span></td>' +
@@ -2199,7 +2233,7 @@
 
             tbody.innerHTML = data.map(c => '<tr>' +
                 '<td><div class="client-name"><div class="client-avatar" style="background:' + avatarColor(c.nombre) + '">' + initials(c.nombre) + '</div>' + c.nombre + '</div></td>' +
-                '<td><div class="client-phone">' + (c.telefono || '-') + (c.telefono ? ' <a href="https://wa.me/52' + c.telefono + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
+                '<td><div class="client-phone">' + (c.telefono || '-') + (c.telefono ? ' <a href="' + waLink(c.telefono) + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
                 '<td style="font-weight:600;">' + c.vehiculo + '</td>' +
                 '<td><span class="badge badge-' + estadoCClass(c.estado) + '">' + c.estado + '</span></td>' +
                 '<td>' + getSeguimientoHTML(c) + '</td>' +
@@ -3494,7 +3528,7 @@
             if (!msg) { showNotif('Escribe un mensaje', true); return; }
             var tel = c.telefono || c.telComprador || '';
             if (!tel) { showNotif('No tiene telefono registrado', true); return; }
-            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(msg);
+            var url = waLink(tel, msg);
             window.open(url, '_blank');
 
             if (!c.mensajesEnviados) c.mensajesEnviados = [];
@@ -3594,7 +3628,7 @@
             var tel = c.telResponsable || c.telefono || '';
             if (!tel) { showNotif('No hay telefono de responsable', true); return; }
             var msg = 'ALERTA DE PANICO FYRADRIVE\nComprador: ' + c.nombre + '\nVehiculo: ' + c.vehiculo + '\nEstado: ' + c.estado + '\nToken: ' + (c.tokenSeguridad || 'N/A') + '\nACCION INMEDIATA REQUERIDA';
-            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(msg);
+            var url = waLink(tel, msg);
             window.open(url, '_blank');
             showNotif('ALERTA DE PANICO ACTIVADA', true);
         }
@@ -3604,7 +3638,7 @@
             if (!c) return;
             var tel = c.telDueno || c.telComprador || c.telefono || '';
             if (!tel) { showNotif('No hay telefono para compartir', true); return; }
-            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent('Te comparto mi ubicacion en vivo para la cita del ' + c.vehiculo + '. Token de seguridad: ' + (c.tokenSeguridad || 'N/A'));
+            var url = waLink(tel, 'Te comparto mi ubicacion en vivo para la cita del ' + c.vehiculo + '. Token de seguridad: ' + (c.tokenSeguridad || 'N/A'));
             window.open(url, '_blank');
             showNotif('Abre WhatsApp y comparte tu ubicacion en vivo');
         }
