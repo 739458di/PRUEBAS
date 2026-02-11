@@ -122,9 +122,20 @@ async function setConversation(telefono, data) {
     }
 }
 
+// ===== LIMPIAR TELEFONO MEXICO =====
+function cleanPhone(tel) {
+    var clean = tel.replace(/\D/g, '');
+    // Meta manda 521XXXXXXXXXX (13 digitos) pero el API necesita 52XXXXXXXXXX (12 digitos)
+    if (clean.length === 13 && clean.startsWith('521')) {
+        clean = '52' + clean.substring(3);
+    }
+    return clean;
+}
+
 // ===== ENVIAR MENSAJE =====
 async function sendMessage(to, text) {
     try {
+        var cleanTo = cleanPhone(to);
         var response = await fetch(WA_API_URL, {
             method: 'POST',
             headers: {
@@ -134,7 +145,7 @@ async function sendMessage(to, text) {
             body: JSON.stringify({
                 messaging_product: 'whatsapp',
                 recipient_type: 'individual',
-                to: to,
+                to: cleanTo,
                 type: 'text',
                 text: { preview_url: false, body: text }
             })
