@@ -3,90 +3,33 @@
 // Body: { tipo: "vendedor"|"comprador", nombre, telefono, auto?, vehiculo?, notas? }
 // Header: x-api-key = fyradrive2026
 
-const https = require('https');
+const { createClient } = require('@libsql/client');
 
 const API_KEY = 'fyradrive2026';
-let BLOB_ID = '019c4d4f-574f-716b-b8c1-4c3240cbd38b';
+
+const client = createClient({
+    url: 'libsql://crm-fyradrive-739458di.aws-us-west-2.turso.io',
+    authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzA4MjUwMDYsImlkIjoiYTczOTliMjctYWFlNi00YjhmLWJmYjktODQ2M2JmMWU1MzljIiwicmlkIjoiNWVhMDBiM2QtNzNiNS00Njg3LWFjN2YtMTNhMGQzZmJlZmM1In0.ZVnn2UF2WdEw_yvQYGGB9Eyvbh_JRniPhkByn6Vxiavki0FkHVM8Xb0cwu1Ijrhti_j3iiOxS5jtt2IwCRWvDA'
+});
 
 const EMPTY_DATA = { vendedores: [], compradores: [], proyectos: [], eventos: [] };
 
-function blobRequest(method, blobId, data) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'jsonblob.com',
-            path: '/api/jsonBlob/' + blobId,
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        };
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                resolve({ statusCode: res.statusCode, headers: res.headers, body: body });
-            });
-        });
-        req.on('error', reject);
-        if (data) req.write(JSON.stringify(data));
-        req.end();
-    });
-}
-
-function createNewBlob(data) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'jsonblob.com',
-            path: '/api/jsonBlob',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        };
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                const newId = res.headers['x-jsonblob-id'];
-                if (newId) resolve(newId);
-                else reject(new Error('No blob ID returned'));
-            });
-        });
-        req.on('error', reject);
-        req.write(JSON.stringify(data || EMPTY_DATA));
-        req.end();
-    });
-}
-
-async function getDataSafe() {
-    const result = await blobRequest('GET', BLOB_ID);
-    if (result.statusCode === 404 || result.body.includes('not found') || result.body.includes('Not Found')) {
-        const newId = await createNewBlob(EMPTY_DATA);
-        BLOB_ID = newId;
-        return EMPTY_DATA;
-    }
+async function getData() {
     try {
-        const parsed = JSON.parse(result.body);
-        return {
-            vendedores: parsed.vendedores || [],
-            compradores: parsed.compradores || [],
-            proyectos: parsed.proyectos || [],
-            eventos: parsed.eventos || []
-        };
-    } catch (e) {
+        const result = await client.execute("SELECT data FROM crm_data WHERE id = 'main'");
+        if (result.rows.length === 0) return EMPTY_DATA;
+        return JSON.parse(result.rows[0].data);
+    } catch (err) {
+        console.error('getData error:', err);
         return EMPTY_DATA;
     }
 }
 
-async function putDataSafe(data) {
-    const result = await blobRequest('PUT', BLOB_ID, data);
-    if (result.statusCode === 404 || result.body.includes('not found')) {
-        const newId = await createNewBlob(data);
-        BLOB_ID = newId;
-    }
-    return { success: true };
+async function putData(data) {
+    await client.execute({
+        sql: 'UPDATE crm_data SET data = ?, updated_at = ? WHERE id = ?',
+        args: [JSON.stringify(data), Date.now(), 'main']
+    });
 }
 
 function validarTelefono(tel) {
@@ -130,7 +73,7 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        const data = await getDataSafe();
+        const data = await getData();
         const vendedores = data.vendedores || [];
         const compradores = data.compradores || [];
         const proyectos = data.proyectos || [];
@@ -147,7 +90,7 @@ module.exports = async function handler(req, res) {
                 vendedores[existente].notas = (vendedores[existente].notas || '') +
                     '\n[ManyChat ' + new Date().toLocaleDateString('es-MX') + '] ' + (notas || 'Contacto repetido');
 
-                await putDataSafe({ vendedores, compradores, proyectos, eventos });
+                await putData({ vendedores, compradores, proyectos, eventos });
                 return res.status(200).json({
                     registrado: true,
                     duplicado: true,
@@ -169,7 +112,7 @@ module.exports = async function handler(req, res) {
             };
 
             vendedores.push(nuevoVendedor);
-            await putDataSafe({ vendedores, compradores, proyectos, eventos });
+            await putData({ vendedores, compradores, proyectos, eventos });
 
             return res.status(200).json({
                 registrado: true,
@@ -190,7 +133,7 @@ module.exports = async function handler(req, res) {
                     '\n[ManyChat ' + new Date().toLocaleDateString('es-MX') + '] ' + (notas || 'Contacto repetido') +
                     (vehiculo ? ' - Interesado en: ' + vehiculo : '');
 
-                await putDataSafe({ vendedores, compradores, proyectos, eventos });
+                await putData({ vendedores, compradores, proyectos, eventos });
                 return res.status(200).json({
                     registrado: true,
                     duplicado: true,
@@ -216,7 +159,7 @@ module.exports = async function handler(req, res) {
             };
 
             compradores.push(nuevoComprador);
-            await putDataSafe({ vendedores, compradores, proyectos, eventos });
+            await putData({ vendedores, compradores, proyectos, eventos });
 
             return res.status(200).json({
                 registrado: true,

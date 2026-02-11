@@ -1,109 +1,44 @@
-// CRM Database API - uses JSONBlob.com as free cloud database
+// CRM Database API - Turso (LibSQL) - Permanent cloud database
 // Both Sebastian and Mario can read/write the same data in real time
-// Auto-recovery: if blob is deleted, creates a new one automatically
 
-const https = require('https');
+const { createClient } = require('@libsql/client');
 
-let BLOB_ID = '019c4d4f-574f-716b-b8c1-4c3240cbd38b';
+const client = createClient({
+    url: 'libsql://crm-fyradrive-739458di.aws-us-west-2.turso.io',
+    authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzA4MjUwMDYsImlkIjoiYTczOTliMjctYWFlNi00YjhmLWJmYjktODQ2M2JmMWU1MzljIiwicmlkIjoiNWVhMDBiM2QtNzNiNS00Njg3LWFjN2YtMTNhMGQzZmJlZmM1In0.ZVnn2UF2WdEw_yvQYGGB9Eyvbh_JRniPhkByn6Vxiavki0FkHVM8Xb0cwu1Ijrhti_j3iiOxS5jtt2IwCRWvDA'
+});
 
 const EMPTY_DATA = { vendedores: [], compradores: [], proyectos: [], eventos: [] };
 
-function blobRequest(method, blobId, data) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'jsonblob.com',
-            path: '/api/jsonBlob/' + blobId,
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                resolve({ statusCode: res.statusCode, headers: res.headers, body: body });
-            });
-        });
-
-        req.on('error', reject);
-        if (data) req.write(JSON.stringify(data));
-        req.end();
-    });
-}
-
-// Create a new blob and return its ID
-function createNewBlob(data) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'jsonblob.com',
-            path: '/api/jsonBlob',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                const newId = res.headers['x-jsonblob-id'];
-                if (newId) {
-                    resolve(newId);
-                } else {
-                    reject(new Error('No blob ID returned'));
-                }
-            });
-        });
-
-        req.on('error', reject);
-        req.write(JSON.stringify(data || EMPTY_DATA));
-        req.end();
-    });
-}
-
-async function getDataSafe() {
-    const result = await blobRequest('GET', BLOB_ID);
-
-    // If blob was deleted/expired, create a new one
-    if (result.statusCode === 404 || result.body.includes('not found') || result.body.includes('Not Found')) {
-        console.log('Blob not found, creating new one...');
-        const newId = await createNewBlob(EMPTY_DATA);
-        BLOB_ID = newId;
-        console.log('New blob created: ' + newId);
-        return { ...EMPTY_DATA, _newBlobId: newId };
-    }
-
+async function getData() {
     try {
-        const parsed = JSON.parse(result.body);
-        // Ensure all required arrays exist
-        return {
-            vendedores: parsed.vendedores || [],
-            compradores: parsed.compradores || [],
-            proyectos: parsed.proyectos || [],
-            eventos: parsed.eventos || []
-        };
-    } catch (e) {
+        const result = await client.execute("SELECT data FROM crm_data WHERE id = 'main'");
+        if (result.rows.length === 0) {
+            // No data yet, initialize
+            await client.execute({
+                sql: 'INSERT INTO crm_data (id, data, updated_at) VALUES (?, ?, ?)',
+                args: ['main', JSON.stringify(EMPTY_DATA), Date.now()]
+            });
+            return EMPTY_DATA;
+        }
+        return JSON.parse(result.rows[0].data);
+    } catch (err) {
+        console.error('getData error:', err);
         return EMPTY_DATA;
     }
 }
 
-async function putDataSafe(data) {
-    const result = await blobRequest('PUT', BLOB_ID, data);
-
-    // If blob was deleted, create new and write there
-    if (result.statusCode === 404 || result.body.includes('not found')) {
-        console.log('Blob not found on PUT, creating new one...');
-        const newId = await createNewBlob(data);
-        BLOB_ID = newId;
-        return { success: true, _newBlobId: newId };
+async function putData(data) {
+    try {
+        await client.execute({
+            sql: 'UPDATE crm_data SET data = ?, updated_at = ? WHERE id = ?',
+            args: [JSON.stringify(data), Date.now(), 'main']
+        });
+        return { success: true };
+    } catch (err) {
+        console.error('putData error:', err);
+        throw err;
     }
-
-    return { success: true };
 }
 
 module.exports = async function handler(req, res) {
@@ -114,15 +49,13 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
-        // GET - fetch all data
         if (req.method === 'GET') {
-            const data = await getDataSafe();
+            const data = await getData();
             return res.status(200).json(data);
         }
 
-        // PUT - save all data (full replace)
         if (req.method === 'PUT') {
-            const result = await putDataSafe(req.body);
+            const result = await putData(req.body);
             return res.status(200).json(result);
         }
 
