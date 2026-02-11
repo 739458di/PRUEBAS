@@ -331,31 +331,30 @@
         .badge-vendido { background: #10b981; color: var(--white); }
         .badge-ventafallida { background: #fecaca; color: #991b1b; }
 
-        /* Countdown badge */
-        .countdown-badge {
-            display: inline-flex; align-items: center; gap: 4px;
-            padding: 3px 8px; border-radius: 50px; font-size: 10px; font-weight: 700;
-            white-space: nowrap;
-        }
-        .cd-fresh { background: #d1fae5; color: #065f46; }
-        .cd-attention { background: #fef3c7; color: #92400e; }
-        .cd-urgent { background: #fecaca; color: #991b1b; animation: urgentPulse 1.5s infinite; }
-        @keyframes urgentPulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
-
-        /* Seguimiento indicator */
+        /* Seguimiento indicator in table */
         .seg-indicator {
             display: inline-flex; align-items: center; gap: 4px;
-            padding: 3px 8px; border-radius: 50px; font-size: 10px; font-weight: 700;
-            cursor: pointer; transition: all 0.2s;
+            padding: 4px 10px; border-radius: 50px; font-size: 10px; font-weight: 700;
+            cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
         .seg-aldia { background: #d1fae5; color: #065f46; }
         .seg-pendiente { background: #fef3c7; color: #92400e; }
-        .seg-urgente { background: #fecaca; color: #991b1b; }
+        .seg-urgente { background: #fecaca; color: #991b1b; animation: urgentPulse 1.5s infinite; }
         .seg-indicator:hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        @keyframes urgentPulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
 
-        /* Panel de Seguimiento (modal grande) */
+        /* Alert badge (table) */
+        .seg-alert-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 2px 7px; border-radius: 50px; font-size: 9px; font-weight: 800;
+            background: #ef4444; color: white; margin-left: 4px;
+            animation: alertBounce 1s infinite;
+        }
+        @keyframes alertBounce { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+
+        /* Panel de Seguimiento */
         .seg-panel {
-            position: fixed; top: 0; right: -480px; width: 460px; height: 100vh;
+            position: fixed; top: 0; right: -500px; width: 480px; height: 100vh;
             background: var(--white); box-shadow: -8px 0 32px rgba(0,0,0,0.15);
             z-index: 1200; transition: right 0.3s ease; overflow-y: auto;
         }
@@ -382,21 +381,50 @@
             text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
         }
 
-        /* Countdown grande */
-        .seg-countdown-big {
-            text-align: center; padding: 20px; border-radius: 14px;
-            margin-bottom: 8px;
+        /* CRONOMETRO en tiempo real */
+        .seg-crono {
+            text-align: center; padding: 24px; border-radius: 16px; position: relative;
+            overflow: hidden;
         }
-        .seg-countdown-big .days { font-size: 42px; font-weight: 900; line-height: 1; }
-        .seg-countdown-big .label { font-size: 12px; font-weight: 600; margin-top: 4px; }
-        .seg-countdown-big.fresh { background: linear-gradient(135deg, #d1fae5, #ecfdf5); color: #065f46; }
-        .seg-countdown-big.attention { background: linear-gradient(135deg, #fef3c7, #fffbeb); color: #92400e; }
-        .seg-countdown-big.urgent { background: linear-gradient(135deg, #fecaca, #fef2f2); color: #991b1b; }
+        .seg-crono.fresh { background: linear-gradient(135deg, #ecfdf5, #d1fae5); }
+        .seg-crono.attention { background: linear-gradient(135deg, #fffbeb, #fef3c7); }
+        .seg-crono.urgent { background: linear-gradient(135deg, #fef2f2, #fecaca); }
+        .seg-crono-time {
+            font-size: 48px; font-weight: 900; font-family: 'Courier New', monospace;
+            letter-spacing: 2px; line-height: 1;
+        }
+        .seg-crono-sub { font-size: 11px; font-weight: 600; margin-top: 6px; opacity: 0.8; }
+        .seg-crono-label {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; margin-top: 8px; opacity: 0.6;
+        }
+        /* Progress bar inside crono */
+        .seg-crono-progress {
+            height: 4px; background: rgba(0,0,0,0.1); border-radius: 4px;
+            margin-top: 12px; overflow: hidden;
+        }
+        .seg-crono-progress-fill {
+            height: 100%; border-radius: 4px; transition: width 1s linear;
+        }
+        .seg-crono.fresh .seg-crono-progress-fill { background: #10b981; }
+        .seg-crono.attention .seg-crono-progress-fill { background: #f59e0b; }
+        .seg-crono.urgent .seg-crono-progress-fill { background: #ef4444; }
 
-        /* State machine visual */
-        .seg-state-flow {
-            display: flex; gap: 2px; margin-bottom: 12px; flex-wrap: wrap;
+        /* Alerta de mensaje sugerido */
+        .seg-alerta {
+            background: linear-gradient(135deg, #fef2f2, #fecaca); border: 2px solid #f87171;
+            border-radius: 12px; padding: 14px; margin-bottom: 12px;
+            animation: alertGlow 2s infinite;
         }
+        @keyframes alertGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 16px 4px rgba(239,68,68,0.15); } }
+        .seg-alerta-title {
+            font-size: 12px; font-weight: 800; color: #dc2626;
+            display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+        }
+        .seg-alerta-desc { font-size: 11px; color: #7f1d1d; }
+
+        /* State flow */
+        .seg-state-flow { display: flex; gap: 2px; margin-bottom: 12px; flex-wrap: wrap; }
         .seg-state-dot {
             padding: 4px 8px; border-radius: 4px; font-size: 9px; font-weight: 700;
             background: #f3f4f6; color: var(--gray-light); white-space: nowrap;
@@ -404,50 +432,44 @@
         .seg-state-dot.active { background: var(--cyan); color: white; }
         .seg-state-dot.done { background: #d1fae5; color: #065f46; }
 
-        /* Intenciones grid */
-        .seg-intenciones {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-        }
-        .seg-intencion-btn {
-            padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 10px;
-            background: var(--white); cursor: pointer; text-align: left;
-            font-family: 'Inter', sans-serif; transition: all 0.2s;
-        }
-        .seg-intencion-btn:hover { border-color: var(--cyan); background: #ecfeff; }
-        .seg-intencion-btn.selected { border-color: var(--cyan); background: #ecfeff; }
-        .seg-intencion-btn .emoji { font-size: 16px; }
-        .seg-intencion-btn .title { font-size: 11px; font-weight: 700; color: var(--dark); margin-top: 2px; }
-        .seg-intencion-btn .desc { font-size: 9px; color: var(--gray); margin-top: 1px; }
-
-        /* Mensaje generado */
+        /* Mensaje editable area */
         .seg-mensaje-box {
             background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 12px;
-            padding: 14px; margin-top: 10px; position: relative;
+            padding: 14px; position: relative;
         }
-        .seg-mensaje-text {
-            font-size: 13px; line-height: 1.5; color: #1a1a1a; white-space: pre-wrap;
+        .seg-mensaje-textarea {
+            width: 100%; min-height: 80px; border: none; background: transparent;
+            font-size: 13px; line-height: 1.6; color: #1a1a1a; resize: vertical;
+            font-family: 'Inter', sans-serif; font-weight: 500; outline: none;
         }
-        .seg-mensaje-actions {
-            display: flex; gap: 8px; margin-top: 10px;
+        .seg-mensaje-label {
+            font-size: 9px; font-weight: 700; color: #065f46; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 6px;
         }
+        .seg-mensaje-actions { display: flex; gap: 8px; margin-top: 10px; }
         .seg-btn-wa {
-            flex: 1; padding: 10px; background: #25d366; color: white; border: none;
-            border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+            flex: 1; padding: 12px; background: #25d366; color: white; border: none;
+            border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
             font-family: 'Inter', sans-serif; display: flex; align-items: center;
             justify-content: center; gap: 6px; transition: all 0.2s;
         }
         .seg-btn-wa:hover { background: #1da851; }
-        .seg-btn-copy {
-            padding: 10px 16px; background: #f3f4f6; color: var(--dark); border: none;
-            border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+        .seg-btn-alt {
+            padding: 12px 16px; background: #f3f4f6; color: var(--dark); border: none;
+            border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer;
             font-family: 'Inter', sans-serif; transition: all 0.2s;
         }
-        .seg-btn-copy:hover { background: #e5e7eb; }
-        .seg-btn-refresh {
-            padding: 10px; background: var(--white); border: 1.5px solid var(--border);
-            border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s;
+        .seg-btn-alt:hover { background: #e5e7eb; }
+
+        /* Options row */
+        .seg-opciones { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .seg-opcion-btn {
+            padding: 6px 12px; border: 1.5px solid var(--border); border-radius: 50px;
+            background: var(--white); cursor: pointer; font-size: 11px; font-weight: 700;
+            font-family: 'Inter', sans-serif; transition: all 0.2s; color: var(--dark);
         }
-        .seg-btn-refresh:hover { border-color: var(--cyan); }
+        .seg-opcion-btn:hover { border-color: var(--cyan); background: #ecfeff; }
+        .seg-opcion-btn.active { border-color: var(--cyan); background: var(--cyan); color: white; }
 
         /* Historial */
         .seg-historial-item {
@@ -455,14 +477,11 @@
             border-bottom: 1px solid #f9fafb; font-size: 12px;
         }
         .seg-historial-item:last-child { border-bottom: none; }
-        .seg-hist-dot {
-            width: 8px; height: 8px; border-radius: 50%; background: #25d366;
-            margin-top: 4px; flex-shrink: 0;
-        }
+        .seg-hist-dot { width: 8px; height: 8px; border-radius: 50%; background: #25d366; margin-top: 4px; flex-shrink: 0; }
         .seg-hist-time { font-size: 10px; color: var(--gray); }
         .seg-hist-msg { color: var(--dark); font-weight: 500; }
 
-        /* Avanzar estado btn */
+        /* Avanzar estado */
         .seg-btn-advance {
             width: 100%; padding: 12px; background: linear-gradient(135deg, var(--cyan), #06b6d4);
             color: white; border: none; border-radius: 10px; font-size: 13px; font-weight: 700;
@@ -471,18 +490,15 @@
         }
         .seg-btn-advance:hover { background: linear-gradient(135deg, #0e7490, var(--cyan)); }
 
-        /* Token de seguridad */
+        /* Token */
         .seg-token-box {
             text-align: center; padding: 16px; background: linear-gradient(135deg, #1e1b4b, #312e81);
             border-radius: 12px; color: white;
         }
-        .seg-token-code {
-            font-size: 32px; font-weight: 900; letter-spacing: 8px; margin: 8px 0;
-            font-family: 'Courier New', monospace;
-        }
+        .seg-token-code { font-size: 32px; font-weight: 900; letter-spacing: 8px; margin: 8px 0; font-family: 'Courier New', monospace; }
         .seg-token-label { font-size: 10px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; }
 
-        /* Boton de panico */
+        /* Panico */
         .seg-btn-panico {
             width: 100%; padding: 14px; background: #dc2626; color: white;
             border: none; border-radius: 10px; font-size: 14px; font-weight: 800;
@@ -493,17 +509,26 @@
         @keyframes panicoPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); } 50% { box-shadow: 0 0 0 12px rgba(220,38,38,0); } }
 
         /* Post-cita resultado */
-        .seg-postcita-btns {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-        }
+        .seg-postcita-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
         .seg-postcita-btn {
             padding: 10px; border: 1.5px solid var(--border); border-radius: 8px;
             background: var(--white); cursor: pointer; text-align: center;
-            font-family: 'Inter', sans-serif; transition: all 0.2s;
-            font-size: 11px; font-weight: 700;
+            font-family: 'Inter', sans-serif; transition: all 0.2s; font-size: 11px; font-weight: 700;
         }
         .seg-postcita-btn:hover { border-color: var(--cyan); background: #ecfeff; }
         .seg-postcita-btn.selected { border-color: var(--cyan); background: #ecfeff; }
+
+        /* CRM Alert Notification (top banner) */
+        .seg-crm-alert {
+            position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+            background: linear-gradient(135deg, #dc2626, #ef4444); color: white;
+            padding: 10px 20px; border-radius: 12px; font-size: 12px; font-weight: 700;
+            display: none; align-items: center; gap: 10px; z-index: 1100;
+            box-shadow: 0 8px 32px rgba(220,38,38,0.3); cursor: pointer;
+            animation: alertSlideIn 0.4s ease-out;
+        }
+        .seg-crm-alert.show { display: flex; }
+        @keyframes alertSlideIn { from { transform: translateX(-50%) translateY(-20px); opacity:0; } to { transform: translateX(-50%) translateY(0); opacity:1; } }
 
         /* NOTIFICATION */
         .notification {
@@ -1626,6 +1651,13 @@
         </div>
     </div>
 
+    <!-- CRM ALERT (top banner notification) -->
+    <div class="seg-crm-alert" id="seg-crm-alert" onclick="handleCRMAlert()">
+        <span>&#128680;</span>
+        <span id="seg-crm-alert-text">Toca darle seguimiento a un comprador</span>
+        <span style="font-size:10px; opacity:0.8; margin-left:8px;">Click para abrir</span>
+    </div>
+
     <!-- PANEL DE SEGUIMIENTO (slide-in lateral) -->
     <div class="seg-panel-overlay" id="seg-overlay" onclick="closeSeguimiento()"></div>
     <div class="seg-panel" id="seg-panel">
@@ -1638,17 +1670,23 @@
             <div class="seg-section-title">Flujo de Compra</div>
             <div class="seg-state-flow" id="seg-flow"></div>
         </div>
-        <!-- Countdown -->
+        <!-- CRONOMETRO en tiempo real -->
         <div class="seg-section">
-            <div class="seg-countdown-big" id="seg-countdown">
-                <div class="days" id="seg-cd-days">0</div>
-                <div class="label" id="seg-cd-label">dias en este estado</div>
-            </div>
-            <div id="seg-cita-countdown" style="display:none; text-align:center; margin-top:8px;">
-                <span style="font-size:12px; font-weight:700; color:var(--cyan);" id="seg-cita-cd-text"></span>
+            <div class="seg-crono" id="seg-crono">
+                <div class="seg-crono-time" id="seg-crono-time">00:00:00:00</div>
+                <div class="seg-crono-sub" id="seg-crono-sub"></div>
+                <div class="seg-crono-label" id="seg-crono-label">tiempo en este estado</div>
+                <div class="seg-crono-progress"><div class="seg-crono-progress-fill" id="seg-crono-fill"></div></div>
             </div>
         </div>
-        <!-- Token de seguridad (solo en camino/llego/en cita) -->
+        <!-- ALERTA: toca mandar mensaje -->
+        <div class="seg-section" id="seg-alerta-section" style="display:none;">
+            <div class="seg-alerta" id="seg-alerta">
+                <div class="seg-alerta-title">&#128680; <span id="seg-alerta-title-text">Toca mandar mensaje</span></div>
+                <div class="seg-alerta-desc" id="seg-alerta-desc">Lleva tiempo sin seguimiento, no dejes que se enfrie</div>
+            </div>
+        </div>
+        <!-- Token de seguridad -->
         <div class="seg-section" id="seg-token-section" style="display:none;">
             <div class="seg-section-title">Token de Seguridad</div>
             <div class="seg-token-box">
@@ -1657,37 +1695,33 @@
                 <div class="seg-token-label">Comprador y vendedor deben coincidir</div>
             </div>
         </div>
-        <!-- Boton de panico (solo en camino/llego/en cita) -->
+        <!-- Boton de panico -->
         <div class="seg-section" id="seg-panico-section" style="display:none;">
             <button class="seg-btn-panico" onclick="activarPanico()">&#128680; BOTON DE PANICO &#128680;</button>
             <div style="font-size:10px; color:var(--gray); text-align:center; margin-top:6px;">Envia alerta inmediata por WhatsApp</div>
         </div>
-        <!-- Live location (solo en camino) -->
+        <!-- Live location -->
         <div class="seg-section" id="seg-liveloc-section" style="display:none;">
             <div class="seg-section-title">Ubicacion en Vivo</div>
             <button class="seg-btn-wa" style="width:100%;" onclick="compartirUbicacion()">&#128205; Compartir ubicacion por WhatsApp</button>
-            <div style="font-size:10px; color:var(--gray); text-align:center; margin-top:6px;">Se envia link de ubicacion al vendedor y responsable</div>
         </div>
         <!-- Post-cita resultado -->
         <div class="seg-section" id="seg-postcita-section" style="display:none;">
-            <div class="seg-section-title">Resultado de la Cita</div>
+            <div class="seg-section-title">En que quedaron?</div>
             <div class="seg-postcita-btns" id="seg-postcita-btns"></div>
         </div>
-        <!-- Intenciones -->
-        <div class="seg-section" id="seg-intenciones-section">
-            <div class="seg-section-title">Que quieres comunicar?</div>
-            <div class="seg-intenciones" id="seg-intenciones-grid"></div>
-        </div>
-        <!-- Mensaje generado -->
-        <div class="seg-section" id="seg-mensaje-section" style="display:none;">
-            <div class="seg-section-title">Mensaje Sugerido</div>
+        <!-- MENSAJE SUGERIDO (el CRM te dice que mandar) -->
+        <div class="seg-section" id="seg-mensaje-section">
+            <div class="seg-section-title" id="seg-msg-label">Mensaje Sugerido</div>
+            <div class="seg-opciones" id="seg-opciones"></div>
             <div class="seg-mensaje-box">
-                <div class="seg-mensaje-text" id="seg-mensaje-text"></div>
+                <div class="seg-mensaje-label">Editable — modifica antes de enviar</div>
+                <textarea class="seg-mensaje-textarea" id="seg-mensaje-textarea"></textarea>
             </div>
             <div class="seg-mensaje-actions">
-                <button class="seg-btn-wa" id="seg-btn-enviar-wa" onclick="enviarWhatsApp()">&#128172; Enviar por WhatsApp</button>
-                <button class="seg-btn-copy" onclick="copiarMensaje()">Copiar</button>
-                <button class="seg-btn-refresh" onclick="regenerarMensaje()" title="Otra alternativa">&#128260;</button>
+                <button class="seg-btn-wa" onclick="enviarWhatsApp()">&#128172; Enviar por WhatsApp</button>
+                <button class="seg-btn-alt" onclick="copiarMensaje()">&#128203; Copiar</button>
+                <button class="seg-btn-alt" onclick="regenerarMensaje()">&#128260; Otra opcion</button>
             </div>
         </div>
         <!-- Avanzar estado -->
@@ -2238,10 +2272,20 @@
         function getSeguimientoHTML(c) {
             var dias = getDiasEnEstado(c);
             var cls = getUrgenciaClass(dias, c.estado);
-            var label = dias === 0 ? 'Hoy' : dias === 1 ? '1 dia' : dias + ' dias';
+            var horas = (Date.now() - (c.estadoCambio || c.created || Date.now())) / 3600000;
+            var label = horas < 1 ? Math.floor(horas*60) + 'min' : horas < 24 ? Math.floor(horas) + 'h' : dias + 'd';
+            var segCls = cls === 'cd-fresh' ? 'seg-aldia' : cls === 'cd-attention' ? 'seg-pendiente' : 'seg-urgente';
             var emoji = cls === 'cd-fresh' ? '&#9989;' : cls === 'cd-attention' ? '&#9888;' : '&#128308;';
-            return '<span class="seg-indicator ' + cls.replace('cd-','seg-').replace('fresh','aldia').replace('attention','pendiente').replace('urgent','urgente') + '" onclick="openSeguimiento(\'' + c.id + '\')" title="Abrir seguimiento">' +
-                emoji + ' ' + label + '</span>';
+
+            // Check if alert is active
+            var tl = getTimelineAction(c);
+            var alertBadge = '';
+            if (tl && tl.action && tl.shouldAlert && !['Vendido','Venta Fallida','En Camino','Llego al Lugar','En Cita'].includes(c.estado)) {
+                alertBadge = '<span class="seg-alert-badge">MENSAJE</span>';
+            }
+
+            return '<span class="seg-indicator ' + segCls + '" onclick="openSeguimiento(\'' + c.id + '\')" title="Abrir seguimiento">' +
+                emoji + ' ' + label + '</span>' + alertBadge;
         }
         function showNotif(text, isError) {
             var n = document.getElementById('notification');
@@ -2981,10 +3025,48 @@
         cotCalcular();
 
         // ==========================================
-        // SEGUIMIENTO - STATE MACHINE
+        // SEGUIMIENTO - STATE MACHINE + CRONOMETRO REAL TIME
         // ==========================================
         var BUYER_STATES = ['Pre-Agendacion','Cita Confirmada','En Camino','Llego al Lugar','En Cita','Post-Cita','Tramite Bancario','Separado','Vendido'];
         var segCurrentId = null;
+        var segCronoInterval = null;
+        var segAlertInterval = null;
+        var segAlertShownFor = {}; // track shown alerts
+
+        // REGLAS DE TIEMPO: cuando alertar y que sugerir
+        // horas = horas desde que entro al estado
+        var SEG_TIMELINE = {
+            'Pre-Agendacion': [
+                { horas: 0.5, tipo: 'primer_contacto', alerta: 'Primer contacto: presentate y genera interes', desc: 'Hace 30min que llego este lead, toca romper el hielo' },
+                { horas: 4, tipo: 'confirmar_hora', alerta: 'Confirma hora de cita', desc: 'Ya paso medio dia, confirma disponibilidad para agendar cita' },
+                { horas: 24, tipo: 'recordatorio_interes', alerta: 'Ya paso 1 dia — manda recordatorio', desc: 'Se puede estar enfriando, reactiva el interes' },
+                { horas: 48, tipo: 'urgencia_suave', alerta: '2 dias sin agendar — urgencia suave', desc: 'Menciona que hay mas interesados, incentiva a agendar' },
+                { horas: 72, tipo: 'urgencia_fuerte', alerta: '3 DIAS — se esta enfriando!', desc: 'Ultimo intento estrategico, ofrecele algo extra o cotizacion' },
+                { horas: 120, tipo: 'reactivacion', alerta: '5 DIAS — intento de reactivacion', desc: 'Casi perdido, intenta con enfoque diferente o descuento' }
+            ],
+            'Cita Confirmada': [
+                { horas: 1, tipo: 'seguridad', alerta: 'Dale seguridad sobre el proceso', desc: 'Acaba de confirmar, refuerza que es un proceso seguro y serio' },
+                { horas: 12, tipo: 'funfact', alerta: 'Manda un fun fact del vehiculo', desc: 'Manten el interes vivo con datos curiosos del carro' },
+                { horas: 24, tipo: 'incentivo', alerta: 'Manda un incentivo', desc: 'Dale una razon extra para no faltar a la cita' },
+                { horas: 48, tipo: 'recordatorio', alerta: 'Recordatorio de cita', desc: 'Confirma que sigue en pie, manda ubicacion' },
+                { horas: 72, tipo: 'confirmar_asistencia', alerta: 'Confirma asistencia final', desc: 'Ya casi es la cita, necesitas confirmacion que va a ir' }
+            ],
+            'Post-Cita': [
+                { horas: 2, tipo: 'agradecimiento', alerta: 'Agradece y pregunta que le parecio', desc: 'Post-cita inmediato: que te parecio? alguna duda?' },
+                { horas: 24, tipo: 'seguimiento_suave', alerta: '1 dia post-cita — seguimiento suave', desc: 'Dale espacio pero mantenlo caliente, pregunta si tiene dudas' },
+                { horas: 48, tipo: 'ofrecer_cotizacion', alerta: '2 dias — ofrece cotizacion', desc: 'Si no ha decidido, mandale los numeros del credito' },
+                { horas: 72, tipo: 'cierre_urgencia', alerta: '3 DIAS — cierre con urgencia', desc: 'Hay mas interesados, es hora de decidir' },
+                { horas: 120, tipo: 'negociacion', alerta: '5 DIAS — abre negociacion', desc: 'Ofrece flexibilidad, busca llegar a un acuerdo' },
+                { horas: 168, tipo: 'reactivar', alerta: '7 DIAS — ultimo intento', desc: 'Sigue disponible, cambio de enfoque, nueva oportunidad' }
+            ],
+            'Tramite Bancario': [
+                { horas: 48, tipo: 'estatus_tramite', alerta: '2 dias — pregunta estatus del banco', desc: 'Como va el tramite? necesita documentos?' },
+                { horas: 120, tipo: 'apoyo', alerta: '5 dias — ofrece apoyo con tramite', desc: 'Puede estar atorado, pregunta si necesita ayuda' }
+            ],
+            'Separado': [
+                { horas: 72, tipo: 'cierre', alerta: '3 dias separado — empuja al cierre', desc: 'Que falta para cerrar? Coordina los papeles' }
+            ]
+        };
 
         // INTENCIONES POR ESTADO
         var INTENCIONES = {
@@ -3180,6 +3262,37 @@
         var segCurrentIntencion = null;
         var segCurrentMensaje = '';
 
+        // ===== GET CURRENT SUGGESTED ACTION based on elapsed time =====
+        function getTimelineAction(c) {
+            var timeline = SEG_TIMELINE[c.estado];
+            if (!timeline) return null;
+            var cambio = c.estadoCambio || c.created || Date.now();
+            var horasTranscurridas = (Date.now() - cambio) / 3600000;
+            var lastMsg = (c.mensajesEnviados && c.mensajesEnviados.length > 0) ? c.mensajesEnviados[c.mensajesEnviados.length - 1].fecha : 0;
+            var horasDesdeUltimoMsg = lastMsg ? (Date.now() - lastMsg) / 3600000 : 9999;
+
+            // Find the current action: the latest milestone we've passed
+            var currentAction = null;
+            for (var i = timeline.length - 1; i >= 0; i--) {
+                if (horasTranscurridas >= timeline[i].horas) {
+                    currentAction = timeline[i];
+                    break;
+                }
+            }
+            if (!currentAction && timeline.length > 0) currentAction = timeline[0];
+
+            // Find next action (for countdown progress)
+            var nextAction = null;
+            for (var j = 0; j < timeline.length; j++) {
+                if (horasTranscurridas < timeline[j].horas) { nextAction = timeline[j]; break; }
+            }
+
+            // Should alert? If >2hrs since last message sent
+            var shouldAlert = horasDesdeUltimoMsg > 2 && currentAction;
+
+            return { action: currentAction, next: nextAction, horas: horasTranscurridas, shouldAlert: shouldAlert };
+        }
+
         function openSeguimiento(id) {
             segCurrentId = id;
             var c = compradores.find(function(x) { return x.id === id; });
@@ -3187,9 +3300,10 @@
 
             document.getElementById('seg-overlay').classList.add('show');
             document.getElementById('seg-panel').classList.add('open');
-            document.getElementById('seg-title').textContent = c.nombre;
+            document.getElementById('seg-title').textContent = c.nombre + ' — ' + c.vehiculo;
 
             renderSeguimiento(c);
+            startCrono();
         }
 
         function closeSeguimiento() {
@@ -3197,6 +3311,59 @@
             document.getElementById('seg-panel').classList.remove('open');
             segCurrentId = null;
             segCurrentIntencion = null;
+            if (segCronoInterval) { clearInterval(segCronoInterval); segCronoInterval = null; }
+        }
+
+        function startCrono() {
+            if (segCronoInterval) clearInterval(segCronoInterval);
+            segCronoInterval = setInterval(function() {
+                if (!segCurrentId) return;
+                var c = compradores.find(function(x) { return x.id === segCurrentId; });
+                if (!c) return;
+                updateCrono(c);
+            }, 1000);
+        }
+
+        function updateCrono(c) {
+            var cambio = c.estadoCambio || c.created || Date.now();
+            var elapsed = Date.now() - cambio;
+            var d = Math.floor(elapsed / 86400000);
+            var h = Math.floor((elapsed % 86400000) / 3600000);
+            var m = Math.floor((elapsed % 3600000) / 60000);
+            var s = Math.floor((elapsed % 60000) / 1000);
+
+            var timeStr = (d > 0 ? d + 'd ' : '') +
+                (h < 10 ? '0' : '') + h + ':' +
+                (m < 10 ? '0' : '') + m + ':' +
+                (s < 10 ? '0' : '') + s;
+
+            document.getElementById('seg-crono-time').textContent = timeStr;
+
+            var horas = elapsed / 3600000;
+            var cls = horas < 12 ? 'fresh' : horas < 48 ? 'attention' : 'urgent';
+            document.getElementById('seg-crono').className = 'seg-crono ' + cls;
+
+            // Cita countdown sub-text
+            var subText = '';
+            if (c.estado === 'Cita Confirmada' && c.citaFecha) {
+                var citaDate = new Date(c.citaFecha + 'T' + (c.citaHora || '12:00'));
+                var diff = citaDate - new Date();
+                if (diff > 0) {
+                    var dd = Math.floor(diff / 86400000);
+                    var hh = Math.floor((diff % 86400000) / 3600000);
+                    subText = 'Faltan ' + (dd > 0 ? dd + 'd ' : '') + hh + 'h para la cita';
+                } else { subText = 'LA CITA YA PASO'; }
+            }
+            document.getElementById('seg-crono-sub').textContent = subText;
+
+            // Progress bar
+            var tl = getTimelineAction(c);
+            if (tl && tl.next) {
+                var pct = Math.min(100, (horas / tl.next.horas) * 100);
+                document.getElementById('seg-crono-fill').style.width = pct + '%';
+            } else {
+                document.getElementById('seg-crono-fill').style.width = '100%';
+            }
         }
 
         function renderSeguimiento(c) {
@@ -3210,36 +3377,27 @@
             });
             document.getElementById('seg-flow').innerHTML = flowHTML;
 
-            // Countdown
-            var dias = getDiasEnEstado(c);
-            var cdDiv = document.getElementById('seg-countdown');
-            var urgCls = getUrgenciaClass(dias, c.estado);
-            cdDiv.className = 'seg-countdown-big ' + urgCls.replace('cd-','');
-            document.getElementById('seg-cd-days').textContent = dias;
-            document.getElementById('seg-cd-label').textContent = dias === 1 ? 'dia en ' + c.estado : 'dias en ' + c.estado;
+            // Initial crono update
+            updateCrono(c);
+            document.getElementById('seg-crono-label').textContent = 'en ' + c.estado;
 
-            // Cita countdown
-            var citaCd = document.getElementById('seg-cita-countdown');
-            if (c.estado === 'Cita Confirmada' && c.citaFecha) {
-                var citaDate = new Date(c.citaFecha + 'T' + (c.citaHora || '12:00'));
-                var diff = Math.ceil((citaDate - new Date()) / 86400000);
-                citaCd.style.display = 'block';
-                if (diff > 0) document.getElementById('seg-cita-cd-text').textContent = '&#128197; Faltan ' + diff + ' dias para la cita (' + formatDate(c.citaFecha) + ')';
-                else if (diff === 0) document.getElementById('seg-cita-cd-text').innerHTML = '&#128293; HOY ES LA CITA (' + (c.citaHora || '') + ')';
-                else document.getElementById('seg-cita-cd-text').innerHTML = '&#9888; La cita ya paso hace ' + Math.abs(diff) + ' dias';
-            } else { citaCd.style.display = 'none'; }
-
-            // Token (En Camino, Llego, En Cita)
-            var tokenSec = document.getElementById('seg-token-section');
-            var panicoSec = document.getElementById('seg-panico-section');
-            var livelocSec = document.getElementById('seg-liveloc-section');
-            var showSecurity = ['En Camino','Llego al Lugar','En Cita'].includes(c.estado);
-            tokenSec.style.display = showSecurity ? 'block' : 'none';
-            panicoSec.style.display = showSecurity ? 'block' : 'none';
-            livelocSec.style.display = c.estado === 'En Camino' ? 'block' : 'none';
-            if (showSecurity) {
-                document.getElementById('seg-token-code').textContent = c.tokenSeguridad || '----';
+            // Timeline action & alert
+            var tl = getTimelineAction(c);
+            var alertSec = document.getElementById('seg-alerta-section');
+            if (tl && tl.action && tl.shouldAlert) {
+                alertSec.style.display = 'block';
+                document.getElementById('seg-alerta-title-text').textContent = tl.action.alerta;
+                document.getElementById('seg-alerta-desc').textContent = tl.action.desc;
+            } else {
+                alertSec.style.display = 'none';
             }
+
+            // Token & security
+            var showSecurity = ['En Camino','Llego al Lugar','En Cita'].includes(c.estado);
+            document.getElementById('seg-token-section').style.display = showSecurity ? 'block' : 'none';
+            document.getElementById('seg-panico-section').style.display = showSecurity ? 'block' : 'none';
+            document.getElementById('seg-liveloc-section').style.display = c.estado === 'En Camino' ? 'block' : 'none';
+            if (showSecurity) document.getElementById('seg-token-code').textContent = c.tokenSeguridad || '----';
 
             // Post-cita resultado
             var postcitaSec = document.getElementById('seg-postcita-section');
@@ -3251,19 +3409,43 @@
                 }).join('');
             } else { postcitaSec.style.display = 'none'; }
 
-            // Intenciones
-            var intenciones = INTENCIONES[c.estado] || INTENCIONES['Post-Cita'];
-            var intGrid = document.getElementById('seg-intenciones-grid');
-            intGrid.innerHTML = intenciones.map(function(int) {
-                return '<button class="seg-intencion-btn" onclick="seleccionarIntencion(\'' + int.id + '\')">' +
-                    '<div class="emoji">' + int.emoji + '</div>' +
-                    '<div class="title">' + int.title + '</div>' +
-                    '<div class="desc">' + int.desc + '</div>' +
-                '</button>';
+            // OPTIONS: show alternative message types based on time
+            var opciones = [];
+            var timeline = SEG_TIMELINE[c.estado] || [];
+            var horas = (Date.now() - (c.estadoCambio || c.created || Date.now())) / 3600000;
+            // Show the current + nearby options as chips
+            timeline.forEach(function(t) {
+                if (Math.abs(horas - t.horas) < t.horas * 1.5 || horas >= t.horas) {
+                    opciones.push(t);
+                }
+            });
+            // Also include from INTENCIONES as fallback
+            var intenciones = INTENCIONES[c.estado] || [];
+
+            var opcionesHTML = '';
+            var activeType = (tl && tl.action) ? tl.action.tipo : (intenciones[0] ? intenciones[0].id : 'saludo');
+
+            // Show timeline options + extra intenciones
+            var allOps = [];
+            opciones.forEach(function(o) { allOps.push({ id: o.tipo, label: o.alerta.split(' — ').pop() || o.tipo.replace(/_/g,' ') }); });
+            intenciones.forEach(function(int) {
+                if (!allOps.find(function(x) { return x.id === int.id; })) {
+                    allOps.push({ id: int.id, label: int.title });
+                }
+            });
+
+            document.getElementById('seg-opciones').innerHTML = allOps.map(function(op) {
+                return '<button class="seg-opcion-btn ' + (op.id === activeType ? 'active' : '') + '" onclick="selectOpcion(\'' + op.id + '\')">' + op.label + '</button>';
             }).join('');
 
-            // Reset mensaje
-            document.getElementById('seg-mensaje-section').style.display = segCurrentMensaje ? 'block' : 'none';
+            // Auto-generate the suggested message
+            segCurrentIntencion = activeType;
+            segCurrentMensaje = generarMensaje(c, activeType);
+            document.getElementById('seg-mensaje-textarea').value = segCurrentMensaje;
+
+            var msgLabel = 'Mensaje Sugerido';
+            if (tl && tl.action) msgLabel = 'Sugerencia: ' + tl.action.alerta;
+            document.getElementById('seg-msg-label').textContent = msgLabel;
 
             // Avanzar btn
             var nextIdx = currentIdx + 1;
@@ -3271,71 +3453,103 @@
             if (nextIdx < BUYER_STATES.length && !['Vendido','Venta Fallida'].includes(c.estado)) {
                 avanzarBtn.style.display = 'flex';
                 avanzarBtn.innerHTML = 'Avanzar a: ' + BUYER_STATES[nextIdx] + ' &#10132;';
-            } else {
-                avanzarBtn.style.display = 'none';
-            }
+            } else { avanzarBtn.style.display = 'none'; }
 
             // Historial
             var histHTML = '';
             if (c.mensajesEnviados && c.mensajesEnviados.length > 0) {
                 histHTML = c.mensajesEnviados.slice().reverse().slice(0, 10).map(function(m) {
-                    var d = new Date(m.fecha);
-                    return '<div class="seg-historial-item">' +
-                        '<div class="seg-hist-dot"></div>' +
-                        '<div><div class="seg-hist-time">' + d.toLocaleDateString('es-MX') + ' ' + d.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'}) + ' — ' + (m.intencion || '') + '</div>' +
-                        '<div class="seg-hist-msg">' + (m.mensaje || '').substring(0, 80) + '...</div></div></div>';
+                    var dt = new Date(m.fecha);
+                    return '<div class="seg-historial-item"><div class="seg-hist-dot"></div><div>' +
+                        '<div class="seg-hist-time">' + dt.toLocaleDateString('es-MX') + ' ' + dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) + ' — ' + (m.intencion||'').replace(/_/g,' ') + '</div>' +
+                        '<div class="seg-hist-msg">' + (m.mensaje||'').substring(0,80) + '...</div></div></div>';
                 }).join('');
-            } else {
-                histHTML = '<div style="font-size:12px;color:var(--gray);text-align:center;padding:12px;">Sin mensajes enviados aun</div>';
-            }
+            } else { histHTML = '<div style="font-size:12px;color:var(--gray);text-align:center;padding:12px;">Sin mensajes enviados aun</div>'; }
             document.getElementById('seg-historial').innerHTML = histHTML;
         }
 
-        function seleccionarIntencion(intencionId) {
+        function selectOpcion(tipo) {
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
             if (!c) return;
-            segCurrentIntencion = intencionId;
-            segCurrentMensaje = generarMensaje(c, intencionId);
-
-            document.getElementById('seg-mensaje-text').textContent = segCurrentMensaje;
-            document.getElementById('seg-mensaje-section').style.display = 'block';
-
-            // Highlight selected
-            document.querySelectorAll('.seg-intencion-btn').forEach(function(b) { b.classList.remove('selected'); });
-            event.target.closest('.seg-intencion-btn').classList.add('selected');
+            segCurrentIntencion = tipo;
+            segCurrentMensaje = generarMensaje(c, tipo);
+            document.getElementById('seg-mensaje-textarea').value = segCurrentMensaje;
+            // Update active chip
+            document.querySelectorAll('.seg-opcion-btn').forEach(function(b) { b.classList.remove('active'); });
+            if (event && event.target) event.target.classList.add('active');
         }
 
         function regenerarMensaje() {
-            if (!segCurrentIntencion || !segCurrentId) return;
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
-            if (!c) return;
+            if (!c || !segCurrentIntencion) return;
             segCurrentMensaje = generarMensaje(c, segCurrentIntencion);
-            document.getElementById('seg-mensaje-text').textContent = segCurrentMensaje;
+            document.getElementById('seg-mensaje-textarea').value = segCurrentMensaje;
         }
 
         function enviarWhatsApp() {
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
-            if (!c || !segCurrentMensaje) return;
+            if (!c) return;
+            // Use the textarea content (user may have edited it)
+            var msg = document.getElementById('seg-mensaje-textarea').value.trim();
+            if (!msg) { showNotif('Escribe un mensaje', true); return; }
             var tel = c.telefono || c.telComprador || '';
-            if (!tel) { showNotif('Este comprador no tiene telefono', true); return; }
-            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(segCurrentMensaje);
+            if (!tel) { showNotif('No tiene telefono registrado', true); return; }
+            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(msg);
             window.open(url, '_blank');
 
-            // Log message
             if (!c.mensajesEnviados) c.mensajesEnviados = [];
-            c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion, mensaje: segCurrentMensaje });
+            c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion || 'manual', mensaje: msg });
             c.updated = Date.now();
             saveToCloud();
             renderSeguimiento(c);
-            showNotif('WhatsApp abierto - mensaje listo para enviar');
+            renderCompradores();
+            showNotif('WhatsApp abierto con el mensaje');
         }
 
         function copiarMensaje() {
-            if (!segCurrentMensaje) return;
-            navigator.clipboard.writeText(segCurrentMensaje).then(function() {
-                showNotif('Mensaje copiado al portapapeles');
-            });
+            var msg = document.getElementById('seg-mensaje-textarea').value.trim();
+            if (!msg) return;
+            navigator.clipboard.writeText(msg).then(function() { showNotif('Mensaje copiado'); });
         }
+
+        // ===== CRM ALERT SYSTEM: check all compradores every 30s =====
+        function checkCRMAlerts() {
+            var alertEl = document.getElementById('seg-crm-alert');
+            var alertText = document.getElementById('seg-crm-alert-text');
+            var foundAlert = null;
+
+            compradores.forEach(function(c) {
+                if (['Vendido','Venta Fallida','En Camino','Llego al Lugar','En Cita'].includes(c.estado)) return;
+                var tl = getTimelineAction(c);
+                if (tl && tl.action && tl.shouldAlert) {
+                    var key = c.id + '_' + tl.action.tipo;
+                    // Only alert once per action per comprador per session unless >4hrs
+                    if (!segAlertShownFor[key] || (Date.now() - segAlertShownFor[key]) > 14400000) {
+                        foundAlert = { comprador: c, action: tl.action };
+                    }
+                }
+            });
+
+            if (foundAlert && !segCurrentId) {
+                alertText.textContent = foundAlert.comprador.nombre + ': ' + foundAlert.action.alerta;
+                alertEl.classList.add('show');
+                alertEl.dataset.compradorId = foundAlert.comprador.id;
+                segAlertShownFor[foundAlert.comprador.id + '_' + foundAlert.action.tipo] = Date.now();
+            } else if (!foundAlert) {
+                alertEl.classList.remove('show');
+            }
+        }
+
+        function handleCRMAlert() {
+            var alertEl = document.getElementById('seg-crm-alert');
+            var id = alertEl.dataset.compradorId;
+            alertEl.classList.remove('show');
+            if (id) openSeguimiento(id);
+        }
+
+        // Start alert checker
+        setInterval(checkCRMAlerts, 30000);
+        setTimeout(checkCRMAlerts, 5000); // first check after 5s
 
         function avanzarEstado() {
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
