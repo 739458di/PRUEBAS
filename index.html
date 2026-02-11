@@ -317,6 +317,194 @@
             text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;
         }
 
+        /* ======================== */
+        /* SEGUIMIENTO STYLES      */
+        /* ======================== */
+        .badge-preagendacion { background: #f3f4f6; color: #374151; }
+        .badge-citaconfirmada { background: #dbeafe; color: #1e40af; }
+        .badge-encamino { background: #fef3c7; color: #92400e; }
+        .badge-llegoallugar { background: #e9d5ff; color: #6b21a8; }
+        .badge-encita { background: #fce7f3; color: #9d174d; }
+        .badge-postcita { background: #d1fae5; color: #065f46; }
+        .badge-tramitebancario { background: #fef3c7; color: #92400e; }
+        .badge-separado { background: #e9d5ff; color: #6b21a8; }
+        .badge-vendido { background: #10b981; color: var(--white); }
+        .badge-ventafallida { background: #fecaca; color: #991b1b; }
+
+        /* Countdown badge */
+        .countdown-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 50px; font-size: 10px; font-weight: 700;
+            white-space: nowrap;
+        }
+        .cd-fresh { background: #d1fae5; color: #065f46; }
+        .cd-attention { background: #fef3c7; color: #92400e; }
+        .cd-urgent { background: #fecaca; color: #991b1b; animation: urgentPulse 1.5s infinite; }
+        @keyframes urgentPulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
+
+        /* Seguimiento indicator */
+        .seg-indicator {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 50px; font-size: 10px; font-weight: 700;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .seg-aldia { background: #d1fae5; color: #065f46; }
+        .seg-pendiente { background: #fef3c7; color: #92400e; }
+        .seg-urgente { background: #fecaca; color: #991b1b; }
+        .seg-indicator:hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        /* Panel de Seguimiento (modal grande) */
+        .seg-panel {
+            position: fixed; top: 0; right: -480px; width: 460px; height: 100vh;
+            background: var(--white); box-shadow: -8px 0 32px rgba(0,0,0,0.15);
+            z-index: 1200; transition: right 0.3s ease; overflow-y: auto;
+        }
+        .seg-panel.open { right: 0; }
+        .seg-panel-overlay {
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.3); z-index: 1199; display:none;
+        }
+        .seg-panel-overlay.show { display: block; }
+        .seg-panel-header {
+            padding: 20px 24px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; background: var(--white); z-index: 5;
+        }
+        .seg-panel-header h3 { font-size: 16px; font-weight: 800; }
+        .seg-close {
+            width: 32px; height: 32px; border-radius: 8px; border: none;
+            background: #f3f4f6; cursor: pointer; font-size: 18px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .seg-section { padding: 16px 24px; border-bottom: 1px solid #f3f4f6; }
+        .seg-section-title {
+            font-size: 10px; font-weight: 700; color: var(--gray);
+            text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+        }
+
+        /* Countdown grande */
+        .seg-countdown-big {
+            text-align: center; padding: 20px; border-radius: 14px;
+            margin-bottom: 8px;
+        }
+        .seg-countdown-big .days { font-size: 42px; font-weight: 900; line-height: 1; }
+        .seg-countdown-big .label { font-size: 12px; font-weight: 600; margin-top: 4px; }
+        .seg-countdown-big.fresh { background: linear-gradient(135deg, #d1fae5, #ecfdf5); color: #065f46; }
+        .seg-countdown-big.attention { background: linear-gradient(135deg, #fef3c7, #fffbeb); color: #92400e; }
+        .seg-countdown-big.urgent { background: linear-gradient(135deg, #fecaca, #fef2f2); color: #991b1b; }
+
+        /* State machine visual */
+        .seg-state-flow {
+            display: flex; gap: 2px; margin-bottom: 12px; flex-wrap: wrap;
+        }
+        .seg-state-dot {
+            padding: 4px 8px; border-radius: 4px; font-size: 9px; font-weight: 700;
+            background: #f3f4f6; color: var(--gray-light); white-space: nowrap;
+        }
+        .seg-state-dot.active { background: var(--cyan); color: white; }
+        .seg-state-dot.done { background: #d1fae5; color: #065f46; }
+
+        /* Intenciones grid */
+        .seg-intenciones {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+        }
+        .seg-intencion-btn {
+            padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 10px;
+            background: var(--white); cursor: pointer; text-align: left;
+            font-family: 'Inter', sans-serif; transition: all 0.2s;
+        }
+        .seg-intencion-btn:hover { border-color: var(--cyan); background: #ecfeff; }
+        .seg-intencion-btn.selected { border-color: var(--cyan); background: #ecfeff; }
+        .seg-intencion-btn .emoji { font-size: 16px; }
+        .seg-intencion-btn .title { font-size: 11px; font-weight: 700; color: var(--dark); margin-top: 2px; }
+        .seg-intencion-btn .desc { font-size: 9px; color: var(--gray); margin-top: 1px; }
+
+        /* Mensaje generado */
+        .seg-mensaje-box {
+            background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 12px;
+            padding: 14px; margin-top: 10px; position: relative;
+        }
+        .seg-mensaje-text {
+            font-size: 13px; line-height: 1.5; color: #1a1a1a; white-space: pre-wrap;
+        }
+        .seg-mensaje-actions {
+            display: flex; gap: 8px; margin-top: 10px;
+        }
+        .seg-btn-wa {
+            flex: 1; padding: 10px; background: #25d366; color: white; border: none;
+            border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+            font-family: 'Inter', sans-serif; display: flex; align-items: center;
+            justify-content: center; gap: 6px; transition: all 0.2s;
+        }
+        .seg-btn-wa:hover { background: #1da851; }
+        .seg-btn-copy {
+            padding: 10px 16px; background: #f3f4f6; color: var(--dark); border: none;
+            border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+            font-family: 'Inter', sans-serif; transition: all 0.2s;
+        }
+        .seg-btn-copy:hover { background: #e5e7eb; }
+        .seg-btn-refresh {
+            padding: 10px; background: var(--white); border: 1.5px solid var(--border);
+            border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s;
+        }
+        .seg-btn-refresh:hover { border-color: var(--cyan); }
+
+        /* Historial */
+        .seg-historial-item {
+            display: flex; align-items: flex-start; gap: 10px; padding: 8px 0;
+            border-bottom: 1px solid #f9fafb; font-size: 12px;
+        }
+        .seg-historial-item:last-child { border-bottom: none; }
+        .seg-hist-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #25d366;
+            margin-top: 4px; flex-shrink: 0;
+        }
+        .seg-hist-time { font-size: 10px; color: var(--gray); }
+        .seg-hist-msg { color: var(--dark); font-weight: 500; }
+
+        /* Avanzar estado btn */
+        .seg-btn-advance {
+            width: 100%; padding: 12px; background: linear-gradient(135deg, var(--cyan), #06b6d4);
+            color: white; border: none; border-radius: 10px; font-size: 13px; font-weight: 700;
+            cursor: pointer; font-family: 'Inter', sans-serif; margin-top: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+        }
+        .seg-btn-advance:hover { background: linear-gradient(135deg, #0e7490, var(--cyan)); }
+
+        /* Token de seguridad */
+        .seg-token-box {
+            text-align: center; padding: 16px; background: linear-gradient(135deg, #1e1b4b, #312e81);
+            border-radius: 12px; color: white;
+        }
+        .seg-token-code {
+            font-size: 32px; font-weight: 900; letter-spacing: 8px; margin: 8px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .seg-token-label { font-size: 10px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Boton de panico */
+        .seg-btn-panico {
+            width: 100%; padding: 14px; background: #dc2626; color: white;
+            border: none; border-radius: 10px; font-size: 14px; font-weight: 800;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            animation: panicoPulse 2s infinite;
+        }
+        @keyframes panicoPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); } 50% { box-shadow: 0 0 0 12px rgba(220,38,38,0); } }
+
+        /* Post-cita resultado */
+        .seg-postcita-btns {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+        }
+        .seg-postcita-btn {
+            padding: 10px; border: 1.5px solid var(--border); border-radius: 8px;
+            background: var(--white); cursor: pointer; text-align: center;
+            font-family: 'Inter', sans-serif; transition: all 0.2s;
+            font-size: 11px; font-weight: 700;
+        }
+        .seg-postcita-btn:hover { border-color: var(--cyan); background: #ecfeff; }
+        .seg-postcita-btn.selected { border-color: var(--cyan); background: #ecfeff; }
+
         /* NOTIFICATION */
         .notification {
             position: fixed; top: 72px; right: 20px;
@@ -951,10 +1139,10 @@
                     <tr>
                         <th>Cliente</th>
                         <th>Telefono</th>
-                        <th>Vehiculo Interes</th>
+                        <th>Vehiculo</th>
                         <th>Estado</th>
+                        <th>Seguimiento</th>
                         <th>Responsable</th>
-                        <th>Cita</th>
                         <th>Notas</th>
                         <th>Acciones</th>
                     </tr>
@@ -1368,13 +1556,27 @@
                     <div class="form-group">
                         <label>Estado</label>
                         <select id="c-estado" onchange="toggleCitaFields()">
-                            <option value="Previa Agendacion">Previa Agendacion de Cita</option>
-                            <option value="Cita Agendada">Cita Agendada</option>
-                            <option value="Cita Concretada">Cita Concretada</option>
-                            <option value="Tramite Bancario">En Tramite Bancario</option>
+                            <option value="Pre-Agendacion">Pre-Agendacion</option>
+                            <option value="Cita Confirmada">Cita Confirmada</option>
+                            <option value="En Camino">En Camino</option>
+                            <option value="Llego al Lugar">Llego al Lugar</option>
+                            <option value="En Cita">En Cita</option>
+                            <option value="Post-Cita">Post-Cita</option>
+                            <option value="Tramite Bancario">Tramite Bancario</option>
                             <option value="Separado">Separado</option>
                             <option value="Vendido">Vendido</option>
                             <option value="Venta Fallida">Venta Fallida</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Resultado Cita</label>
+                        <select id="c-postcita">
+                            <option value="">— Sin resultado —</option>
+                            <option value="Lo va a pensar">Lo va a pensar</option>
+                            <option value="Quiere credito">Quiere credito</option>
+                            <option value="Quiere separar">Quiere separar</option>
+                            <option value="Negociacion">Negociacion</option>
+                            <option value="No interesado">No interesado</option>
                         </select>
                     </div>
                 </div>
@@ -1421,6 +1623,81 @@
                 <button class="btn-cancel" onclick="closeModal('comprador')">Cancelar</button>
                 <button class="btn-save" style="background:var(--green);" onclick="saveComprador()">Guardar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- PANEL DE SEGUIMIENTO (slide-in lateral) -->
+    <div class="seg-panel-overlay" id="seg-overlay" onclick="closeSeguimiento()"></div>
+    <div class="seg-panel" id="seg-panel">
+        <div class="seg-panel-header">
+            <h3 id="seg-title">Seguimiento</h3>
+            <button class="seg-close" onclick="closeSeguimiento()">&times;</button>
+        </div>
+        <!-- State flow visual -->
+        <div class="seg-section">
+            <div class="seg-section-title">Flujo de Compra</div>
+            <div class="seg-state-flow" id="seg-flow"></div>
+        </div>
+        <!-- Countdown -->
+        <div class="seg-section">
+            <div class="seg-countdown-big" id="seg-countdown">
+                <div class="days" id="seg-cd-days">0</div>
+                <div class="label" id="seg-cd-label">dias en este estado</div>
+            </div>
+            <div id="seg-cita-countdown" style="display:none; text-align:center; margin-top:8px;">
+                <span style="font-size:12px; font-weight:700; color:var(--cyan);" id="seg-cita-cd-text"></span>
+            </div>
+        </div>
+        <!-- Token de seguridad (solo en camino/llego/en cita) -->
+        <div class="seg-section" id="seg-token-section" style="display:none;">
+            <div class="seg-section-title">Token de Seguridad</div>
+            <div class="seg-token-box">
+                <div class="seg-token-label">Codigo de verificacion</div>
+                <div class="seg-token-code" id="seg-token-code">0000</div>
+                <div class="seg-token-label">Comprador y vendedor deben coincidir</div>
+            </div>
+        </div>
+        <!-- Boton de panico (solo en camino/llego/en cita) -->
+        <div class="seg-section" id="seg-panico-section" style="display:none;">
+            <button class="seg-btn-panico" onclick="activarPanico()">&#128680; BOTON DE PANICO &#128680;</button>
+            <div style="font-size:10px; color:var(--gray); text-align:center; margin-top:6px;">Envia alerta inmediata por WhatsApp</div>
+        </div>
+        <!-- Live location (solo en camino) -->
+        <div class="seg-section" id="seg-liveloc-section" style="display:none;">
+            <div class="seg-section-title">Ubicacion en Vivo</div>
+            <button class="seg-btn-wa" style="width:100%;" onclick="compartirUbicacion()">&#128205; Compartir ubicacion por WhatsApp</button>
+            <div style="font-size:10px; color:var(--gray); text-align:center; margin-top:6px;">Se envia link de ubicacion al vendedor y responsable</div>
+        </div>
+        <!-- Post-cita resultado -->
+        <div class="seg-section" id="seg-postcita-section" style="display:none;">
+            <div class="seg-section-title">Resultado de la Cita</div>
+            <div class="seg-postcita-btns" id="seg-postcita-btns"></div>
+        </div>
+        <!-- Intenciones -->
+        <div class="seg-section" id="seg-intenciones-section">
+            <div class="seg-section-title">Que quieres comunicar?</div>
+            <div class="seg-intenciones" id="seg-intenciones-grid"></div>
+        </div>
+        <!-- Mensaje generado -->
+        <div class="seg-section" id="seg-mensaje-section" style="display:none;">
+            <div class="seg-section-title">Mensaje Sugerido</div>
+            <div class="seg-mensaje-box">
+                <div class="seg-mensaje-text" id="seg-mensaje-text"></div>
+            </div>
+            <div class="seg-mensaje-actions">
+                <button class="seg-btn-wa" id="seg-btn-enviar-wa" onclick="enviarWhatsApp()">&#128172; Enviar por WhatsApp</button>
+                <button class="seg-btn-copy" onclick="copiarMensaje()">Copiar</button>
+                <button class="seg-btn-refresh" onclick="regenerarMensaje()" title="Otra alternativa">&#128260;</button>
+            </div>
+        </div>
+        <!-- Avanzar estado -->
+        <div class="seg-section">
+            <button class="seg-btn-advance" id="seg-btn-avanzar" onclick="avanzarEstado()">Avanzar al siguiente estado &#10132;</button>
+        </div>
+        <!-- Historial -->
+        <div class="seg-section">
+            <div class="seg-section-title">Historial de Mensajes</div>
+            <div id="seg-historial"></div>
         </div>
     </div>
 
@@ -1676,12 +1953,14 @@
                     document.getElementById('c-tel-dueno').value = c.telDueno || '';
                     document.getElementById('c-tel-comprador').value = c.telComprador || '';
                     document.getElementById('c-tel-responsable').value = c.telResponsable || '';
+                    document.getElementById('c-postcita').value = c.postcita || '';
                     toggleCitaFields();
                 } else {
                     document.getElementById('modal-comprador-title').textContent = 'Nuevo Comprador';
                     document.getElementById('c-edit-id').value = '';
-                    document.querySelectorAll('#modal-comprador input, #modal-comprador textarea').forEach(i => { if(i.type !== 'hidden') i.value = ''; });
-                    document.getElementById('c-estado').value = 'Previa Agendacion';
+                    document.querySelectorAll('#modal-comprador input, #modal-comprador textarea, #modal-comprador select').forEach(i => { if(i.type !== 'hidden') i.value = ''; });
+                    document.getElementById('c-estado').value = 'Pre-Agendacion';
+                    document.getElementById('c-postcita').value = '';
                     document.getElementById('c-responsable').value = currentUser;
                     toggleCitaFields();
                 }
@@ -1694,7 +1973,8 @@
 
         function toggleCitaFields() {
             const estado = document.getElementById('c-estado').value;
-            document.getElementById('cita-fields').classList.toggle('show', estado === 'Cita Agendada');
+            const needsCita = ['Cita Confirmada','En Camino','Llego al Lugar','En Cita','Post-Cita'].includes(estado);
+            document.getElementById('cita-fields').classList.toggle('show', needsCita);
         }
 
         // ==========================================
@@ -1753,6 +2033,7 @@
             const telDueno = document.getElementById('c-tel-dueno').value.trim();
             const telComprador = document.getElementById('c-tel-comprador').value.trim();
             const telResponsable = document.getElementById('c-tel-responsable').value.trim();
+            const postcita = document.getElementById('c-postcita').value;
             const editId = document.getElementById('c-edit-id').value;
 
             if (!nombre || !vehiculo) {
@@ -1763,20 +2044,37 @@
             const data = {
                 nombre, telefono, vehiculo, responsable, estado, notas,
                 citaFecha, citaHora, telDueno, telComprador, telResponsable,
+                postcita: postcita || '',
                 updated: Date.now()
             };
 
             if (editId) {
                 const idx = compradores.findIndex(x => x.id === editId);
                 if (idx >= 0) {
+                    const old = compradores[idx];
                     data.id = editId;
-                    data.created = compradores[idx].created;
+                    data.created = old.created;
+                    data.mensajesEnviados = old.mensajesEnviados || [];
+                    data.tokenSeguridad = old.tokenSeguridad || '';
+                    // Track state change
+                    if (old.estado !== estado) {
+                        data.estadoCambio = Date.now();
+                        // Generate token when entering En Camino
+                        if (estado === 'En Camino' && !data.tokenSeguridad) {
+                            data.tokenSeguridad = String(Math.floor(1000 + Math.random() * 9000));
+                        }
+                    } else {
+                        data.estadoCambio = old.estadoCambio || Date.now();
+                    }
                     compradores[idx] = data;
                 }
                 showNotif('Comprador actualizado');
             } else {
                 data.id = 'C' + Date.now();
                 data.created = Date.now();
+                data.estadoCambio = Date.now();
+                data.mensajesEnviados = [];
+                data.tokenSeguridad = '';
                 compradores.push(data);
                 showNotif('Comprador agregado');
             }
@@ -1870,10 +2168,10 @@
                 '<td><div class="client-phone">' + (c.telefono || '-') + (c.telefono ? ' <a href="https://wa.me/52' + c.telefono + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
                 '<td style="font-weight:600;">' + c.vehiculo + '</td>' +
                 '<td><span class="badge badge-' + estadoCClass(c.estado) + '">' + c.estado + '</span></td>' +
+                '<td>' + getSeguimientoHTML(c) + '</td>' +
                 '<td><span class="responsable-tag resp-' + c.responsable.toLowerCase() + '">' + (c.responsable === 'Sebastian' ? '&#128156;' : '&#128153;') + ' ' + c.responsable + '</span></td>' +
-                '<td>' + (c.estado === 'Cita Agendada' && c.citaFecha ? '<span style="font-size:12px;font-weight:600;">&#128197; ' + formatDate(c.citaFecha) + ' ' + (c.citaHora || '') + '</span>' : '<span style="font-size:12px;color:var(--gray);">-</span>') + '</td>' +
                 '<td><div class="description-cell" title="' + (c.notas || '') + '">' + (c.notas || '-') + '</div></td>' +
-                '<td><div class="actions-cell"><button class="btn-icon" onclick="openModal(\'comprador\',\'' + c.id + '\')" title="Editar">&#9998;</button><button class="btn-icon delete" onclick="deleteComprador(\'' + c.id + '\')" title="Eliminar">&#128465;</button></div></td>' +
+                '<td><div class="actions-cell"><button class="btn-icon" onclick="openSeguimiento(\'' + c.id + '\')" title="Seguimiento">&#128202;</button><button class="btn-icon" onclick="openModal(\'comprador\',\'' + c.id + '\')" title="Editar">&#9998;</button><button class="btn-icon delete" onclick="deleteComprador(\'' + c.id + '\')" title="Eliminar">&#128465;</button></div></td>' +
                 '</tr>').join('');
 
             document.getElementById('count-compradores').textContent = compradores.length;
@@ -1885,7 +2183,7 @@
         function updateStats() {
             document.getElementById('stat-vendedores').textContent = vendedores.length;
             document.getElementById('stat-compradores').textContent = compradores.length;
-            document.getElementById('stat-citas').textContent = compradores.filter(c => c.estado === 'Cita Agendada').length;
+            document.getElementById('stat-citas').textContent = compradores.filter(c => ['Cita Confirmada','En Camino','Llego al Lugar','En Cita'].includes(c.estado)).length;
             document.getElementById('stat-vendidos').textContent = compradores.filter(c => c.estado === 'Vendido').length;
         }
 
@@ -1913,11 +2211,37 @@
         }
         function estadoCClass(estado) {
             var map = {
-                'Previa Agendacion': 'previa', 'Cita Agendada': 'agendada',
-                'Cita Concretada': 'concretada', 'Tramite Bancario': 'tramite',
-                'Separado': 'separado', 'Vendido': 'vendido', 'Venta Fallida': 'fallida'
+                'Pre-Agendacion': 'preagendacion', 'Cita Confirmada': 'citaconfirmada',
+                'En Camino': 'encamino', 'Llego al Lugar': 'llegoallugar',
+                'En Cita': 'encita', 'Post-Cita': 'postcita',
+                'Tramite Bancario': 'tramitebancario', 'Separado': 'separado',
+                'Vendido': 'vendido', 'Venta Fallida': 'ventafallida',
+                // backwards compat
+                'Previa Agendacion': 'preagendacion', 'Cita Agendada': 'citaconfirmada',
+                'Cita Concretada': 'postcita'
             };
             return map[estado] || 'info';
+        }
+
+        function getDiasEnEstado(c) {
+            var cambio = c.estadoCambio || c.created || Date.now();
+            return Math.floor((Date.now() - cambio) / 86400000);
+        }
+
+        function getUrgenciaClass(dias, estado) {
+            if (['Vendido','Venta Fallida'].includes(estado)) return 'cd-fresh';
+            if (dias <= 1) return 'cd-fresh';
+            if (dias <= 3) return 'cd-attention';
+            return 'cd-urgent';
+        }
+
+        function getSeguimientoHTML(c) {
+            var dias = getDiasEnEstado(c);
+            var cls = getUrgenciaClass(dias, c.estado);
+            var label = dias === 0 ? 'Hoy' : dias === 1 ? '1 dia' : dias + ' dias';
+            var emoji = cls === 'cd-fresh' ? '&#9989;' : cls === 'cd-attention' ? '&#9888;' : '&#128308;';
+            return '<span class="seg-indicator ' + cls.replace('cd-','seg-').replace('fresh','aldia').replace('attention','pendiente').replace('urgent','urgente') + '" onclick="openSeguimiento(\'' + c.id + '\')" title="Abrir seguimiento">' +
+                emoji + ' ' + label + '</span>';
         }
         function showNotif(text, isError) {
             var n = document.getElementById('notification');
@@ -2226,7 +2550,7 @@
 
             // 1) Citas CRM
             compradores.forEach(function(c) {
-                if (c.estado === 'Cita Agendada' && c.citaFecha) {
+                if (['Cita Confirmada','En Camino','Llego al Lugar','En Cita'].includes(c.estado) && c.citaFecha) {
                     var date = new Date(c.citaFecha + 'T00:00:00');
                     var hour = 10, min = 0;
                     if (c.citaHora) { var p = c.citaHora.split(':'); hour = parseInt(p[0])||10; min = parseInt(p[1])||0; }
@@ -2655,6 +2979,421 @@
 
         // Init cotizador
         cotCalcular();
+
+        // ==========================================
+        // SEGUIMIENTO - STATE MACHINE
+        // ==========================================
+        var BUYER_STATES = ['Pre-Agendacion','Cita Confirmada','En Camino','Llego al Lugar','En Cita','Post-Cita','Tramite Bancario','Separado','Vendido'];
+        var segCurrentId = null;
+
+        // INTENCIONES POR ESTADO
+        var INTENCIONES = {
+            'Pre-Agendacion': [
+                {id:'confirmar_hora', emoji:'&#128197;', title:'Confirmar hora', desc:'Agendar dia y hora de cita'},
+                {id:'generar_interes', emoji:'&#128293;', title:'Generar interes', desc:'Motivar que vea el vehiculo'},
+                {id:'info_vehiculo', emoji:'&#128663;', title:'Info del vehiculo', desc:'Datos, fotos, detalles'},
+                {id:'urgencia', emoji:'&#9200;', title:'Urgencia', desc:'Hay mas interesados, no lo pierda'},
+                {id:'cotizacion', emoji:'&#128176;', title:'Ofrecer cotizacion', desc:'Enviar cotizacion de credito'},
+                {id:'saludo', emoji:'&#128075;', title:'Primer contacto', desc:'Romper el hielo, presentarse'}
+            ],
+            'Cita Confirmada': [
+                {id:'seguridad', emoji:'&#128274;', title:'Brindar seguridad', desc:'Proceso seguro y confiable'},
+                {id:'incentivo', emoji:'&#127873;', title:'Incentivo', desc:'Beneficio extra por asistir'},
+                {id:'funfact', emoji:'&#128161;', title:'Fun fact', desc:'Dato interesante del vehiculo'},
+                {id:'recordatorio', emoji:'&#128276;', title:'Recordatorio cita', desc:'Confirmar que asistira'},
+                {id:'confirmar_asistencia', emoji:'&#9989;', title:'Confirmar asistencia', desc:'Sigue en pie la cita?'},
+                {id:'direccion', emoji:'&#128205;', title:'Enviar ubicacion', desc:'Donde es el punto de encuentro'}
+            ],
+            'En Camino': [
+                {id:'retraso', emoji:'&#128337;', title:'Retraso', desc:'Avisar que va con retraso'},
+                {id:'ya_casi', emoji:'&#128663;', title:'Ya casi llego', desc:'Casi en el punto'}
+            ],
+            'Llego al Lugar': [
+                {id:'identificacion', emoji:'&#128178;', title:'Pedir token', desc:'Solicitar codigo de verificacion'},
+                {id:'ubicacion_exacta', emoji:'&#128205;', title:'Ubicacion exacta', desc:'Donde estas exactamente?'}
+            ],
+            'En Cita': [
+                {id:'todo_bien', emoji:'&#128077;', title:'Todo bien', desc:'Confirmar que va todo bien'}
+            ],
+            'Post-Cita': [
+                {id:'seguimiento_suave', emoji:'&#128172;', title:'Seguimiento suave', desc:'Que te parecio? alguna duda?'},
+                {id:'cierre_urgencia', emoji:'&#128293;', title:'Cierre con urgencia', desc:'Hay mas interesados, decide'},
+                {id:'ofrecer_cotizacion', emoji:'&#128176;', title:'Ofrecer cotizacion', desc:'Te envio numeros del credito'},
+                {id:'resolver_dudas', emoji:'&#129300;', title:'Resolver dudas', desc:'Cualquier pregunta estoy aqui'},
+                {id:'negociacion', emoji:'&#129309;', title:'Negociacion', desc:'Podemos llegar a un acuerdo'},
+                {id:'reactivar', emoji:'&#128260;', title:'Reactivar interes', desc:'Oye, sigue disponible el carro'}
+            ],
+            'Tramite Bancario': [
+                {id:'estatus_tramite', emoji:'&#127974;', title:'Estatus tramite', desc:'Como va con el banco?'},
+                {id:'documentos', emoji:'&#128196;', title:'Documentos', desc:'Necesitas algun documento?'},
+                {id:'apoyo', emoji:'&#128170;', title:'Apoyo', desc:'En que te puedo ayudar?'}
+            ],
+            'Separado': [
+                {id:'cierre', emoji:'&#128274;', title:'Cerrar venta', desc:'Cuando finalizamos?'},
+                {id:'papeles', emoji:'&#128203;', title:'Papeles', desc:'Que falta para cerrar?'}
+            ]
+        };
+
+        // GENERADOR DE MENSAJES
+        function generarMensaje(comprador, intencionId) {
+            var c = comprador;
+            var nombre = c.nombre.split(' ')[0];
+            var vehiculo = c.vehiculo || 'el vehiculo';
+            var resp = c.responsable || 'Sebastian';
+            var dias = getDiasEnEstado(c);
+            var msgs = [];
+
+            if (c.estado === 'Pre-Agendacion') {
+                if (intencionId === 'saludo') msgs = [
+                    'Hola ' + nombre + '! Soy ' + resp + ' de FYRADRIVE. Vi que te interesa el ' + vehiculo + '. Te gustaria agendar una cita para verlo? Estoy a tus ordenes',
+                    'Que tal ' + nombre + '! Te saluda ' + resp + ' de FYRADRIVE. Tenemos el ' + vehiculo + ' disponible, cuando te queda bien para que lo conozcas?',
+                    'Hola ' + nombre + '! ' + resp + ' de FYRADRIVE por aca. El ' + vehiculo + ' esta disponible, te gustaria verlo en persona? Puedo agendar una cita cuando gustes'
+                ];
+                else if (intencionId === 'confirmar_hora') msgs = [
+                    'Hola ' + nombre + '! Para agendar tu cita con el ' + vehiculo + ', que dia y hora te funciona mejor esta semana?',
+                    nombre + '! Oye, quiero apartar tu lugar para ver el ' + vehiculo + '. Que horario te queda? Tengo disponibilidad esta semana',
+                    'Hola ' + nombre + ', listo para agendar tu cita! Que dia prefieres para ver el ' + vehiculo + '? Manana o pasado manana?'
+                ];
+                else if (intencionId === 'generar_interes') msgs = [
+                    'Hola ' + nombre + '! El ' + vehiculo + ' sigue disponible, pero la verdad hay bastante interes. Si te late, conviene verlo pronto. Te lo aparto?',
+                    nombre + '! Oye, el ' + vehiculo + ' esta en excelentes condiciones. Justo acabo de sacar unas fotos nuevas, te las paso? Vale mucho la pena verlo en persona',
+                    'Hola ' + nombre + '! Te cuento que el ' + vehiculo + ' ha tenido varias visitas. Si te interesa te sugiero agendemos pronto, no me gustaria que se te fuera'
+                ];
+                else if (intencionId === 'info_vehiculo') msgs = [
+                    'Hola ' + nombre + '! Te comparto los detalles del ' + vehiculo + ': esta en excelentes condiciones, verificado y listo para entregar. Quieres que te mande fotos y mas info?',
+                    nombre + '! Sobre el ' + vehiculo + ', te cuento: kilometraje bajo, todo al corriente, mantenimiento en agencia. Te gustaria verlo? Puedo mandarte video tambien'
+                ];
+                else if (intencionId === 'urgencia') msgs = [
+                    'Hola ' + nombre + '! Te aviso que esta semana he tenido varias consultas sobre el ' + vehiculo + '. Si sigue siendo de tu interes, te recomiendo que lo veas pronto para que no se te vaya',
+                    nombre + '! Oye, solo para avisarte que hay movimiento en el ' + vehiculo + '. No quiero que te lo ganen, agenda tu cita y te lo aparto!'
+                ];
+                else if (intencionId === 'cotizacion') msgs = [
+                    'Hola ' + nombre + '! Quieres que te haga una cotizacion de credito para el ' + vehiculo + '? Te puedo dar los numeros exactos de mensualidad y enganche. Solo necesito que me confirmes el monto de enganche que tienes en mente',
+                    nombre + '! Si te interesa financiar el ' + vehiculo + ', puedo cotizarte ahorita mismo. Las tasas estan buenas. Te mando los numeros?'
+                ];
+            }
+            else if (c.estado === 'Cita Confirmada') {
+                var citaStr = c.citaFecha ? formatDate(c.citaFecha) : 'el dia de la cita';
+                var horaStr = c.citaHora || '';
+                if (intencionId === 'seguridad') msgs = [
+                    'Hola ' + nombre + '! Quiero que sepas que en FYRADRIVE manejamos un proceso totalmente seguro. El dia de la cita generamos un token de seguridad para verificar identidades. Tu tranquilo, estas en buenas manos',
+                    nombre + '! Para tu tranquilidad: el dia de la cita tendras un codigo de seguridad unico, boton de panico y seguimiento en vivo. En FYRADRIVE la seguridad es prioridad',
+                    'Hola ' + nombre + '! Solo queria comentarte que nuestro proceso de citas es 100% seguro. Contamos con verificacion por token, ubicacion en vivo y asistencia inmediata. Nos vemos el ' + citaStr + '!'
+                ];
+                else if (intencionId === 'incentivo') msgs = [
+                    'Hola ' + nombre + '! Tengo una buena noticia: por asistir puntual a tu cita del ' + citaStr + ', tenemos un detalle especial para ti. Nos vemos!',
+                    nombre + '! Oye, si concretas la compra del ' + vehiculo + ' esta semana, tenemos condiciones especiales de financiamiento. Te cuento en la cita!'
+                ];
+                else if (intencionId === 'funfact') msgs = [
+                    'Hola ' + nombre + '! Sabias que el ' + vehiculo + ' es uno de los mas buscados este 2026? Su valor de reventa se mantiene super bien. Buena eleccion!',
+                    nombre + '! Dato curioso: el ' + vehiculo + ' tiene una de las mejores calificaciones en seguridad de su categoria. Vas a estar muy contento con tu compra'
+                ];
+                else if (intencionId === 'recordatorio') msgs = [
+                    'Hola ' + nombre + '! Te recuerdo que tenemos cita el ' + citaStr + (horaStr ? ' a las ' + horaStr : '') + ' para ver el ' + vehiculo + '. Todo confirmado? Te esperamos!',
+                    nombre + '! Solo para confirmar: nos vemos el ' + citaStr + (horaStr ? ' a las ' + horaStr : '') + ' para el ' + vehiculo + '. Si necesitas cambiar algo, avisame con confianza',
+                    'Hola ' + nombre + '! Ya casi es el dia! Cita ' + citaStr + (horaStr ? ' ' + horaStr : '') + ' para ver el ' + vehiculo + '. Vas a poder llegar? Estoy listo para recibirte'
+                ];
+                else if (intencionId === 'confirmar_asistencia') msgs = [
+                    'Hola ' + nombre + '! Solo paso a confirmar, sigue en pie nuestra cita del ' + citaStr + ' para el ' + vehiculo + '?',
+                    nombre + '! Manana es el gran dia! Confirmas que nos vemos ' + citaStr + (horaStr ? ' a las ' + horaStr : '') + '? El ' + vehiculo + ' te espera'
+                ];
+                else if (intencionId === 'direccion') msgs = [
+                    'Hola ' + nombre + '! Te comparto la ubicacion del punto de encuentro para la cita del ' + vehiculo + '. Cualquier duda del camino me marcas directo'
+                ];
+            }
+            else if (c.estado === 'En Camino') {
+                if (intencionId === 'retraso') msgs = [
+                    'Hola ' + nombre + '! Vamos con un poco de retraso, pero ya estamos en camino. En unos minutos llegamos. Disculpa la demora!',
+                    nombre + ', ya casi llegamos! Hay un poco de trafico pero calculo ' + (15 + Math.floor(Math.random()*15)) + ' minutos. Gracias por tu paciencia'
+                ];
+                else if (intencionId === 'ya_casi') msgs = [
+                    nombre + '! Ya vamos llegando, estamos a unos minutos. Listo para conocer el ' + vehiculo + '?',
+                    'Hola ' + nombre + '! Ya estoy cerca, en unos 5 minutitos llego. Nos vemos ahi!'
+                ];
+            }
+            else if (c.estado === 'Llego al Lugar') {
+                if (intencionId === 'identificacion') msgs = [
+                    nombre + '! Ya llegue. Mi codigo de verificacion es el que te llego al momento de activar "En Camino". Me puedes confirmar tu codigo para identificarnos?',
+                    'Hola ' + nombre + ', ya estoy en el punto. Para verificar identidades, cual es tu token de seguridad?'
+                ];
+                else if (intencionId === 'ubicacion_exacta') msgs = [
+                    nombre + '! Ya estoy aqui. Donde te encuentras exactamente? Estoy junto a...',
+                    'Hola ' + nombre + ', ya llegue al punto de encuentro. Dime donde estas para ubicarte'
+                ];
+            }
+            else if (c.estado === 'Post-Cita') {
+                var resultado = c.postcita || 'Lo va a pensar';
+                if (intencionId === 'seguimiento_suave') msgs = [
+                    'Hola ' + nombre + '! Que gusto haberte visto. Que te parecio el ' + vehiculo + '? Si tienes alguna duda o quieres platicar de numeros, estoy para servirte',
+                    nombre + '! Espero que te haya gustado el ' + vehiculo + '. Si necesitas mas info o quieres una segunda vuelta, con toda confianza. Estoy al pendiente',
+                    'Hola ' + nombre + '! Ya van ' + dias + ' dias desde que viste el ' + vehiculo + '. Como vas con la decision? Estoy aqui para cualquier duda'
+                ];
+                else if (intencionId === 'cierre_urgencia') msgs = [
+                    'Hola ' + nombre + '! Te platico que el ' + vehiculo + ' ha tenido mas visitas desde la tuya. Si sigue siendo de tu interes, te sugiero que tomemos una decision pronto para no perderlo',
+                    nombre + '! Oye, te aviso que el ' + vehiculo + ' tiene otro prospecto serio. Si lo quieres asegurar, hoy es buen momento para separarlo. Que dices?'
+                ];
+                else if (intencionId === 'ofrecer_cotizacion') msgs = [
+                    'Hola ' + nombre + '! Te gustaria que te mande la cotizacion de credito del ' + vehiculo + '? Puedo darte numeros exactos de mensualidad, enganche y plazos',
+                    nombre + '! Para que tomes tu decision con todos los datos, quieres que te cotice el financiamiento del ' + vehiculo + '? Las condiciones estan muy buenas'
+                ];
+                else if (intencionId === 'resolver_dudas') msgs = [
+                    'Hola ' + nombre + '! Si te quedo alguna duda del ' + vehiculo + ' o del proceso de compra, con toda confianza preguntame. Estoy para ayudarte a tomar la mejor decision',
+                    nombre + '! Oye, por si tienes dudas: el ' + vehiculo + ' cuenta con garantia, esta verificado y tiene todos los papeles en orden. En que mas te puedo apoyar?'
+                ];
+                else if (intencionId === 'negociacion') msgs = [
+                    'Hola ' + nombre + '! Oye, si el tema es el precio del ' + vehiculo + ', platiquemos. Estoy seguro de que podemos llegar a algo que funcione para los dos',
+                    nombre + '! Sobre el ' + vehiculo + ': estoy abierto a platicar las condiciones. Que tienes en mente? Vamos a buscarle'
+                ];
+                else if (intencionId === 'reactivar') msgs = [
+                    'Hola ' + nombre + '! Ya paso un rato desde que viste el ' + vehiculo + '. Sigue disponible y en las mismas condiciones. Te gustaria reconsiderarlo?',
+                    nombre + '! Oye, el ' + vehiculo + ' sigue aqui. Si cambias de opinion o quieres verlo de nuevo, nomas dime. Sin compromiso'
+                ];
+            }
+            else if (c.estado === 'Tramite Bancario') {
+                if (intencionId === 'estatus_tramite') msgs = [
+                    'Hola ' + nombre + '! Como va tu tramite bancario para el ' + vehiculo + '? Si necesitas apoyo con algo del banco, estoy aqui',
+                    nombre + '! Solo para dar seguimiento: ya hay avance con el credito del ' + vehiculo + '? Cualquier cosa que necesites, cuentas conmigo'
+                ];
+                else if (intencionId === 'documentos') msgs = [
+                    'Hola ' + nombre + '! El banco necesita algun documento adicional para tu tramite del ' + vehiculo + '? Te ayudo a conseguirlo',
+                    nombre + '! Revisa si el banco te pidio algo extra. Si necesitas algun documento de nuestra parte, te lo tengo listo'
+                ];
+                else if (intencionId === 'apoyo') msgs = [
+                    'Hola ' + nombre + '! Estoy al pendiente de tu tramite para el ' + vehiculo + '. Si hay cualquier cuestion con el banco, yo te apoyo para agilizar'
+                ];
+            }
+            else if (c.estado === 'Separado') {
+                if (intencionId === 'cierre') msgs = [
+                    'Hola ' + nombre + '! El ' + vehiculo + ' esta separado para ti. Cuando podemos cerrar? Estoy listo para finalizar',
+                    nombre + '! Ya falta poco para que el ' + vehiculo + ' sea tuyo. Que necesitas para que cerremos esta semana?'
+                ];
+                else if (intencionId === 'papeles') msgs = [
+                    'Hola ' + nombre + '! Que falta para finalizar la compra del ' + vehiculo + '? Tengo todo listo de mi lado, solo dime cuando',
+                    nombre + '! Los papeles del ' + vehiculo + ' estan listos. Falta algo de tu parte? Coordinamos para cerrar'
+                ];
+            }
+
+            if (msgs.length === 0) msgs = ['Hola ' + nombre + '! ' + resp + ' de FYRADRIVE. Como vas con lo del ' + vehiculo + '? Estoy al pendiente'];
+            return msgs[Math.floor(Math.random() * msgs.length)];
+        }
+
+        var segCurrentIntencion = null;
+        var segCurrentMensaje = '';
+
+        function openSeguimiento(id) {
+            segCurrentId = id;
+            var c = compradores.find(function(x) { return x.id === id; });
+            if (!c) return;
+
+            document.getElementById('seg-overlay').classList.add('show');
+            document.getElementById('seg-panel').classList.add('open');
+            document.getElementById('seg-title').textContent = c.nombre;
+
+            renderSeguimiento(c);
+        }
+
+        function closeSeguimiento() {
+            document.getElementById('seg-overlay').classList.remove('show');
+            document.getElementById('seg-panel').classList.remove('open');
+            segCurrentId = null;
+            segCurrentIntencion = null;
+        }
+
+        function renderSeguimiento(c) {
+            // State flow
+            var flowHTML = '';
+            var currentIdx = BUYER_STATES.indexOf(c.estado);
+            if (currentIdx < 0) currentIdx = 0;
+            BUYER_STATES.forEach(function(st, i) {
+                var cls = i < currentIdx ? 'done' : i === currentIdx ? 'active' : '';
+                flowHTML += '<div class="seg-state-dot ' + cls + '">' + st + '</div>';
+            });
+            document.getElementById('seg-flow').innerHTML = flowHTML;
+
+            // Countdown
+            var dias = getDiasEnEstado(c);
+            var cdDiv = document.getElementById('seg-countdown');
+            var urgCls = getUrgenciaClass(dias, c.estado);
+            cdDiv.className = 'seg-countdown-big ' + urgCls.replace('cd-','');
+            document.getElementById('seg-cd-days').textContent = dias;
+            document.getElementById('seg-cd-label').textContent = dias === 1 ? 'dia en ' + c.estado : 'dias en ' + c.estado;
+
+            // Cita countdown
+            var citaCd = document.getElementById('seg-cita-countdown');
+            if (c.estado === 'Cita Confirmada' && c.citaFecha) {
+                var citaDate = new Date(c.citaFecha + 'T' + (c.citaHora || '12:00'));
+                var diff = Math.ceil((citaDate - new Date()) / 86400000);
+                citaCd.style.display = 'block';
+                if (diff > 0) document.getElementById('seg-cita-cd-text').textContent = '&#128197; Faltan ' + diff + ' dias para la cita (' + formatDate(c.citaFecha) + ')';
+                else if (diff === 0) document.getElementById('seg-cita-cd-text').innerHTML = '&#128293; HOY ES LA CITA (' + (c.citaHora || '') + ')';
+                else document.getElementById('seg-cita-cd-text').innerHTML = '&#9888; La cita ya paso hace ' + Math.abs(diff) + ' dias';
+            } else { citaCd.style.display = 'none'; }
+
+            // Token (En Camino, Llego, En Cita)
+            var tokenSec = document.getElementById('seg-token-section');
+            var panicoSec = document.getElementById('seg-panico-section');
+            var livelocSec = document.getElementById('seg-liveloc-section');
+            var showSecurity = ['En Camino','Llego al Lugar','En Cita'].includes(c.estado);
+            tokenSec.style.display = showSecurity ? 'block' : 'none';
+            panicoSec.style.display = showSecurity ? 'block' : 'none';
+            livelocSec.style.display = c.estado === 'En Camino' ? 'block' : 'none';
+            if (showSecurity) {
+                document.getElementById('seg-token-code').textContent = c.tokenSeguridad || '----';
+            }
+
+            // Post-cita resultado
+            var postcitaSec = document.getElementById('seg-postcita-section');
+            if (c.estado === 'Post-Cita') {
+                postcitaSec.style.display = 'block';
+                var resultados = ['Lo va a pensar','Quiere credito','Quiere separar','Negociacion','No interesado'];
+                document.getElementById('seg-postcita-btns').innerHTML = resultados.map(function(r) {
+                    return '<button class="seg-postcita-btn ' + (c.postcita === r ? 'selected' : '') + '" onclick="setPostCitaResultado(\'' + r + '\')">' + r + '</button>';
+                }).join('');
+            } else { postcitaSec.style.display = 'none'; }
+
+            // Intenciones
+            var intenciones = INTENCIONES[c.estado] || INTENCIONES['Post-Cita'];
+            var intGrid = document.getElementById('seg-intenciones-grid');
+            intGrid.innerHTML = intenciones.map(function(int) {
+                return '<button class="seg-intencion-btn" onclick="seleccionarIntencion(\'' + int.id + '\')">' +
+                    '<div class="emoji">' + int.emoji + '</div>' +
+                    '<div class="title">' + int.title + '</div>' +
+                    '<div class="desc">' + int.desc + '</div>' +
+                '</button>';
+            }).join('');
+
+            // Reset mensaje
+            document.getElementById('seg-mensaje-section').style.display = segCurrentMensaje ? 'block' : 'none';
+
+            // Avanzar btn
+            var nextIdx = currentIdx + 1;
+            var avanzarBtn = document.getElementById('seg-btn-avanzar');
+            if (nextIdx < BUYER_STATES.length && !['Vendido','Venta Fallida'].includes(c.estado)) {
+                avanzarBtn.style.display = 'flex';
+                avanzarBtn.innerHTML = 'Avanzar a: ' + BUYER_STATES[nextIdx] + ' &#10132;';
+            } else {
+                avanzarBtn.style.display = 'none';
+            }
+
+            // Historial
+            var histHTML = '';
+            if (c.mensajesEnviados && c.mensajesEnviados.length > 0) {
+                histHTML = c.mensajesEnviados.slice().reverse().slice(0, 10).map(function(m) {
+                    var d = new Date(m.fecha);
+                    return '<div class="seg-historial-item">' +
+                        '<div class="seg-hist-dot"></div>' +
+                        '<div><div class="seg-hist-time">' + d.toLocaleDateString('es-MX') + ' ' + d.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'}) + ' — ' + (m.intencion || '') + '</div>' +
+                        '<div class="seg-hist-msg">' + (m.mensaje || '').substring(0, 80) + '...</div></div></div>';
+                }).join('');
+            } else {
+                histHTML = '<div style="font-size:12px;color:var(--gray);text-align:center;padding:12px;">Sin mensajes enviados aun</div>';
+            }
+            document.getElementById('seg-historial').innerHTML = histHTML;
+        }
+
+        function seleccionarIntencion(intencionId) {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            segCurrentIntencion = intencionId;
+            segCurrentMensaje = generarMensaje(c, intencionId);
+
+            document.getElementById('seg-mensaje-text').textContent = segCurrentMensaje;
+            document.getElementById('seg-mensaje-section').style.display = 'block';
+
+            // Highlight selected
+            document.querySelectorAll('.seg-intencion-btn').forEach(function(b) { b.classList.remove('selected'); });
+            event.target.closest('.seg-intencion-btn').classList.add('selected');
+        }
+
+        function regenerarMensaje() {
+            if (!segCurrentIntencion || !segCurrentId) return;
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            segCurrentMensaje = generarMensaje(c, segCurrentIntencion);
+            document.getElementById('seg-mensaje-text').textContent = segCurrentMensaje;
+        }
+
+        function enviarWhatsApp() {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c || !segCurrentMensaje) return;
+            var tel = c.telefono || c.telComprador || '';
+            if (!tel) { showNotif('Este comprador no tiene telefono', true); return; }
+            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(segCurrentMensaje);
+            window.open(url, '_blank');
+
+            // Log message
+            if (!c.mensajesEnviados) c.mensajesEnviados = [];
+            c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion, mensaje: segCurrentMensaje });
+            c.updated = Date.now();
+            saveToCloud();
+            renderSeguimiento(c);
+            showNotif('WhatsApp abierto - mensaje listo para enviar');
+        }
+
+        function copiarMensaje() {
+            if (!segCurrentMensaje) return;
+            navigator.clipboard.writeText(segCurrentMensaje).then(function() {
+                showNotif('Mensaje copiado al portapapeles');
+            });
+        }
+
+        function avanzarEstado() {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            var idx = BUYER_STATES.indexOf(c.estado);
+            if (idx < 0 || idx >= BUYER_STATES.length - 1) return;
+
+            var nextState = BUYER_STATES[idx + 1];
+            if (!confirm('Avanzar a "' + nextState + '"?')) return;
+
+            c.estado = nextState;
+            c.estadoCambio = Date.now();
+            c.updated = Date.now();
+
+            // Generate token when entering En Camino
+            if (nextState === 'En Camino' && !c.tokenSeguridad) {
+                c.tokenSeguridad = String(Math.floor(1000 + Math.random() * 9000));
+            }
+
+            saveToCloud();
+            renderCompradores();
+            updateStats();
+            renderSeguimiento(c);
+            showNotif('Estado cambiado a: ' + nextState);
+        }
+
+        function setPostCitaResultado(resultado) {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            c.postcita = resultado;
+            c.updated = Date.now();
+            saveToCloud();
+            renderSeguimiento(c);
+            showNotif('Resultado: ' + resultado);
+        }
+
+        function activarPanico() {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            if (!confirm('ACTIVAR ALERTA DE PANICO? Se enviara mensaje de emergencia por WhatsApp')) return;
+
+            var tel = c.telResponsable || c.telefono || '';
+            if (!tel) { showNotif('No hay telefono de responsable', true); return; }
+            var msg = 'ALERTA DE PANICO FYRADRIVE\nComprador: ' + c.nombre + '\nVehiculo: ' + c.vehiculo + '\nEstado: ' + c.estado + '\nToken: ' + (c.tokenSeguridad || 'N/A') + '\nACCION INMEDIATA REQUERIDA';
+            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(msg);
+            window.open(url, '_blank');
+            showNotif('ALERTA DE PANICO ACTIVADA', true);
+        }
+
+        function compartirUbicacion() {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            var tel = c.telDueno || c.telComprador || c.telefono || '';
+            if (!tel) { showNotif('No hay telefono para compartir', true); return; }
+            var url = 'https://wa.me/52' + tel.replace(/\D/g,'') + '?text=' + encodeURIComponent('Te comparto mi ubicacion en vivo para la cita del ' + c.vehiculo + '. Token de seguridad: ' + (c.tokenSeguridad || 'N/A'));
+            window.open(url, '_blank');
+            showNotif('Abre WhatsApp y comparte tu ubicacion en vivo');
+        }
 
         // ==========================================
         // INIT
