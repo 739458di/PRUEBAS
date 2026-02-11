@@ -1,16 +1,18 @@
 // CRM Database API - uses JSONBlob.com as free cloud database
 // Both Sebastian and Mario can read/write the same data in real time
+// Auto-recovery: if blob is deleted, creates a new one automatically
 
 const https = require('https');
 
-const BLOB_ID = '019c47e7-57ad-72e3-8ecf-2868ecf25ee7';
-const BLOB_URL = '/api/jsonBlob/' + BLOB_ID;
+let BLOB_ID = '019c4d4f-574f-716b-b8c1-4c3240cbd38b';
 
-function blobRequest(method, data) {
+const EMPTY_DATA = { vendedores: [], compradores: [], proyectos: [], eventos: [] };
+
+function blobRequest(method, blobId, data) {
     return new Promise((resolve, reject) => {
         const options = {
             hostname: 'jsonblob.com',
-            path: BLOB_URL,
+            path: '/api/jsonBlob/' + blobId,
             method: method,
             headers: {
                 'Content-Type': 'application/json',
@@ -22,8 +24,7 @@ function blobRequest(method, data) {
             let body = '';
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
-                try { resolve(JSON.parse(body)); }
-                catch(e) { resolve({}); }
+                resolve({ statusCode: res.statusCode, headers: res.headers, body: body });
             });
         });
 
@@ -31,6 +32,78 @@ function blobRequest(method, data) {
         if (data) req.write(JSON.stringify(data));
         req.end();
     });
+}
+
+// Create a new blob and return its ID
+function createNewBlob(data) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'jsonblob.com',
+            path: '/api/jsonBlob',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                const newId = res.headers['x-jsonblob-id'];
+                if (newId) {
+                    resolve(newId);
+                } else {
+                    reject(new Error('No blob ID returned'));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(JSON.stringify(data || EMPTY_DATA));
+        req.end();
+    });
+}
+
+async function getDataSafe() {
+    const result = await blobRequest('GET', BLOB_ID);
+
+    // If blob was deleted/expired, create a new one
+    if (result.statusCode === 404 || result.body.includes('not found') || result.body.includes('Not Found')) {
+        console.log('Blob not found, creating new one...');
+        const newId = await createNewBlob(EMPTY_DATA);
+        BLOB_ID = newId;
+        console.log('New blob created: ' + newId);
+        return { ...EMPTY_DATA, _newBlobId: newId };
+    }
+
+    try {
+        const parsed = JSON.parse(result.body);
+        // Ensure all required arrays exist
+        return {
+            vendedores: parsed.vendedores || [],
+            compradores: parsed.compradores || [],
+            proyectos: parsed.proyectos || [],
+            eventos: parsed.eventos || []
+        };
+    } catch (e) {
+        return EMPTY_DATA;
+    }
+}
+
+async function putDataSafe(data) {
+    const result = await blobRequest('PUT', BLOB_ID, data);
+
+    // If blob was deleted, create new and write there
+    if (result.statusCode === 404 || result.body.includes('not found')) {
+        console.log('Blob not found on PUT, creating new one...');
+        const newId = await createNewBlob(data);
+        BLOB_ID = newId;
+        return { success: true, _newBlobId: newId };
+    }
+
+    return { success: true };
 }
 
 module.exports = async function handler(req, res) {
@@ -43,14 +116,14 @@ module.exports = async function handler(req, res) {
     try {
         // GET - fetch all data
         if (req.method === 'GET') {
-            const data = await blobRequest('GET');
+            const data = await getDataSafe();
             return res.status(200).json(data);
         }
 
         // PUT - save all data (full replace)
         if (req.method === 'PUT') {
-            await blobRequest('PUT', req.body);
-            return res.status(200).json({ success: true });
+            const result = await putDataSafe(req.body);
+            return res.status(200).json(result);
         }
 
         return res.status(405).json({ error: 'Method not allowed' });

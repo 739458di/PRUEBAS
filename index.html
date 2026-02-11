@@ -1463,14 +1463,52 @@
             try {
                 const resp = await fetch(API_URL);
                 const data = await resp.json();
-                const newHash = JSON.stringify(data);
 
+                const cloudV = data.vendedores || [];
+                const cloudC = data.compradores || [];
+                const cloudP = data.proyectos || [];
+                const cloudE = data.eventos || [];
+
+                // Protection: if cloud returns empty but localStorage has data, restore from backup
+                const localV = JSON.parse(localStorage.getItem('fyra_crm_vendedores') || '[]');
+                const localC = JSON.parse(localStorage.getItem('fyra_crm_compradores') || '[]');
+                const localP = JSON.parse(localStorage.getItem('fyra_crm_proyectos') || '[]');
+                const localE = JSON.parse(localStorage.getItem('fyra_crm_eventos') || '[]');
+
+                const cloudTotal = cloudV.length + cloudC.length + cloudP.length + cloudE.length;
+                const localTotal = localV.length + localC.length + localP.length + localE.length;
+
+                if (cloudTotal === 0 && localTotal > 0) {
+                    // Cloud lost data! Restore from localStorage backup
+                    console.warn('Cloud data empty but localStorage has data - restoring backup!');
+                    vendedores = localV;
+                    compradores = localC;
+                    proyectos = localP;
+                    eventos = localE;
+                    // Push backup to cloud
+                    await fetch(API_URL, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ vendedores, compradores, proyectos, eventos })
+                    });
+                    showNotif('Datos restaurados desde respaldo local');
+                } else {
+                    vendedores = cloudV;
+                    compradores = cloudC;
+                    proyectos = cloudP;
+                    eventos = cloudE;
+                    // Save cloud data to localStorage as backup
+                    if (cloudTotal > 0) {
+                        localStorage.setItem('fyra_crm_vendedores', JSON.stringify(vendedores));
+                        localStorage.setItem('fyra_crm_compradores', JSON.stringify(compradores));
+                        localStorage.setItem('fyra_crm_proyectos', JSON.stringify(proyectos));
+                        localStorage.setItem('fyra_crm_eventos', JSON.stringify(eventos));
+                    }
+                }
+
+                const newHash = JSON.stringify({ vendedores, compradores, proyectos, eventos });
                 if (newHash !== lastDataHash) {
                     lastDataHash = newHash;
-                    vendedores = data.vendedores || [];
-                    compradores = data.compradores || [];
-                    proyectos = data.proyectos || [];
-                    eventos = data.eventos || [];
                     renderVendedores();
                     renderCompradores();
                     renderProyectos();

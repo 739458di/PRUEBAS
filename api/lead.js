@@ -6,14 +6,15 @@
 const https = require('https');
 
 const API_KEY = 'fyradrive2026';
-const BLOB_ID = '019c47e7-57ad-72e3-8ecf-2868ecf25ee7';
-const BLOB_URL = '/api/jsonBlob/' + BLOB_ID;
+let BLOB_ID = '019c4d4f-574f-716b-b8c1-4c3240cbd38b';
 
-function blobRequest(method, data) {
+const EMPTY_DATA = { vendedores: [], compradores: [], proyectos: [], eventos: [] };
+
+function blobRequest(method, blobId, data) {
     return new Promise((resolve, reject) => {
         const options = {
             hostname: 'jsonblob.com',
-            path: BLOB_URL,
+            path: '/api/jsonBlob/' + blobId,
             method: method,
             headers: {
                 'Content-Type': 'application/json',
@@ -24,14 +25,68 @@ function blobRequest(method, data) {
             let body = '';
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
-                try { resolve(JSON.parse(body)); }
-                catch(e) { resolve({ vendedores: [], compradores: [] }); }
+                resolve({ statusCode: res.statusCode, headers: res.headers, body: body });
             });
         });
         req.on('error', reject);
         if (data) req.write(JSON.stringify(data));
         req.end();
     });
+}
+
+function createNewBlob(data) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'jsonblob.com',
+            path: '/api/jsonBlob',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        };
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                const newId = res.headers['x-jsonblob-id'];
+                if (newId) resolve(newId);
+                else reject(new Error('No blob ID returned'));
+            });
+        });
+        req.on('error', reject);
+        req.write(JSON.stringify(data || EMPTY_DATA));
+        req.end();
+    });
+}
+
+async function getDataSafe() {
+    const result = await blobRequest('GET', BLOB_ID);
+    if (result.statusCode === 404 || result.body.includes('not found') || result.body.includes('Not Found')) {
+        const newId = await createNewBlob(EMPTY_DATA);
+        BLOB_ID = newId;
+        return EMPTY_DATA;
+    }
+    try {
+        const parsed = JSON.parse(result.body);
+        return {
+            vendedores: parsed.vendedores || [],
+            compradores: parsed.compradores || [],
+            proyectos: parsed.proyectos || [],
+            eventos: parsed.eventos || []
+        };
+    } catch (e) {
+        return EMPTY_DATA;
+    }
+}
+
+async function putDataSafe(data) {
+    const result = await blobRequest('PUT', BLOB_ID, data);
+    if (result.statusCode === 404 || result.body.includes('not found')) {
+        const newId = await createNewBlob(data);
+        BLOB_ID = newId;
+    }
+    return { success: true };
 }
 
 function validarTelefono(tel) {
@@ -75,25 +130,24 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        // Leer datos actuales
-        const data = await blobRequest('GET');
+        const data = await getDataSafe();
         const vendedores = data.vendedores || [];
         const compradores = data.compradores || [];
+        const proyectos = data.proyectos || [];
+        const eventos = data.eventos || [];
         const telLimpio = limpiarTelefono(telefono);
 
         if (tipo === 'vendedor') {
-            // Checar duplicado por telefono
             const existente = vendedores.findIndex(v =>
                 limpiarTelefono(v.telefono || '') === telLimpio
             );
 
             if (existente >= 0) {
-                // Actualizar notas y fecha
                 vendedores[existente].updated = Date.now();
                 vendedores[existente].notas = (vendedores[existente].notas || '') +
                     '\n[ManyChat ' + new Date().toLocaleDateString('es-MX') + '] ' + (notas || 'Contacto repetido');
 
-                await blobRequest('PUT', { vendedores, compradores });
+                await putDataSafe({ vendedores, compradores, proyectos, eventos });
                 return res.status(200).json({
                     registrado: true,
                     duplicado: true,
@@ -101,7 +155,6 @@ module.exports = async function handler(req, res) {
                 });
             }
 
-            // Nuevo vendedor
             const nuevoVendedor = {
                 id: 'V' + Date.now(),
                 nombre: nombre.trim(),
@@ -116,7 +169,7 @@ module.exports = async function handler(req, res) {
             };
 
             vendedores.push(nuevoVendedor);
-            await blobRequest('PUT', { vendedores, compradores });
+            await putDataSafe({ vendedores, compradores, proyectos, eventos });
 
             return res.status(200).json({
                 registrado: true,
@@ -127,7 +180,6 @@ module.exports = async function handler(req, res) {
             });
 
         } else {
-            // COMPRADOR
             const existente = compradores.findIndex(c =>
                 limpiarTelefono(c.telefono || '') === telLimpio
             );
@@ -138,7 +190,7 @@ module.exports = async function handler(req, res) {
                     '\n[ManyChat ' + new Date().toLocaleDateString('es-MX') + '] ' + (notas || 'Contacto repetido') +
                     (vehiculo ? ' - Interesado en: ' + vehiculo : '');
 
-                await blobRequest('PUT', { vendedores, compradores });
+                await putDataSafe({ vendedores, compradores, proyectos, eventos });
                 return res.status(200).json({
                     registrado: true,
                     duplicado: true,
@@ -164,7 +216,7 @@ module.exports = async function handler(req, res) {
             };
 
             compradores.push(nuevoComprador);
-            await blobRequest('PUT', { vendedores, compradores });
+            await putDataSafe({ vendedores, compradores, proyectos, eventos });
 
             return res.status(200).json({
                 registrado: true,
