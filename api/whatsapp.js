@@ -3,7 +3,7 @@
 // Body: { telefono, mensaje, nombre? }
 // Header: x-api-key = fyradrive2026
 
-const WA_TOKEN = process.env.WA_TOKEN || 'EAAcJmKFNOhYBQmwLpx7E9W1LRdHZBOO1FhzKcLYDC1MmUXOHhhkOyOqFYUh4IpCLZCBBdfx2tTZAemBjH8Va7dyr2ywQ2MZBlB9SjuspHaUK9HVTj2ixZC3y2oxIehxEi4aYsMbJRGZC9M3yZCp15rY6gaTgiTkfifakjfg27c8W1IhDh3KLn8eUQZBGT9ZA8cduWROGiGv4zDXMx8QmxASkL2HsZCz08hfdH6VTL6QQN0Ln7Ovtj8ZBlQLZCZBTrwMTr71Jb3mzf0Pv04fN6ZCZAcmmVzwLQUlmQZDZD';
+const WA_TOKEN = process.env.WA_TOKEN || 'EAAcJmKFNOhYBQsJ7OsS0mmrutqcaiDPM7pZB0yBA8P3C97RWMyfHIttlqKFETTdvXqmOLOpGZBlGS2qrTLANNvkKJIJ4rySnB3retbc1sdjHlGV9ZCK0nVYbxI5B8GNcZCwzM05HctvpAQQZBhuVrXBlJVZB897e4m1zWErozWB1eBiD1nwiRw2xtnYR249oZC21XLnLsMZAKfup7CoR6qBdPmsYZCXZByyL238tUZBZBnx0iOqpFBEQN1Og4gypD2h4WibApKZCCzV35t3Nypj9QnVhl6qZCD';
 const PHONE_NUMBER_ID = '968960759641278';
 const API_KEY = 'fyradrive2026';
 const WA_API_URL = 'https://graph.facebook.com/v21.0/' + PHONE_NUMBER_ID + '/messages';
