@@ -1719,10 +1719,12 @@
                 <textarea class="seg-mensaje-textarea" id="seg-mensaje-textarea"></textarea>
             </div>
             <div class="seg-mensaje-actions">
-                <button class="seg-btn-wa" onclick="enviarWhatsApp()">&#128172; Enviar por WhatsApp</button>
+                <button class="seg-btn-wa" onclick="enviarWhatsAppAPI()" id="seg-btn-wa-api" title="Envia directo desde FYRADRIVE sin abrir WhatsApp">&#128640; Enviar Directo</button>
+                <button class="seg-btn-wa" onclick="enviarWhatsApp()" style="background:#25d366;" title="Abre WhatsApp con el mensaje listo">&#128172; Abrir WhatsApp</button>
                 <button class="seg-btn-alt" onclick="copiarMensaje()">&#128203; Copiar</button>
                 <button class="seg-btn-alt" onclick="regenerarMensaje()">&#128260; Otra opcion</button>
             </div>
+            <div id="seg-wa-status" style="display:none;padding:6px 10px;margin-top:6px;border-radius:8px;font-size:12px;text-align:center;"></div>
         </div>
         <!-- Avanzar estado -->
         <div class="seg-section">
@@ -3520,10 +3522,70 @@
             document.getElementById('seg-mensaje-textarea').value = segCurrentMensaje;
         }
 
+        // Enviar DIRECTO por WhatsApp Business API (sin abrir WhatsApp)
+        function enviarWhatsAppAPI() {
+            var c = compradores.find(function(x) { return x.id === segCurrentId; });
+            if (!c) return;
+            var msg = document.getElementById('seg-mensaje-textarea').value.trim();
+            if (!msg) { showNotif('Escribe un mensaje', true); return; }
+            var tel = c.telefono || c.telComprador || '';
+            if (!tel) { showNotif('No tiene telefono registrado', true); return; }
+
+            var statusEl = document.getElementById('seg-wa-status');
+            statusEl.style.display = 'block';
+            statusEl.style.background = '#fff3cd';
+            statusEl.style.color = '#856404';
+            statusEl.textContent = '⏳ Enviando mensaje directo...';
+
+            var btnApi = document.getElementById('seg-btn-wa-api');
+            btnApi.disabled = true;
+            btnApi.textContent = '⏳ Enviando...';
+
+            fetch('/api/whatsapp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
+                body: JSON.stringify({ telefono: tel, mensaje: msg, nombre: c.nombre })
+            })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+                btnApi.disabled = false;
+                btnApi.textContent = '🚀 Enviar Directo';
+                if (result.ok && result.data.enviado) {
+                    statusEl.style.background = '#d4edda';
+                    statusEl.style.color = '#155724';
+                    statusEl.textContent = '✅ Mensaje enviado directo por FYRADRIVE WhatsApp';
+                    // Registrar en historial
+                    if (!c.mensajesEnviados) c.mensajesEnviados = [];
+                    c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion || 'manual', mensaje: msg, via: 'api', waId: result.data.mensaje_id });
+                    c.updated = Date.now();
+                    saveToCloud();
+                    renderSeguimiento(c);
+                    renderCompradores();
+                    showNotif('✅ Mensaje enviado directo por FYRADRIVE');
+                } else {
+                    var errMsg = result.data.error || 'Error desconocido';
+                    statusEl.style.background = '#f8d7da';
+                    statusEl.style.color = '#721c24';
+                    statusEl.textContent = '❌ Error: ' + errMsg;
+                    showNotif('Error al enviar: ' + errMsg, true);
+                }
+                setTimeout(function() { statusEl.style.display = 'none'; }, 8000);
+            })
+            .catch(function(err) {
+                btnApi.disabled = false;
+                btnApi.textContent = '🚀 Enviar Directo';
+                statusEl.style.background = '#f8d7da';
+                statusEl.style.color = '#721c24';
+                statusEl.textContent = '❌ Error de conexion: ' + err.message;
+                showNotif('Error de conexion', true);
+                setTimeout(function() { statusEl.style.display = 'none'; }, 8000);
+            });
+        }
+
+        // Enviar por wa.me (abre WhatsApp en otra ventana)
         function enviarWhatsApp() {
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
             if (!c) return;
-            // Use the textarea content (user may have edited it)
             var msg = document.getElementById('seg-mensaje-textarea').value.trim();
             if (!msg) { showNotif('Escribe un mensaje', true); return; }
             var tel = c.telefono || c.telComprador || '';
@@ -3532,7 +3594,7 @@
             window.open(url, '_blank');
 
             if (!c.mensajesEnviados) c.mensajesEnviados = [];
-            c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion || 'manual', mensaje: msg });
+            c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion || 'manual', mensaje: msg, via: 'wame' });
             c.updated = Date.now();
             saveToCloud();
             renderSeguimiento(c);
