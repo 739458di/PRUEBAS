@@ -344,6 +344,19 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     await initTables();
     platform = platform || 'whatsapp';
     telefono = cleanPhone(telefono);
+
+    // Messenger: solo registrar + analizar (Bola Mágica), NO responder
+    if (platform === 'messenger') {
+        console.log('[FYRA-BOT] Messenger modo escucha — solo registro y análisis para', telefono);
+        try {
+            await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre, 'messenger');
+        } catch(ae) {
+            console.error('[FYRA-BOT] Error análisis Messenger:', ae.message);
+        }
+        await setConversation(telefono, { estado: 'idle', nombre: nombre });
+        return;
+    }
+
     var conv = await getConversation(telefono);
     var estado = conv ? conv.estado : 'idle';
     var textoLower = texto.toLowerCase().trim();
