@@ -101,12 +101,42 @@ async function initTables() {
 }
 
 async function getConversation(telefono) {
+    // Buscar con telefono limpio y variantes
+    var clean = cleanPhone(telefono);
     var result = await client.execute({
         sql: 'SELECT * FROM wa_conversations WHERE telefono = ?',
-        args: [telefono]
+        args: [clean]
     });
+    // Si no encuentra, buscar con formato 521
+    if (result.rows.length === 0 && clean.length === 12 && clean.startsWith('52')) {
+        var alt = '521' + clean.substring(2);
+        result = await client.execute({
+            sql: 'SELECT * FROM wa_conversations WHERE telefono = ?',
+            args: [alt]
+        });
+        // Si encontramos con formato viejo, migrar al formato limpio
+        if (result.rows.length > 0) {
+            await client.execute({
+                sql: 'UPDATE wa_conversations SET telefono = ? WHERE telefono = ?',
+                args: [clean, alt]
+            });
+        }
+    }
     if (result.rows.length === 0) return null;
-    return result.rows[0];
+    var conv = result.rows[0];
+    // Auto-reset: si lleva >30 min en estado de cotización, resetear a idle
+    if (conv.estado !== 'idle' && conv.updated_at) {
+        var minutos = (Date.now() - conv.updated_at) / 60000;
+        if (minutos > 30) {
+            console.log('[FYRA-BOT] Auto-reset conversación atrapada:', clean, 'estado:', conv.estado, 'minutos:', Math.round(minutos));
+            await client.execute({
+                sql: 'UPDATE wa_conversations SET estado = ?, updated_at = ? WHERE telefono = ?',
+                args: ['idle', Date.now(), clean]
+            });
+            conv.estado = 'idle';
+        }
+    }
+    return conv;
 }
 
 async function setConversation(telefono, data) {
@@ -185,9 +215,10 @@ async function sendMessage(to, text, aiGenerated) {
 // ===== GUARDAR MENSAJE ENTRANTE =====
 async function saveMessage(data) {
     try {
+        var tel = cleanPhone(data.telefono || '');
         await client.execute({
             sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-            args: [data.wa_id || '', data.telefono || '', data.nombre || '', data.mensaje || '', data.tipo || 'text', data.direccion || 'in', data.timestamp || Math.floor(Date.now() / 1000), data.mensaje_id || '', Date.now()]
+            args: [tel, tel, data.nombre || '', data.mensaje || '', data.tipo || 'text', data.direccion || 'in', data.timestamp || Math.floor(Date.now() / 1000), data.mensaje_id || '', Date.now()]
         });
     } catch (err) {
         console.error('saveMessage error:', err);
@@ -227,6 +258,8 @@ function extraerPlazo(texto) {
 // ===== LOGICA DEL CHATBOT =====
 async function procesarMensaje(telefono, nombre, texto) {
     await initTables();
+    // Normalizar telefono para consistencia (521→52)
+    telefono = cleanPhone(telefono);
     var conv = await getConversation(telefono);
     var estado = conv ? conv.estado : 'idle';
     var textoLower = texto.toLowerCase().trim();
