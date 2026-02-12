@@ -1559,7 +1559,13 @@
                     <p style="font-size:11px;color:var(--gray);margin-bottom:8px;">
                         Escribe tus técnicas de venta, frases que funcionan, cómo manejas objeciones, tu filosofía. La IA usa esto como referencia para responder como tú.
                     </p>
-                    <textarea id="ai-sales-doc" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;" placeholder="Ejemplo: Siempre empiezo preguntando qué tipo de auto buscan y para qué lo necesitan. Cuando dicen que es muy caro, les pregunto cuánto traen de enganche y les muestro que con facilidades queda accesible..."></textarea>
+                    <div id="ai-drop-zone" style="position:relative;border:2px dashed var(--border);border-radius:8px;transition:all 0.2s;">
+                        <textarea id="ai-sales-doc" rows="8" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;background:transparent;" placeholder="Ejemplo: Siempre empiezo preguntando qué tipo de auto buscan y para qué lo necesitan. Cuando dicen que es muy caro, les pregunto cuánto traen de enganche y les muestro que con facilidades queda accesible..."></textarea>
+                        <div id="ai-drop-overlay" style="display:none;position:absolute;inset:0;background:rgba(8,145,178,0.1);border-radius:8px;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">
+                            <div style="font-size:28px;">📎</div>
+                            <div style="font-size:13px;font-weight:700;color:var(--cyan);margin-top:4px;">Suelta el archivo aquí</div>
+                        </div>
+                    </div>
                     <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">
                         <button onclick="guardarAIConfig()" style="padding:8px 18px;background:var(--cyan);color:white;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
                             💾 Guardar Documento
@@ -1570,7 +1576,7 @@
                         </label>
                         <span id="ai-config-status" style="font-size:12px;color:var(--gray);"></span>
                     </div>
-                    <p style="font-size:10px;color:var(--gray-light);margin-top:4px;">Acepta: TXT, PDF, CSV, MD. El contenido se agrega al documento de ventas.</p>
+                    <p style="font-size:10px;color:var(--gray-light);margin-top:4px;">Arrastra archivos aquí o usa el botón. Acepta: TXT, PDF, CSV, MD.</p>
                 </div>
             </div>
         </div>
@@ -4085,6 +4091,61 @@
                 }
             })
             .catch(function() { btn.textContent = '⚠️ Error'; });
+        }
+
+        // ===== DRAG & DROP PARA ARCHIVOS IA =====
+        (function() {
+            document.addEventListener('DOMContentLoaded', function() {
+                var dropZone = document.getElementById('ai-drop-zone');
+                if (!dropZone) return;
+                var overlay = document.getElementById('ai-drop-overlay');
+                var dragCounter = 0;
+
+                dropZone.addEventListener('dragenter', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dragCounter++;
+                    dropZone.style.borderColor = 'var(--cyan)';
+                    dropZone.style.background = 'rgba(8,145,178,0.03)';
+                    overlay.style.display = 'flex';
+                });
+
+                dropZone.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dragCounter--;
+                    if (dragCounter <= 0) {
+                        dragCounter = 0;
+                        dropZone.style.borderColor = 'var(--border)';
+                        dropZone.style.background = '';
+                        overlay.style.display = 'none';
+                    }
+                });
+
+                dropZone.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+
+                dropZone.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dragCounter = 0;
+                    dropZone.style.borderColor = 'var(--border)';
+                    dropZone.style.background = '';
+                    overlay.style.display = 'none';
+
+                    var files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        procesarArchivoDrop(files[0]);
+                    }
+                });
+            });
+        })();
+
+        function procesarArchivoDrop(file) {
+            var fakeInput = { files: [file], value: 'drop' };
+            cargarArchivoAI(fakeInput);
         }
 
         function cargarArchivoAI(input) {
