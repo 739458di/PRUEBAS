@@ -2071,7 +2071,7 @@
 
             if (tab === 'proyectos') renderProyectos();
             if (tab === 'calendario') renderCalendar();
-            if (tab === 'bolamagica') cargarBolaMagica();
+            if (tab === 'bolamagica') startBMPolling(); else stopBMPolling();
         }
 
         // ==========================================
@@ -3963,6 +3963,21 @@
         // ==========================================
         // 🔮 BOLA MÁGICA FUNCTIONS
         // ==========================================
+        var bmPollingInterval = null;
+
+        function startBMPolling() {
+            if (bmPollingInterval) clearInterval(bmPollingInterval);
+            cargarBolaMagica();
+            bmPollingInterval = setInterval(cargarBolaMagica, 5000);
+        }
+
+        function stopBMPolling() {
+            if (bmPollingInterval) {
+                clearInterval(bmPollingInterval);
+                bmPollingInterval = null;
+            }
+        }
+
         function cargarBolaMagica() {
             var periodo = document.getElementById('bm-periodo').value;
             fetch('/api/bola-magica?periodo=' + periodo, {

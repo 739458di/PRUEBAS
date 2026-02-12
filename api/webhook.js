@@ -550,14 +550,15 @@ module.exports = async function handler(req, res) {
                                     mensaje_id: msg.id || ''
                                 });
 
-                                // Procesar con chatbot (solo texto) + análisis emocional en paralelo
+                                // Procesar con chatbot (solo texto) + análisis emocional
                                 if (msg.type === 'text' && texto) {
-                                    // Chatbot responde inmediato, análisis corre en background
                                     await procesarMensaje(telefono, nombre, texto);
-                                    // Análisis emocional (no bloquea la respuesta)
-                                    analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre).catch(function(err) {
-                                        console.error('[FYRA-BOT] Error análisis emocional:', err.message);
-                                    });
+                                    // Análisis emocional con await para que Vercel no mate el proceso
+                                    try {
+                                        await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre);
+                                    } catch(analyzeErr) {
+                                        console.error('[FYRA-BOT] Error análisis emocional:', analyzeErr.message);
+                                    }
                                 }
                             }
                         }
