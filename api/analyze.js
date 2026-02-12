@@ -103,13 +103,15 @@ async function initBehaviorTable() {
                 created_at INTEGER
             )
         `);
+        // Agregar columna platform si no existe
+        try { await client.execute("ALTER TABLE wa_behavior ADD COLUMN platform TEXT DEFAULT 'whatsapp'"); } catch(e) {}
     } catch (err) {
         console.error('initBehaviorTable error:', err);
     }
 }
 
 // ===== ANALIZAR MENSAJE CON CLAUDE =====
-async function analizarMensaje(telefono, mensaje, direccion, contextoExtra) {
+async function analizarMensaje(telefono, mensaje, direccion, contextoExtra, platform) {
     try {
         var userContent = 'Mensaje del cliente (teléfono ' + telefono + '):\n"' + mensaje + '"';
         if (contextoExtra) {
@@ -159,8 +161,9 @@ async function analizarMensaje(telefono, mensaje, direccion, contextoExtra) {
 
         // Guardar en base de datos
         await initBehaviorTable();
+        var plat = platform || (typeof telefono === 'string' && telefono.startsWith('fb_') ? 'messenger' : 'whatsapp');
         await client.execute({
-            sql: `INSERT INTO wa_behavior (telefono, mensaje, direccion, emocion, miedo, deseo, intencion, seriedad, senal, sugerencia, resumen, raw_analysis, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            sql: `INSERT INTO wa_behavior (telefono, mensaje, direccion, emocion, miedo, deseo, intencion, seriedad, senal, sugerencia, resumen, raw_analysis, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             args: [
                 telefono,
                 mensaje,
@@ -174,6 +177,7 @@ async function analizarMensaje(telefono, mensaje, direccion, contextoExtra) {
                 analysis.sugerencia || '',
                 analysis.resumen || '',
                 textoRespuesta,
+                plat,
                 Date.now()
             ]
         });

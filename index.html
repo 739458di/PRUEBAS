@@ -1885,7 +1885,7 @@
         </div>
         <!-- MINI CHAT WhatsApp -->
         <div class="seg-section">
-            <div class="seg-section-title">💬 Chat WhatsApp</div>
+            <div class="seg-section-title" id="seg-chat-title">💬 Chat</div>
             <div id="seg-chat-container" style="background:#e5ddd5;border-radius:10px;padding:10px;max-height:350px;overflow-y:auto;margin-bottom:8px;">
                 <div id="seg-chat-messages" style="display:flex;flex-direction:column;gap:6px;">
                     <div style="text-align:center;color:#888;font-size:12px;padding:20px;">Cargando chat...</div>
@@ -2322,6 +2322,8 @@
         }
 
         function waLink(tel, text) {
+            // Messenger contacts no tienen link de wa.me
+            if (tel && tel.startsWith('fb_')) return '#';
             var num = formatWA(tel);
             if (!num) return '#';
             var url = 'https://wa.me/' + num;
@@ -2370,7 +2372,7 @@
 
             tbody.innerHTML = data.map(v => '<tr>' +
                 '<td><div class="client-name"><div class="client-avatar" style="background:' + avatarColor(v.nombre) + '">' + initials(v.nombre) + '</div>' + v.nombre + '</div></td>' +
-                '<td><div class="client-phone">' + (v.telefono || '-') + (v.telefono ? ' <a href="' + waLink(v.telefono) + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
+                '<td><div class="client-phone">' + (v.telefono || '-') + (v.telefono ? (v.telefono.startsWith('fb_') ? ' <span title="Messenger" style="cursor:default;">💬</span>' : ' <a href="' + waLink(v.telefono) + '" target="_blank" title="WhatsApp">📱</a>') : '') + '</div></td>' +
                 '<td style="font-weight:600;">' + v.auto + '</td>' +
                 '<td><span class="badge badge-' + v.seriedad.toLowerCase() + '">' + v.seriedad + '</span></td>' +
                 '<td><span class="badge badge-' + estadoVClass(v.estado) + '">' + v.estado + '</span></td>' +
@@ -2405,7 +2407,7 @@
 
             tbody.innerHTML = data.map(c => '<tr>' +
                 '<td><div class="client-name"><div class="client-avatar" style="background:' + avatarColor(c.nombre) + '">' + initials(c.nombre) + '</div>' + c.nombre + '</div></td>' +
-                '<td><div class="client-phone">' + (c.telefono || '-') + (c.telefono ? ' <a href="' + waLink(c.telefono) + '" target="_blank" title="WhatsApp">&#128172;</a>' : '') + '</div></td>' +
+                '<td><div class="client-phone">' + (c.telefono || '-') + (c.telefono ? (c.telefono.startsWith('fb_') ? ' <span title="Messenger" style="cursor:default;">💬</span>' : ' <a href="' + waLink(c.telefono) + '" target="_blank" title="WhatsApp">📱</a>') : '') + '</div></td>' +
                 '<td style="font-weight:600;">' + c.vehiculo + '</td>' +
                 '<td><span class="badge badge-' + estadoCClass(c.estado) + '">' + c.estado + '</span></td>' +
                 '<td>' + getSeguimientoHTML(c) + '</td>' +
@@ -3694,7 +3696,7 @@
             document.getElementById('seg-mensaje-textarea').value = segCurrentMensaje;
         }
 
-        // Enviar DIRECTO por WhatsApp Business API (sin abrir WhatsApp)
+        // Enviar DIRECTO por API (WhatsApp o Messenger según contacto)
         function enviarWhatsAppAPI() {
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
             if (!c) return;
@@ -3703,6 +3705,7 @@
             var tel = c.telefono || c.telComprador || '';
             if (!tel) { showNotif('No tiene telefono registrado', true); return; }
 
+            var isMessenger = tel.startsWith('fb_');
             var statusEl = document.getElementById('seg-wa-status');
             statusEl.style.display = 'block';
             statusEl.style.background = '#fff3cd';
@@ -3713,27 +3716,33 @@
             btnApi.disabled = true;
             btnApi.textContent = '⏳ Enviando...';
 
-            fetch('/api/whatsapp', {
+            var apiUrl = isMessenger ? '/api/messenger-send' : '/api/whatsapp';
+            var bodyData = isMessenger
+                ? { psid: tel, mensaje: msg, nombre: c.nombre }
+                : { telefono: tel, mensaje: msg, nombre: c.nombre };
+
+            fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
-                body: JSON.stringify({ telefono: tel, mensaje: msg, nombre: c.nombre })
+                body: JSON.stringify(bodyData)
             })
             .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
             .then(function(result) {
                 btnApi.disabled = false;
                 btnApi.textContent = '🚀 Enviar Directo';
                 if (result.ok && result.data.enviado) {
+                    var viaLabel = isMessenger ? 'Messenger' : 'WhatsApp';
                     statusEl.style.background = '#d4edda';
                     statusEl.style.color = '#155724';
-                    statusEl.textContent = '✅ Mensaje enviado directo por FYRADRIVE WhatsApp';
+                    statusEl.textContent = '✅ Mensaje enviado directo por FYRADRIVE ' + viaLabel;
                     // Registrar en historial
                     if (!c.mensajesEnviados) c.mensajesEnviados = [];
-                    c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion || 'manual', mensaje: msg, via: 'api', waId: result.data.mensaje_id });
+                    c.mensajesEnviados.push({ fecha: Date.now(), intencion: segCurrentIntencion || 'manual', mensaje: msg, via: isMessenger ? 'messenger' : 'api', waId: result.data.mensaje_id || result.data.message_id });
                     c.updated = Date.now();
                     saveToCloud();
                     renderSeguimiento(c);
                     renderCompradores();
-                    showNotif('✅ Mensaje enviado directo por FYRADRIVE');
+                    showNotif('✅ Mensaje enviado directo por ' + viaLabel);
                 } else {
                     var errMsg = result.data.error || 'Error desconocido';
                     statusEl.style.background = '#f8d7da';
@@ -3754,7 +3763,7 @@
             });
         }
 
-        // Enviar por wa.me (abre WhatsApp en otra ventana)
+        // Enviar por wa.me (abre WhatsApp en otra ventana) — solo WhatsApp, para Messenger usa API directo
         function enviarWhatsApp() {
             var c = compradores.find(function(x) { return x.id === segCurrentId; });
             if (!c) return;
@@ -3762,6 +3771,11 @@
             if (!msg) { showNotif('Escribe un mensaje', true); return; }
             var tel = c.telefono || c.telComprador || '';
             if (!tel) { showNotif('No tiene telefono registrado', true); return; }
+            // Messenger no tiene wa.me link — usar API directo
+            if (tel.startsWith('fb_')) {
+                showNotif('Contacto de Messenger — usa Enviar Directo', true);
+                return;
+            }
             var url = waLink(tel, msg);
             window.open(url, '_blank');
 
@@ -3792,6 +3806,11 @@
                 return;
             }
 
+            // Detectar plataforma por prefijo fb_
+            var isMessenger = tel.startsWith('fb_');
+            var chatTitle = document.getElementById('seg-chat-title');
+            if (chatTitle) chatTitle.textContent = isMessenger ? '💬 Chat Messenger' : '📱 Chat WhatsApp';
+
             fetch('/api/messages?telefono=' + encodeURIComponent(tel), {
                 headers: { 'x-api-key': 'fyradrive2026' }
             })
@@ -3809,11 +3828,13 @@
                 msgs.forEach(function(m) {
                     var isOut = m.direccion === 'out';
                     var isAI = m.ai_generated === 1 || m.ai_generated === '1';
+                    var msgPlatform = m.platform || 'whatsapp';
+                    var platformIcon = msgPlatform === 'messenger' ? '💬' : '📱';
                     var time = new Date(m.timestamp * 1000);
                     var timeStr = time.getHours() + ':' + (time.getMinutes() < 10 ? '0' : '') + time.getMinutes();
                     var align = isOut ? 'flex-end' : 'flex-start';
                     var bg = isOut ? (isAI ? '#e0f2fe' : '#dcf8c6') : '#fff';
-                    var label = isOut ? (isAI ? '🤖 FYRA-IA' : 'FYRADRIVE') : (m.nombre || m.telefono);
+                    var label = isOut ? (isAI ? '🤖 FYRA-IA' : 'FYRADRIVE') : (platformIcon + ' ' + (m.nombre || m.telefono));
                     var labelColor = isOut ? (isAI ? '#0369a1' : '#128c7e') : '#e74c3c';
 
                     html += '<div style="align-self:' + align + ';max-width:80%;background:' + bg + ';padding:6px 10px;border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,0.1);">';
@@ -3845,10 +3866,17 @@
             input.disabled = true;
             input.value = 'Enviando...';
 
-            fetch('/api/whatsapp', {
+            // Detectar plataforma: fb_ = Messenger, otro = WhatsApp
+            var isMessenger = tel.startsWith('fb_');
+            var apiUrl = isMessenger ? '/api/messenger-send' : '/api/whatsapp';
+            var bodyData = isMessenger
+                ? { psid: tel, mensaje: msg, nombre: c.nombre }
+                : { telefono: tel, mensaje: msg, nombre: c.nombre };
+
+            fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
-                body: JSON.stringify({ telefono: tel, mensaje: msg, nombre: c.nombre })
+                body: JSON.stringify(bodyData)
             })
             .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
             .then(function(result) {
@@ -3867,7 +3895,7 @@
                     container.appendChild(div);
                     var chatContainer = document.getElementById('seg-chat-container');
                     chatContainer.scrollTop = chatContainer.scrollHeight;
-                    showNotif('✅ Mensaje enviado');
+                    showNotif(isMessenger ? '✅ Mensaje enviado por Messenger' : '✅ Mensaje enviado por WhatsApp');
                 } else {
                     input.value = msg;
                     showNotif('Error: ' + (result.data.error || 'No enviado'), true);

@@ -1,7 +1,8 @@
-// WhatsApp Webhook + Chatbot FYRADRIVE
-// Recibe mensajes, detecta intención de cotización, captura datos, genera cotización
-// GET  /api/webhook = verificación del webhook
-// POST /api/webhook = mensaje entrante + respuesta automática
+// WhatsApp + Messenger Webhook + Chatbot FYRADRIVE
+// Recibe mensajes de WhatsApp y Messenger, detecta intención de cotización,
+// captura datos, genera cotización, responde con IA
+// GET  /api/webhook = verificación del webhook (WhatsApp)
+// POST /api/webhook = mensaje entrante WhatsApp + respuesta automática
 
 const { createClient } = require('@libsql/client');
 const { analizarMensaje } = require('./analyze.js');
@@ -13,8 +14,10 @@ const client = createClient({
 });
 
 const WA_TOKEN = process.env.WA_TOKEN || 'EAAcJmKFNOhYBQvLYIJj611y1ZCLmASwZC76pbuKuLG3sLfCBrLFEsasPOlIcWZAyQ1tbvFBbbXghvaNXIjC2MZCYilaz4y24GCO9rd7ZCMukRhqMOTZAzLyieIycDjww4DmyboZCbTSG7XknyZBJ3nWYZCMb4llOuTZAqkm9OVBn5B0AomBVezqWfrnK25wl9TJpDHiZAvHiZARAZBHUsoI2BF9tBbZAL2c9Dqe1gBYESbjLiHFIpzMUt0dE7Lraj0Xd8SBmtZArzUEDXv62UienZCCq4v8TpSBG';
+const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN || '';
 const PHONE_NUMBER_ID = '968960759641278';
 const WA_API_URL = 'https://graph.facebook.com/v21.0/' + PHONE_NUMBER_ID + '/messages';
+const FB_API_URL = 'https://graph.facebook.com/v21.0/me/messages';
 const VERIFY_TOKEN = 'fyradrive_webhook_2026';
 
 // ===== COTIZADOR FORMULAS (idénticas al CRM) =====
@@ -95,26 +98,52 @@ async function initTables() {
                 updated_at INTEGER
             )
         `);
+        // Agregar columnas nuevas si no existen
+        try { await client.execute('ALTER TABLE wa_messages ADD COLUMN ai_generated INTEGER DEFAULT 0'); } catch(e) {}
+        try { await client.execute('ALTER TABLE wa_messages ADD COLUMN platform TEXT DEFAULT \'whatsapp\''); } catch(e) {}
+        try { await client.execute('ALTER TABLE wa_conversations ADD COLUMN platform TEXT DEFAULT \'whatsapp\''); } catch(e) {}
     } catch (err) {
         console.error('initTables error:', err);
     }
 }
 
 async function getConversation(telefono) {
-    // Buscar con telefono limpio y variantes
     var clean = cleanPhone(telefono);
+
+    // Messenger: lookup directo, sin variantes de teléfono
+    if (clean.startsWith('fb_')) {
+        var result = await client.execute({
+            sql: 'SELECT * FROM wa_conversations WHERE telefono = ?',
+            args: [clean]
+        });
+        if (result.rows.length === 0) return null;
+        var conv = result.rows[0];
+        // Auto-reset: si lleva >30 min en estado de cotización, resetear a idle
+        if (conv.estado !== 'idle' && conv.updated_at) {
+            var minutos = (Date.now() - conv.updated_at) / 60000;
+            if (minutos > 30) {
+                console.log('[FYRA-BOT] Auto-reset conversación atrapada:', clean, 'estado:', conv.estado);
+                await client.execute({
+                    sql: 'UPDATE wa_conversations SET estado = ?, updated_at = ? WHERE telefono = ?',
+                    args: ['idle', Date.now(), clean]
+                });
+                conv.estado = 'idle';
+            }
+        }
+        return conv;
+    }
+
+    // WhatsApp: buscar con variantes 52/521
     var result = await client.execute({
         sql: 'SELECT * FROM wa_conversations WHERE telefono = ?',
         args: [clean]
     });
-    // Si no encuentra, buscar con formato 521
     if (result.rows.length === 0 && clean.length === 12 && clean.startsWith('52')) {
         var alt = '521' + clean.substring(2);
         result = await client.execute({
             sql: 'SELECT * FROM wa_conversations WHERE telefono = ?',
             args: [alt]
         });
-        // Si encontramos con formato viejo, migrar al formato limpio
         if (result.rows.length > 0) {
             await client.execute({
                 sql: 'UPDATE wa_conversations SET telefono = ? WHERE telefono = ?',
@@ -124,7 +153,7 @@ async function getConversation(telefono) {
     }
     if (result.rows.length === 0) return null;
     var conv = result.rows[0];
-    // Auto-reset: si lleva >30 min en estado de cotización, resetear a idle
+    // Auto-reset
     if (conv.estado !== 'idle' && conv.updated_at) {
         var minutos = (Date.now() - conv.updated_at) / 60000;
         if (minutos > 30) {
@@ -147,15 +176,19 @@ async function setConversation(telefono, data) {
             args: [data.estado || 'idle', data.nombre || '', data.dato_precio || 0, data.dato_enganche || 0, data.dato_plazo || 0, data.dato_vehiculo || '', data.paso || '', Date.now(), telefono]
         });
     } else {
+        var platform = telefono.startsWith('fb_') ? 'messenger' : 'whatsapp';
         await client.execute({
-            sql: `INSERT INTO wa_conversations (telefono, estado, nombre, dato_precio, dato_enganche, dato_plazo, dato_vehiculo, paso, updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-            args: [telefono, data.estado || 'idle', data.nombre || '', data.dato_precio || 0, data.dato_enganche || 0, data.dato_plazo || 0, data.dato_vehiculo || '', data.paso || '', Date.now()]
+            sql: `INSERT INTO wa_conversations (telefono, estado, nombre, dato_precio, dato_enganche, dato_plazo, dato_vehiculo, paso, platform, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+            args: [telefono, data.estado || 'idle', data.nombre || '', data.dato_precio || 0, data.dato_enganche || 0, data.dato_plazo || 0, data.dato_vehiculo || '', data.paso || '', platform, Date.now()]
         });
     }
 }
 
-// ===== LIMPIAR TELEFONO MEXICO =====
+// ===== LIMPIAR TELEFONO / IDENTIFICADOR =====
 function cleanPhone(tel) {
+    if (!tel) return '';
+    // Messenger PSIDs: no limpiar, retornar tal cual
+    if (typeof tel === 'string' && tel.startsWith('fb_')) return tel;
     var clean = tel.replace(/\D/g, '');
     // Meta manda 521XXXXXXXXXX (13 digitos) pero el API necesita 52XXXXXXXXXX (12 digitos)
     if (clean.length === 13 && clean.startsWith('521')) {
@@ -164,12 +197,21 @@ function cleanPhone(tel) {
     return clean;
 }
 
-// ===== ENVIAR MENSAJE =====
-async function sendMessage(to, text, aiGenerated) {
+// ===== ENVIAR MENSAJE (router por plataforma) =====
+async function sendMessage(to, text, aiGenerated, platform) {
+    platform = platform || 'whatsapp';
+    if (platform === 'messenger') {
+        return sendMessengerMessage(to, text, aiGenerated);
+    }
+    return sendWhatsAppMessage(to, text, aiGenerated);
+}
+
+// ===== ENVIAR MENSAJE WHATSAPP =====
+async function sendWhatsAppMessage(to, text, aiGenerated) {
     try {
         var cleanTo = cleanPhone(to);
         var isAI = aiGenerated ? 1 : 0;
-        console.log('[FYRA-BOT] Enviando mensaje a:', cleanTo, '| AI:', isAI, '| Texto:', text.substring(0, 50) + '...');
+        console.log('[FYRA-WA] Enviando a:', cleanTo, '| AI:', isAI, '| Texto:', text.substring(0, 50) + '...');
 
         var response = await fetch(WA_API_URL, {
             method: 'POST',
@@ -186,28 +228,77 @@ async function sendMessage(to, text, aiGenerated) {
             })
         });
         var data = await response.json();
+        console.log('[FYRA-WA] Respuesta Meta:', response.status, JSON.stringify(data));
 
-        console.log('[FYRA-BOT] Respuesta Meta:', response.status, JSON.stringify(data));
-
-        // SOLO guardar si Meta realmente envió el mensaje
         if (response.ok && data.messages && data.messages.length > 0) {
             await client.execute({
-                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-                args: [cleanTo, cleanTo, 'FYRADRIVE', text, 'text', 'out', Math.floor(Date.now() / 1000), data.messages[0].id, isAI, Date.now()]
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                args: [cleanTo, cleanTo, 'FYRADRIVE', text, 'text', 'out', Math.floor(Date.now() / 1000), data.messages[0].id, isAI, 'whatsapp', Date.now()]
             });
-            console.log('[FYRA-BOT] Mensaje enviado y guardado OK:', data.messages[0].id, isAI ? '(IA)' : '(BOT)');
+            console.log('[FYRA-WA] Mensaje enviado OK:', data.messages[0].id, isAI ? '(IA)' : '(BOT)');
             return data;
         } else {
-            // Meta falló - guardar error para debug pero NO como mensaje enviado
-            console.error('[FYRA-BOT] ERROR Meta API:', response.status, JSON.stringify(data));
+            console.error('[FYRA-WA] ERROR Meta API:', response.status, JSON.stringify(data));
             await client.execute({
-                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-                args: [cleanTo, cleanTo, 'FYRADRIVE', '❌ FALLÓ ENVÍO: ' + text, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), isAI, Date.now()]
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                args: [cleanTo, cleanTo, 'FYRADRIVE', '❌ FALLÓ ENVÍO: ' + text, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), isAI, 'whatsapp', Date.now()]
             });
             return null;
         }
     } catch (err) {
-        console.error('[FYRA-BOT] sendMessage EXCEPCION:', err.message);
+        console.error('[FYRA-WA] sendMessage EXCEPCION:', err.message);
+        return null;
+    }
+}
+
+// ===== ENVIAR MENSAJE MESSENGER =====
+async function sendMessengerMessage(to, text, aiGenerated) {
+    try {
+        // Extraer PSID del formato fb_XXXXX
+        var psid = to.startsWith('fb_') ? to.substring(3) : to;
+        var isAI = aiGenerated ? 1 : 0;
+        console.log('[FYRA-FB] Enviando a PSID:', psid, '| AI:', isAI, '| Texto:', text.substring(0, 50) + '...');
+
+        if (!FB_PAGE_TOKEN) {
+            console.error('[FYRA-FB] No hay FB_PAGE_TOKEN configurado');
+            await client.execute({
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                args: [to, to, 'FYRADRIVE', '❌ FALLÓ ENVÍO (sin token FB): ' + text, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), isAI, 'messenger', Date.now()]
+            });
+            return null;
+        }
+
+        // Messenger no soporta markdown de WhatsApp (*bold*, _italic_) — limpiar
+        var cleanText = text.replace(/\*(.*?)\*/g, '$1').replace(/_(.*?)_/g, '$1');
+
+        var response = await fetch(FB_API_URL + '?access_token=' + FB_PAGE_TOKEN, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                recipient: { id: psid },
+                message: { text: cleanText }
+            })
+        });
+        var data = await response.json();
+        console.log('[FYRA-FB] Respuesta Meta:', response.status, JSON.stringify(data));
+
+        if (response.ok && data.message_id) {
+            await client.execute({
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                args: [to, to, 'FYRADRIVE', cleanText, 'text', 'out', Math.floor(Date.now() / 1000), data.message_id, isAI, 'messenger', Date.now()]
+            });
+            console.log('[FYRA-FB] Mensaje enviado OK:', data.message_id, isAI ? '(IA)' : '(BOT)');
+            return data;
+        } else {
+            console.error('[FYRA-FB] ERROR Messenger API:', response.status, JSON.stringify(data));
+            await client.execute({
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                args: [to, to, 'FYRADRIVE', '❌ FALLÓ ENVÍO: ' + cleanText, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), isAI, 'messenger', Date.now()]
+            });
+            return null;
+        }
+    } catch (err) {
+        console.error('[FYRA-FB] sendMessengerMessage EXCEPCION:', err.message);
         return null;
     }
 }
@@ -216,9 +307,10 @@ async function sendMessage(to, text, aiGenerated) {
 async function saveMessage(data) {
     try {
         var tel = cleanPhone(data.telefono || '');
+        var platform = data.platform || 'whatsapp';
         await client.execute({
-            sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-            args: [tel, tel, data.nombre || '', data.mensaje || '', data.tipo || 'text', data.direccion || 'in', data.timestamp || Math.floor(Date.now() / 1000), data.mensaje_id || '', Date.now()]
+            sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, platform, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+            args: [tel, tel, data.nombre || '', data.mensaje || '', data.tipo || 'text', data.direccion || 'in', data.timestamp || Math.floor(Date.now() / 1000), data.mensaje_id || '', platform, Date.now()]
         });
     } catch (err) {
         console.error('saveMessage error:', err);
@@ -227,18 +319,12 @@ async function saveMessage(data) {
 
 // ===== EXTRAER NUMERO DE UN TEXTO =====
 function extraerNumero(texto) {
-    // Buscar números con o sin formato: 590000, 590,000, $590,000, 590k, 590mil
     var t = texto.toLowerCase().replace(/,/g, '').replace(/\$/g, '').trim();
-
-    // "590k" o "590 mil"
     var matchK = t.match(/(\d+(?:\.\d+)?)\s*(?:k|mil)/);
     if (matchK) return parseFloat(matchK[1]) * 1000;
-
-    // Número directo
     var matchNum = t.match(/(\d+(?:\.\d+)?)/);
     if (matchNum) {
         var num = parseFloat(matchNum[1]);
-        // Si es menor a 1000 probablemente es en miles (ej: "590" = 590,000 para precio)
         return num;
     }
     return 0;
@@ -246,37 +332,32 @@ function extraerNumero(texto) {
 
 function extraerPlazo(texto) {
     var t = texto.toLowerCase();
-    // Buscar meses directamente
     var matchMeses = t.match(/(\d+)\s*(?:meses|mes)/);
     if (matchMeses) return parseInt(matchMeses[1]);
-    // Solo número
     var matchNum = t.match(/(\d+)/);
     if (matchNum) return parseInt(matchNum[1]);
     return 0;
 }
 
-// ===== LOGICA DEL CHATBOT =====
-async function procesarMensaje(telefono, nombre, texto) {
+// ===== LOGICA DEL CHATBOT (platform-aware) =====
+async function procesarMensaje(telefono, nombre, texto, platform) {
     await initTables();
-    // Normalizar telefono para consistencia (521→52)
+    platform = platform || 'whatsapp';
     telefono = cleanPhone(telefono);
     var conv = await getConversation(telefono);
     var estado = conv ? conv.estado : 'idle';
     var textoLower = texto.toLowerCase().trim();
 
-    // ---- ESTADO: IDLE (sin conversación activa) ----
+    // ---- ESTADO: IDLE ----
     if (estado === 'idle' || !estado) {
-        // Detectar keywords de cotización
         var esCotizacion = COTIZACION_KEYWORDS.some(function(kw) {
             return textoLower.includes(kw);
         });
 
         if (esCotizacion) {
             await setConversation(telefono, {
-                estado: 'ofreciendo_cotizacion',
-                nombre: nombre,
-                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '',
-                paso: ''
+                estado: 'ofreciendo_cotizacion', nombre: nombre,
+                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: ''
             });
             await sendMessage(telefono,
                 '🚗 *FYRADRIVE - Cotizador de Crédito Automotriz*\n\n' +
@@ -286,34 +367,29 @@ async function procesarMensaje(telefono, nombre, texto) {
                 '✅ Plazos de 24 a 60 meses\n' +
                 '✅ Enganche desde 25%\n\n' +
                 '¿Te gustaría que te hagamos una cotización personalizada? 🤔\n\n' +
-                '_Responde *SI* para continuar_'
+                '_Responde *SI* para continuar_',
+                false, platform
             );
             return;
         }
 
-        // ===== CHATBOT IA: Respuesta inteligente =====
+        // ===== CHATBOT IA =====
         try {
             var config = await getAIConfig();
             if (config && config.ai_enabled) {
-                // Primero analizar emocionalmente
                 var analisis = null;
                 try {
                     analisis = await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre);
                 } catch(ae) {
                     console.error('[FYRA-AI] Error análisis previo:', ae.message);
                 }
-
-                // Generar respuesta IA
                 var aiResult = await generarRespuestaAI(telefono, texto, nombre, analisis);
 
                 if (aiResult && aiResult.trigger_cotizacion) {
-                    // IA detectó que quiere cotizar → activar flujo de cotización
                     console.log('[FYRA-AI] Trigger cotización detectado por IA');
                     await setConversation(telefono, {
-                        estado: 'ofreciendo_cotizacion',
-                        nombre: nombre,
-                        dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '',
-                        paso: ''
+                        estado: 'ofreciendo_cotizacion', nombre: nombre,
+                        dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: ''
                     });
                     await sendMessage(telefono,
                         '🚗 *FYRADRIVE - Cotizador de Crédito Automotriz*\n\n' +
@@ -323,14 +399,15 @@ async function procesarMensaje(telefono, nombre, texto) {
                         '✅ Plazos de 24 a 60 meses\n' +
                         '✅ Enganche desde 25%\n\n' +
                         '¿Te gustaría que te hagamos una cotización personalizada? 🤔\n\n' +
-                        '_Responde *SI* para continuar_'
+                        '_Responde *SI* para continuar_',
+                        false, platform
                     );
                     return;
                 }
 
                 if (aiResult && aiResult.respuesta) {
                     await setConversation(telefono, { estado: 'idle', nombre: nombre });
-                    await sendMessage(telefono, aiResult.respuesta, true);
+                    await sendMessage(telefono, aiResult.respuesta, true, platform);
                     return;
                 }
             }
@@ -338,7 +415,7 @@ async function procesarMensaje(telefono, nombre, texto) {
             console.error('[FYRA-AI] Error chatbot IA:', aiErr.message);
         }
 
-        // FALLBACK: Si IA está desactivada o falló, saludo genérico
+        // FALLBACK
         await setConversation(telefono, { estado: 'idle', nombre: nombre });
         await sendMessage(telefono,
             '¡Hola' + (nombre ? ' ' + nombre.split(' ')[0] : '') + '! 👋\n\n' +
@@ -346,27 +423,27 @@ async function procesarMensaje(telefono, nombre, texto) {
             'Somos especialistas en compra y venta de autos.\n\n' +
             '¿En qué te podemos ayudar?\n\n' +
             '📊 Escribe *"cotización"* para cotizar un crédito automotriz\n' +
-            '📞 O un asesor se comunicará contigo pronto'
+            '📞 O un asesor se comunicará contigo pronto',
+            false, platform
         );
         return;
     }
 
-    // ---- ESTADO: OFRECIENDO COTIZACION (esperando SI/NO) ----
+    // ---- ESTADO: OFRECIENDO COTIZACION ----
     if (estado === 'ofreciendo_cotizacion') {
         var esSi = SI_KEYWORDS.some(function(kw) { return textoLower === kw || textoLower.startsWith(kw + ' '); });
         var esNo = NO_KEYWORDS.some(function(kw) { return textoLower === kw || textoLower.startsWith(kw + ' '); });
 
         if (esSi) {
             await setConversation(telefono, {
-                estado: 'pidiendo_precio',
-                nombre: nombre || (conv ? conv.nombre : ''),
-                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '',
-                paso: 'precio'
+                estado: 'pidiendo_precio', nombre: nombre || (conv ? conv.nombre : ''),
+                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: 'precio'
             });
             await sendMessage(telefono,
                 '¡Perfecto! Vamos a armar tu cotización 📋\n\n' +
                 '*Paso 1 de 3:* 💰 ¿Cuál es el *precio del vehículo*?\n\n' +
-                '_Ejemplo: 350000 o 350k_'
+                '_Ejemplo: 350000 o 350k_',
+                false, platform
             );
             return;
         }
@@ -374,44 +451,40 @@ async function procesarMensaje(telefono, nombre, texto) {
         if (esNo) {
             await setConversation(telefono, { estado: 'idle', nombre: nombre || (conv ? conv.nombre : '') });
             await sendMessage(telefono,
-                'Sin problema! 👍\n\n' +
-                'Cuando quieras cotizar, solo escribe *"cotización"* y con gusto te ayudamos.\n\n' +
-                '¡Estamos para servirte! 🚗'
+                'Sin problema! 👍\n\nCuando quieras cotizar, solo escribe *"cotización"* y con gusto te ayudamos.\n\n¡Estamos para servirte! 🚗',
+                false, platform
             );
             return;
         }
 
-        // No entendió
-        await sendMessage(telefono, '¿Te gustaría que te hagamos la cotización? Responde *SI* o *NO* 🤔');
+        await sendMessage(telefono, '¿Te gustaría que te hagamos la cotización? Responde *SI* o *NO* 🤔', false, platform);
         return;
     }
 
     // ---- ESTADO: PIDIENDO PRECIO ----
     if (estado === 'pidiendo_precio') {
         var precio = extraerNumero(textoLower);
-        if (precio > 0 && precio < 1000) precio = precio * 1000; // 350 → 350,000
+        if (precio > 0 && precio < 1000) precio = precio * 1000;
 
         if (precio < 50000) {
-            await sendMessage(telefono, 'Hmm, ese precio parece muy bajo 🤔\n\n¿Cuál es el *precio del vehículo*? (ej: 350000)');
+            await sendMessage(telefono, 'Hmm, ese precio parece muy bajo 🤔\n\n¿Cuál es el *precio del vehículo*? (ej: 350000)', false, platform);
             return;
         }
         if (precio > 5000000) {
-            await sendMessage(telefono, 'Ese precio parece muy alto 🤔\n\n¿Cuál es el *precio del vehículo*? (ej: 350000)');
+            await sendMessage(telefono, 'Ese precio parece muy alto 🤔\n\n¿Cuál es el *precio del vehículo*? (ej: 350000)', false, platform);
             return;
         }
 
         await setConversation(telefono, {
-            estado: 'pidiendo_enganche',
-            nombre: conv ? conv.nombre : nombre,
-            dato_precio: precio,
-            dato_vehiculo: conv ? conv.dato_vehiculo : '',
-            paso: 'enganche'
+            estado: 'pidiendo_enganche', nombre: conv ? conv.nombre : nombre,
+            dato_precio: precio, dato_vehiculo: conv ? conv.dato_vehiculo : '', paso: 'enganche'
         });
         await sendMessage(telefono,
             '✅ Precio: *' + formatMoney(precio) + '*\n\n' +
             '*Paso 2 de 3:* 💵 ¿Cuánto darías de *enganche*?\n\n' +
             'Mínimo el 25% = ' + formatMoney(precio * 0.25) + '\n\n' +
-            '_Ejemplo: ' + Math.round(precio * 0.30 / 1000) + '000 o ' + Math.round(precio * 0.30 / 1000) + 'k_'
+            '_Ejemplo: ' + Math.round(precio * 0.30 / 1000) + '000 o ' + Math.round(precio * 0.30 / 1000) + 'k_',
+            false, platform
         );
         return;
     }
@@ -422,7 +495,6 @@ async function procesarMensaje(telefono, nombre, texto) {
         var enganche = extraerNumero(textoLower);
         if (enganche > 0 && enganche < 1000) enganche = enganche * 1000;
 
-        // Si puso porcentaje
         var matchPct = textoLower.match(/(\d+)\s*%/);
         if (matchPct) {
             enganche = precioActual * (parseInt(matchPct[1]) / 100);
@@ -432,31 +504,27 @@ async function procesarMensaje(telefono, nombre, texto) {
         if (enganche < minEnganche) {
             await sendMessage(telefono,
                 '⚠️ El enganche mínimo es *25%* del precio = *' + formatMoney(minEnganche) + '*\n\n' +
-                '¿Cuánto darías de enganche?\n_Puedes escribir el monto o el porcentaje (ej: 30%)_'
+                '¿Cuánto darías de enganche?\n_Puedes escribir el monto o el porcentaje (ej: 30%)_',
+                false, platform
             );
             return;
         }
         if (enganche >= precioActual) {
-            await sendMessage(telefono, '⚠️ El enganche no puede ser mayor al precio 🤔\n\n¿Cuánto darías de *enganche*?');
+            await sendMessage(telefono, '⚠️ El enganche no puede ser mayor al precio 🤔\n\n¿Cuánto darías de *enganche*?', false, platform);
             return;
         }
 
         await setConversation(telefono, {
-            estado: 'pidiendo_plazo',
-            nombre: conv ? conv.nombre : nombre,
-            dato_precio: precioActual,
-            dato_enganche: enganche,
-            dato_vehiculo: conv ? conv.dato_vehiculo : '',
-            paso: 'plazo'
+            estado: 'pidiendo_plazo', nombre: conv ? conv.nombre : nombre,
+            dato_precio: precioActual, dato_enganche: enganche,
+            dato_vehiculo: conv ? conv.dato_vehiculo : '', paso: 'plazo'
         });
         await sendMessage(telefono,
             '✅ Enganche: *' + formatMoney(enganche) + '* (' + Math.round(enganche / precioActual * 100) + '%)\n\n' +
             '*Paso 3 de 3:* 📅 ¿A cuántos *meses* te gustaría pagarlo?\n\n' +
-            '• 24 meses (2 años)\n' +
-            '• 36 meses (3 años)\n' +
-            '• 48 meses (4 años)\n' +
-            '• 60 meses (5 años)\n\n' +
-            '_Escribe el número de meses_'
+            '• 24 meses (2 años)\n• 36 meses (3 años)\n• 48 meses (4 años)\n• 60 meses (5 años)\n\n' +
+            '_Escribe el número de meses_',
+            false, platform
         );
         return;
     }
@@ -465,28 +533,20 @@ async function procesarMensaje(telefono, nombre, texto) {
     if (estado === 'pidiendo_plazo') {
         var plazo = extraerPlazo(textoLower);
         if (plazo < 12 || plazo > 72) {
-            await sendMessage(telefono, '⚠️ El plazo debe ser entre *12 y 60 meses*\n\n¿A cuántos meses? (24, 36, 48 o 60)');
+            await sendMessage(telefono, '⚠️ El plazo debe ser entre *12 y 60 meses*\n\n¿A cuántos meses? (24, 36, 48 o 60)', false, platform);
             return;
         }
 
         var precioFinal = conv ? conv.dato_precio : 0;
         var engancheFinal = conv ? conv.dato_enganche : 0;
-
-        // CALCULAR COTIZACION
         var cot = calcularCotizacion(precioFinal, engancheFinal, plazo);
 
-        // Guardar estado completado
         await setConversation(telefono, {
-            estado: 'cotizacion_enviada',
-            nombre: conv ? conv.nombre : nombre,
-            dato_precio: precioFinal,
-            dato_enganche: engancheFinal,
-            dato_plazo: plazo,
-            dato_vehiculo: conv ? conv.dato_vehiculo : '',
-            paso: 'completado'
+            estado: 'cotizacion_enviada', nombre: conv ? conv.nombre : nombre,
+            dato_precio: precioFinal, dato_enganche: engancheFinal, dato_plazo: plazo,
+            dato_vehiculo: conv ? conv.dato_vehiculo : '', paso: 'completado'
         });
 
-        // Enviar cotización formateada
         await sendMessage(telefono,
             '🎉 *¡Tu Cotización FYRADRIVE está lista!*\n\n' +
             '━━━━━━━━━━━━━━━━━━━\n' +
@@ -510,7 +570,8 @@ async function procesarMensaje(telefono, nombre, texto) {
             '_Cotización sujeta a aprobación crediticia_\n\n' +
             '¿Te gustaría agendar una cita para ver el vehículo? 🤝\n' +
             'Escribe *"SI"* y un asesor te contactará\n\n' +
-            '¿Quieres cotizar con otros montos? Escribe *"cotización"*'
+            '¿Quieres cotizar con otros montos? Escribe *"cotización"*',
+            false, platform
         );
         return;
     }
@@ -518,21 +579,16 @@ async function procesarMensaje(telefono, nombre, texto) {
     // ---- ESTADO: COTIZACION ENVIADA ----
     if (estado === 'cotizacion_enviada') {
         var esSi2 = SI_KEYWORDS.some(function(kw) { return textoLower === kw || textoLower.startsWith(kw + ' '); });
-
-        // Detectar si quiere otra cotización
         var otraCot = COTIZACION_KEYWORDS.some(function(kw) { return textoLower.includes(kw); });
 
         if (otraCot) {
             await setConversation(telefono, {
-                estado: 'pidiendo_precio',
-                nombre: conv ? conv.nombre : nombre,
-                dato_precio: 0, dato_enganche: 0, dato_plazo: 0,
-                paso: 'precio'
+                estado: 'pidiendo_precio', nombre: conv ? conv.nombre : nombre,
+                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, paso: 'precio'
             });
             await sendMessage(telefono,
-                '📋 ¡Vamos con otra cotización!\n\n' +
-                '*Paso 1 de 3:* 💰 ¿Cuál es el *precio del vehículo*?\n\n' +
-                '_Ejemplo: 350000 o 350k_'
+                '📋 ¡Vamos con otra cotización!\n\n*Paso 1 de 3:* 💰 ¿Cuál es el *precio del vehículo*?\n\n_Ejemplo: 350000 o 350k_',
+                false, platform
             );
             return;
         }
@@ -540,15 +596,13 @@ async function procesarMensaje(telefono, nombre, texto) {
         if (esSi2) {
             await setConversation(telefono, { estado: 'idle', nombre: conv ? conv.nombre : nombre });
             await sendMessage(telefono,
-                '🤝 *¡Excelente!*\n\n' +
-                'Un asesor de FYRADRIVE se pondrá en contacto contigo muy pronto para agendar tu cita.\n\n' +
-                '📞 También puedes llamarnos directamente.\n\n' +
-                '¡Gracias por tu interés! 🚗✨'
+                '🤝 *¡Excelente!*\n\nUn asesor de FYRADRIVE se pondrá en contacto contigo muy pronto para agendar tu cita.\n\n📞 También puedes llamarnos directamente.\n\n¡Gracias por tu interés! 🚗✨',
+                false, platform
             );
             return;
         }
 
-        // Cualquier otra cosa → IA maneja post-cotización (objeciones, dudas, etc.)
+        // IA maneja post-cotización
         await setConversation(telefono, { estado: 'idle', nombre: conv ? conv.nombre : nombre });
         try {
             var configPost = await getAIConfig();
@@ -559,31 +613,29 @@ async function procesarMensaje(telefono, nombre, texto) {
                 } catch(aePost) {}
                 var aiPost = await generarRespuestaAI(telefono, texto, nombre, analisisPost);
                 if (aiPost && aiPost.respuesta) {
-                    await sendMessage(telefono, aiPost.respuesta, true);
+                    await sendMessage(telefono, aiPost.respuesta, true, platform);
                     return;
                 }
             }
         } catch(aiPostErr) {
             console.error('[FYRA-AI] Error post-cotización:', aiPostErr.message);
         }
-        // Fallback
         await sendMessage(telefono,
-            '¡Gracias por tu interés! 😊\n\n' +
-            'Si necesitas otra cotización, escribe *"cotización"*\n' +
-            'Un asesor te contactará pronto 📞'
+            '¡Gracias por tu interés! 😊\n\nSi necesitas otra cotización, escribe *"cotización"*\nUn asesor te contactará pronto 📞',
+            false, platform
         );
         return;
     }
 
-    // ---- ESTADO NO RECONOCIDO: reset ----
+    // ---- ESTADO NO RECONOCIDO ----
     await setConversation(telefono, { estado: 'idle', nombre: nombre });
     await sendMessage(telefono,
-        '¡Hola! 👋 Bienvenido a *FYRADRIVE* 🚗\n\n' +
-        'Escribe *"cotización"* para cotizar un crédito automotriz 📊'
+        '¡Hola! 👋 Bienvenido a *FYRADRIVE* 🚗\n\nEscribe *"cotización"* para cotizar un crédito automotriz 📊',
+        false, platform
     );
 }
 
-// ===== HANDLER PRINCIPAL =====
+// ===== HANDLER PRINCIPAL (WhatsApp) =====
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -601,7 +653,7 @@ module.exports = async function handler(req, res) {
         return res.status(403).send('Token invalido');
     }
 
-    // POST = Mensaje entrante
+    // POST = Mensaje entrante WhatsApp
     if (req.method === 'POST') {
         try {
             await initTables();
@@ -636,26 +688,16 @@ module.exports = async function handler(req, res) {
                                     texto = '[' + msg.type + ']';
                                 }
 
-                                // Guardar mensaje entrante
                                 await saveMessage({
-                                    wa_id: telefono,
-                                    telefono: telefono,
-                                    nombre: nombre,
-                                    mensaje: texto,
-                                    tipo: msg.type || 'text',
-                                    direccion: 'in',
+                                    wa_id: telefono, telefono: telefono, nombre: nombre,
+                                    mensaje: texto, tipo: msg.type || 'text', direccion: 'in',
                                     timestamp: parseInt(msg.timestamp) || Math.floor(Date.now() / 1000),
-                                    mensaje_id: msg.id || ''
+                                    mensaje_id: msg.id || '', platform: 'whatsapp'
                                 });
 
-                                // Procesar con chatbot (solo texto)
-                                // Nota: El análisis emocional ahora se hace DENTRO de procesarMensaje
-                                // para el path de IA (para pasar el análisis como contexto al AI).
-                                // Para el path de cotización (reglas), analizamos después.
                                 if (msg.type === 'text' && texto) {
-                                    // Inicializar tablas de IA
                                     try { await initAITables(); } catch(e) {}
-                                    await procesarMensaje(telefono, nombre, texto);
+                                    await procesarMensaje(telefono, nombre, texto, 'whatsapp');
                                 }
                             }
                         }
@@ -671,3 +713,10 @@ module.exports = async function handler(req, res) {
 
     return res.status(405).send('Method not allowed');
 };
+
+// ===== EXPORTS para messenger.js =====
+module.exports.procesarMensaje = procesarMensaje;
+module.exports.saveMessage = saveMessage;
+module.exports.sendMessage = sendMessage;
+module.exports.initTables = initTables;
+module.exports.cleanPhone = cleanPhone;

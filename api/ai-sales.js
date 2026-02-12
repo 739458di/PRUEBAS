@@ -34,6 +34,7 @@ CONTEXTO DEL NEGOCIO:
 - Proceso: cliente pregunta -> cotizacion -> enganche -> aprobacion credito -> cierre
 - No tenemos inventario en linea aun. Si preguntan por autos disponibles, diles que nos digan que buscan y les conseguimos opciones
 - Aceptamos autos a cuenta (trade-in)
+- El cliente puede estar en WhatsApp o Facebook Messenger. Responde igual independientemente de la plataforma
 
 REGLAS ESTRICTAS:
 1. Si el cliente quiere COTIZAR, saber cuanto pagaria, preguntar por credito/financiamiento/mensualidades/plazos/enganche: DEBES responder con "trigger_cotizacion": true y NO generar respuesta. El sistema de cotizacion se encargara.
@@ -146,23 +147,35 @@ async function updateAIConfig(updates) {
 // ===== TRAER HISTORIAL DE CONVERSACION =====
 async function getConversationHistory(telefono, maxMessages) {
     try {
-        // Buscar con variantes de telefono (52 vs 521)
-        var tel10 = telefono.replace(/\D/g, '');
-        if (tel10.length === 13 && tel10.startsWith('521')) tel10 = '52' + tel10.slice(3);
-        if (tel10.length === 12 && tel10.startsWith('52')) {
-            var tel10base = tel10.slice(2);
-            var tel521 = '521' + tel10base;
-        } else {
-            var tel10base = tel10;
-            var tel521 = tel10;
-        }
+        var result;
 
-        var result = await client.execute({
-            sql: `SELECT mensaje, direccion, nombre, timestamp, ai_generated FROM wa_messages
-                  WHERE telefono IN (?, ?, ?)
-                  ORDER BY timestamp DESC LIMIT ?`,
-            args: [tel10, tel10base || tel10, tel521 || tel10, maxMessages || 20]
-        });
+        // Messenger: lookup directo con fb_ prefix
+        if (typeof telefono === 'string' && telefono.startsWith('fb_')) {
+            result = await client.execute({
+                sql: `SELECT mensaje, direccion, nombre, timestamp, ai_generated FROM wa_messages
+                      WHERE telefono = ?
+                      ORDER BY timestamp DESC LIMIT ?`,
+                args: [telefono, maxMessages || 20]
+            });
+        } else {
+            // WhatsApp: buscar con variantes de telefono (52 vs 521)
+            var tel10 = telefono.replace(/\D/g, '');
+            if (tel10.length === 13 && tel10.startsWith('521')) tel10 = '52' + tel10.slice(3);
+            if (tel10.length === 12 && tel10.startsWith('52')) {
+                var tel10base = tel10.slice(2);
+                var tel521 = '521' + tel10base;
+            } else {
+                var tel10base = tel10;
+                var tel521 = tel10;
+            }
+
+            result = await client.execute({
+                sql: `SELECT mensaje, direccion, nombre, timestamp, ai_generated FROM wa_messages
+                      WHERE telefono IN (?, ?, ?)
+                      ORDER BY timestamp DESC LIMIT ?`,
+                args: [tel10, tel10base || tel10, tel521 || tel10, maxMessages || 20]
+            });
+        }
 
         // Revertir para orden cronologico
         var messages = result.rows.slice().reverse();
@@ -176,8 +189,12 @@ async function getConversationHistory(telefono, maxMessages) {
 // ===== TRAER MUESTRAS DE ESTILO DE SEBASTIAN =====
 async function getStyleSamples(currentTelefono, count) {
     try {
-        var tel = currentTelefono.replace(/\D/g, '');
-        if (tel.length === 13 && tel.startsWith('521')) tel = '52' + tel.slice(3);
+        // Messenger: usar tal cual, WhatsApp: limpiar
+        var tel = currentTelefono;
+        if (!tel.startsWith('fb_')) {
+            tel = currentTelefono.replace(/\D/g, '');
+            if (tel.length === 13 && tel.startsWith('521')) tel = '52' + tel.slice(3);
+        }
 
         var result = await client.execute({
             sql: `SELECT telefono, nombre, mensaje, timestamp FROM wa_messages

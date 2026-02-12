@@ -52,26 +52,33 @@ module.exports = async function handler(req, res) {
     try {
         var result;
         if (telefono) {
-            // Buscar mensajes de un telefono especifico
-            // Normalizar: buscar con y sin prefijos
-            var clean = telefono.replace(/\D/g, '');
-            var variants = [clean];
-            if (clean.length === 10) {
-                variants.push('52' + clean);
-                variants.push('521' + clean);
-            } else if (clean.length === 12 && clean.startsWith('52')) {
-                variants.push(clean.substring(2));
-                variants.push('521' + clean.substring(2));
-            } else if (clean.length === 13 && clean.startsWith('521')) {
-                variants.push(clean.substring(3));
-                variants.push('52' + clean.substring(3));
-            }
+            // Messenger: lookup directo con fb_ prefix
+            if (telefono.startsWith('fb_')) {
+                result = await client.execute({
+                    sql: 'SELECT * FROM wa_messages WHERE telefono = ? ORDER BY timestamp DESC LIMIT ?',
+                    args: [telefono, limit]
+                });
+            } else {
+                // WhatsApp: buscar con variantes de telefono
+                var clean = telefono.replace(/\D/g, '');
+                var variants = [clean];
+                if (clean.length === 10) {
+                    variants.push('52' + clean);
+                    variants.push('521' + clean);
+                } else if (clean.length === 12 && clean.startsWith('52')) {
+                    variants.push(clean.substring(2));
+                    variants.push('521' + clean.substring(2));
+                } else if (clean.length === 13 && clean.startsWith('521')) {
+                    variants.push(clean.substring(3));
+                    variants.push('52' + clean.substring(3));
+                }
 
-            var placeholders = variants.map(function() { return '?'; }).join(',');
-            result = await client.execute({
-                sql: 'SELECT * FROM wa_messages WHERE telefono IN (' + placeholders + ') ORDER BY timestamp DESC LIMIT ?',
-                args: variants.concat([limit])
-            });
+                var placeholders = variants.map(function() { return '?'; }).join(',');
+                result = await client.execute({
+                    sql: 'SELECT * FROM wa_messages WHERE telefono IN (' + placeholders + ') ORDER BY timestamp DESC LIMIT ?',
+                    args: variants.concat([limit])
+                });
+            }
         } else {
             // Todos los mensajes recientes
             result = await client.execute({
@@ -92,6 +99,7 @@ module.exports = async function handler(req, res) {
                 mensaje_id: row.mensaje_id,
                 leido: row.leido,
                 ai_generated: row.ai_generated || 0,
+                platform: row.platform || 'whatsapp',
                 created_at: row.created_at
             };
         });
