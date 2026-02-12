@@ -136,6 +136,8 @@ function cleanPhone(tel) {
 async function sendMessage(to, text) {
     try {
         var cleanTo = cleanPhone(to);
+        console.log('[FYRA-BOT] Enviando mensaje a:', cleanTo, '| Texto:', text.substring(0, 50) + '...');
+
         var response = await fetch(WA_API_URL, {
             method: 'POST',
             headers: {
@@ -152,15 +154,28 @@ async function sendMessage(to, text) {
         });
         var data = await response.json();
 
-        // Guardar mensaje enviado
-        await client.execute({
-            sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-            args: [to, to, 'FYRADRIVE', text, 'text', 'out', Math.floor(Date.now() / 1000), data.messages ? data.messages[0].id : '', Date.now()]
-        });
+        console.log('[FYRA-BOT] Respuesta Meta:', response.status, JSON.stringify(data));
 
-        return data;
+        // SOLO guardar si Meta realmente envió el mensaje
+        if (response.ok && data.messages && data.messages.length > 0) {
+            await client.execute({
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+                args: [cleanTo, cleanTo, 'FYRADRIVE', text, 'text', 'out', Math.floor(Date.now() / 1000), data.messages[0].id, Date.now()]
+            });
+            console.log('[FYRA-BOT] Mensaje enviado y guardado OK:', data.messages[0].id);
+            return data;
+        } else {
+            // Meta falló - guardar error para debug pero NO como mensaje enviado
+            console.error('[FYRA-BOT] ERROR Meta API:', response.status, JSON.stringify(data));
+            // Guardar como mensaje fallido para que aparezca en el CRM con indicación de error
+            await client.execute({
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+                args: [cleanTo, cleanTo, 'FYRADRIVE', '❌ FALLÓ ENVÍO: ' + text, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), Date.now()]
+            });
+            return null;
+        }
     } catch (err) {
-        console.error('sendMessage error:', err);
+        console.error('[FYRA-BOT] sendMessage EXCEPCION:', err.message);
         return null;
     }
 }
