@@ -1560,12 +1560,17 @@
                         Escribe tus técnicas de venta, frases que funcionan, cómo manejas objeciones, tu filosofía. La IA usa esto como referencia para responder como tú.
                     </p>
                     <textarea id="ai-sales-doc" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;" placeholder="Ejemplo: Siempre empiezo preguntando qué tipo de auto buscan y para qué lo necesitan. Cuando dicen que es muy caro, les pregunto cuánto traen de enganche y les muestro que con facilidades queda accesible..."></textarea>
-                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">
                         <button onclick="guardarAIConfig()" style="padding:8px 18px;background:var(--cyan);color:white;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
                             💾 Guardar Documento
                         </button>
+                        <label style="padding:8px 18px;background:#f0f9ff;color:#0369a1;border:1px dashed #0369a1;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                            📎 Subir Archivo
+                            <input type="file" id="ai-file-upload" accept=".txt,.pdf,.doc,.docx,.csv,.md" style="display:none;" onchange="cargarArchivoAI(this)">
+                        </label>
                         <span id="ai-config-status" style="font-size:12px;color:var(--gray);"></span>
                     </div>
+                    <p style="font-size:10px;color:var(--gray-light);margin-top:4px;">Acepta: TXT, PDF, CSV, MD. El contenido se agrega al documento de ventas.</p>
                 </div>
             </div>
         </div>
@@ -4080,6 +4085,91 @@
                 }
             })
             .catch(function() { btn.textContent = '⚠️ Error'; });
+        }
+
+        function cargarArchivoAI(input) {
+            if (!input.files || !input.files[0]) return;
+            var file = input.files[0];
+            var statusEl = document.getElementById('ai-config-status');
+            var maxSize = 5 * 1024 * 1024; // 5MB max
+
+            if (file.size > maxSize) {
+                showNotif('Archivo muy grande (max 5MB)', true);
+                input.value = '';
+                return;
+            }
+
+            statusEl.textContent = '📎 Leyendo ' + file.name + '...';
+
+            // PDF: usar pdf.js para extraer texto
+            if (file.name.toLowerCase().endsWith('.pdf')) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var typedarray = new Uint8Array(e.target.result);
+                    if (typeof pdfjsLib === 'undefined') {
+                        // Cargar pdf.js dinámicamente
+                        var script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                        script.onload = function() {
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                            extraerTextoPDF(typedarray, file.name, statusEl);
+                        };
+                        document.head.appendChild(script);
+                    } else {
+                        extraerTextoPDF(typedarray, file.name, statusEl);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                // TXT, CSV, MD, DOC: leer como texto
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var contenido = e.target.result;
+                    var doc = document.getElementById('ai-sales-doc');
+                    var existing = doc.value.trim();
+                    doc.value = existing ? existing + '\n\n--- ' + file.name + ' ---\n' + contenido : contenido;
+                    statusEl.textContent = '✅ ' + file.name + ' cargado (' + contenido.length + ' caracteres)';
+                    showNotif('📎 Archivo cargado: ' + file.name + '. Dale Guardar para aplicar.');
+                    setTimeout(function() { statusEl.textContent = ''; }, 5000);
+                };
+                reader.onerror = function() {
+                    statusEl.textContent = '❌ Error leyendo archivo';
+                    showNotif('Error al leer el archivo', true);
+                };
+                reader.readAsText(file);
+            }
+            input.value = '';
+        }
+
+        function extraerTextoPDF(typedarray, filename, statusEl) {
+            pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                var totalPages = pdf.numPages;
+                var textoCompleto = '';
+                var pagesProcessed = 0;
+                statusEl.textContent = '📄 Extrayendo texto de ' + totalPages + ' páginas...';
+
+                for (var i = 1; i <= totalPages; i++) {
+                    pdf.getPage(i).then(function(page) {
+                        page.getTextContent().then(function(textContent) {
+                            var pageText = textContent.items.map(function(item) { return item.str; }).join(' ');
+                            textoCompleto += pageText + '\n';
+                            pagesProcessed++;
+
+                            if (pagesProcessed === totalPages) {
+                                var doc = document.getElementById('ai-sales-doc');
+                                var existing = doc.value.trim();
+                                doc.value = existing ? existing + '\n\n--- ' + filename + ' ---\n' + textoCompleto : textoCompleto;
+                                statusEl.textContent = '✅ ' + filename + ' cargado (' + textoCompleto.length + ' chars, ' + totalPages + ' páginas)';
+                                showNotif('📎 PDF cargado: ' + filename + '. Dale Guardar para aplicar.');
+                                setTimeout(function() { statusEl.textContent = ''; }, 5000);
+                            }
+                        });
+                    });
+                }
+            }).catch(function(err) {
+                statusEl.textContent = '❌ Error leyendo PDF';
+                showNotif('Error al leer PDF: ' + err.message, true);
+            });
         }
 
         function guardarAIConfig() {
