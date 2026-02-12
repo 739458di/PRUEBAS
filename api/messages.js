@@ -91,6 +91,7 @@ module.exports = async function handler(req, res) {
                 timestamp: row.timestamp,
                 mensaje_id: row.mensaje_id,
                 leido: row.leido,
+                ai_generated: row.ai_generated || 0,
                 created_at: row.created_at
             };
         });

@@ -5,6 +5,7 @@
 
 const { createClient } = require('@libsql/client');
 const { analizarMensaje } = require('./analyze.js');
+const { generarRespuestaAI, getAIConfig, initAITables } = require('./ai-sales.js');
 
 const client = createClient({
     url: 'libsql://crm-fyradrive-739458di.aws-us-west-2.turso.io',
@@ -134,10 +135,11 @@ function cleanPhone(tel) {
 }
 
 // ===== ENVIAR MENSAJE =====
-async function sendMessage(to, text) {
+async function sendMessage(to, text, aiGenerated) {
     try {
         var cleanTo = cleanPhone(to);
-        console.log('[FYRA-BOT] Enviando mensaje a:', cleanTo, '| Texto:', text.substring(0, 50) + '...');
+        var isAI = aiGenerated ? 1 : 0;
+        console.log('[FYRA-BOT] Enviando mensaje a:', cleanTo, '| AI:', isAI, '| Texto:', text.substring(0, 50) + '...');
 
         var response = await fetch(WA_API_URL, {
             method: 'POST',
@@ -160,18 +162,17 @@ async function sendMessage(to, text) {
         // SOLO guardar si Meta realmente envió el mensaje
         if (response.ok && data.messages && data.messages.length > 0) {
             await client.execute({
-                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-                args: [cleanTo, cleanTo, 'FYRADRIVE', text, 'text', 'out', Math.floor(Date.now() / 1000), data.messages[0].id, Date.now()]
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+                args: [cleanTo, cleanTo, 'FYRADRIVE', text, 'text', 'out', Math.floor(Date.now() / 1000), data.messages[0].id, isAI, Date.now()]
             });
-            console.log('[FYRA-BOT] Mensaje enviado y guardado OK:', data.messages[0].id);
+            console.log('[FYRA-BOT] Mensaje enviado y guardado OK:', data.messages[0].id, isAI ? '(IA)' : '(BOT)');
             return data;
         } else {
             // Meta falló - guardar error para debug pero NO como mensaje enviado
             console.error('[FYRA-BOT] ERROR Meta API:', response.status, JSON.stringify(data));
-            // Guardar como mensaje fallido para que aparezca en el CRM con indicación de error
             await client.execute({
-                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-                args: [cleanTo, cleanTo, 'FYRADRIVE', '❌ FALLÓ ENVÍO: ' + text, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), Date.now()]
+                sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+                args: [cleanTo, cleanTo, 'FYRADRIVE', '❌ FALLÓ ENVÍO: ' + text, 'text', 'out', Math.floor(Date.now() / 1000), 'ERROR-' + Date.now(), isAI, Date.now()]
             });
             return null;
         }
@@ -257,7 +258,54 @@ async function procesarMensaje(telefono, nombre, texto) {
             return;
         }
 
-        // Si no es cotización, saludo genérico
+        // ===== CHATBOT IA: Respuesta inteligente =====
+        try {
+            var config = await getAIConfig();
+            if (config && config.ai_enabled) {
+                // Primero analizar emocionalmente
+                var analisis = null;
+                try {
+                    analisis = await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre);
+                } catch(ae) {
+                    console.error('[FYRA-AI] Error análisis previo:', ae.message);
+                }
+
+                // Generar respuesta IA
+                var aiResult = await generarRespuestaAI(telefono, texto, nombre, analisis);
+
+                if (aiResult && aiResult.trigger_cotizacion) {
+                    // IA detectó que quiere cotizar → activar flujo de cotización
+                    console.log('[FYRA-AI] Trigger cotización detectado por IA');
+                    await setConversation(telefono, {
+                        estado: 'ofreciendo_cotizacion',
+                        nombre: nombre,
+                        dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '',
+                        paso: ''
+                    });
+                    await sendMessage(telefono,
+                        '🚗 *FYRADRIVE - Cotizador de Crédito Automotriz*\n\n' +
+                        'Con gusto te cotizamos tu crédito! 📊\n\n' +
+                        'Manejamos financiamiento bancario con:\n' +
+                        '✅ Tasa competitiva\n' +
+                        '✅ Plazos de 24 a 60 meses\n' +
+                        '✅ Enganche desde 25%\n\n' +
+                        '¿Te gustaría que te hagamos una cotización personalizada? 🤔\n\n' +
+                        '_Responde *SI* para continuar_'
+                    );
+                    return;
+                }
+
+                if (aiResult && aiResult.respuesta) {
+                    await setConversation(telefono, { estado: 'idle', nombre: nombre });
+                    await sendMessage(telefono, aiResult.respuesta, true);
+                    return;
+                }
+            }
+        } catch(aiErr) {
+            console.error('[FYRA-AI] Error chatbot IA:', aiErr.message);
+        }
+
+        // FALLBACK: Si IA está desactivada o falló, saludo genérico
         await setConversation(telefono, { estado: 'idle', nombre: nombre });
         await sendMessage(telefono,
             '¡Hola' + (nombre ? ' ' + nombre.split(' ')[0] : '') + '! 👋\n\n' +
@@ -467,8 +515,25 @@ async function procesarMensaje(telefono, nombre, texto) {
             return;
         }
 
-        // Cualquier otra cosa, reset
+        // Cualquier otra cosa → IA maneja post-cotización (objeciones, dudas, etc.)
         await setConversation(telefono, { estado: 'idle', nombre: conv ? conv.nombre : nombre });
+        try {
+            var configPost = await getAIConfig();
+            if (configPost && configPost.ai_enabled) {
+                var analisisPost = null;
+                try {
+                    analisisPost = await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre + ' | Acaba de recibir cotización');
+                } catch(aePost) {}
+                var aiPost = await generarRespuestaAI(telefono, texto, nombre, analisisPost);
+                if (aiPost && aiPost.respuesta) {
+                    await sendMessage(telefono, aiPost.respuesta, true);
+                    return;
+                }
+            }
+        } catch(aiPostErr) {
+            console.error('[FYRA-AI] Error post-cotización:', aiPostErr.message);
+        }
+        // Fallback
         await sendMessage(telefono,
             '¡Gracias por tu interés! 😊\n\n' +
             'Si necesitas otra cotización, escribe *"cotización"*\n' +
@@ -550,15 +615,14 @@ module.exports = async function handler(req, res) {
                                     mensaje_id: msg.id || ''
                                 });
 
-                                // Procesar con chatbot (solo texto) + análisis emocional
+                                // Procesar con chatbot (solo texto)
+                                // Nota: El análisis emocional ahora se hace DENTRO de procesarMensaje
+                                // para el path de IA (para pasar el análisis como contexto al AI).
+                                // Para el path de cotización (reglas), analizamos después.
                                 if (msg.type === 'text' && texto) {
+                                    // Inicializar tablas de IA
+                                    try { await initAITables(); } catch(e) {}
                                     await procesarMensaje(telefono, nombre, texto);
-                                    // Análisis emocional con await para que Vercel no mate el proceso
-                                    try {
-                                        await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre);
-                                    } catch(analyzeErr) {
-                                        console.error('[FYRA-BOT] Error análisis emocional:', analyzeErr.message);
-                                    }
                                 }
                             }
                         }

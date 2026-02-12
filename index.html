@@ -1539,6 +1539,35 @@
                     <em style="color:var(--gray);">Haz clic en "🧠 Generar Licuadora Semanal" para generar tu reporte</em>
                 </div>
             </div>
+
+            <!-- CHATBOT IA CONFIG -->
+            <div style="background:linear-gradient(135deg,#06b6d411,#8b5cf611);border-radius:12px;padding:20px;border:2px solid var(--cyan);margin-bottom:24px;">
+                <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">🤖 Chatbot IA de Ventas</h3>
+                <p style="font-size:12px;color:var(--gray);margin-bottom:16px;">La IA responde mensajes de WhatsApp como Seb: empático, directo, siempre buscando solución. Aprende de tus mensajes reales.</p>
+
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                    <label style="font-weight:700;font-size:13px;">Estado:</label>
+                    <button id="ai-toggle-btn" onclick="toggleAI()" style="padding:6px 16px;border-radius:8px;border:none;font-weight:700;cursor:pointer;font-size:13px;">
+                        ⏳ Cargando...
+                    </button>
+                </div>
+
+                <div>
+                    <label style="font-weight:700;font-size:13px;display:block;margin-bottom:6px;">
+                        📝 Documento de Ventas de Sebastian
+                    </label>
+                    <p style="font-size:11px;color:var(--gray);margin-bottom:8px;">
+                        Escribe tus técnicas de venta, frases que funcionan, cómo manejas objeciones, tu filosofía. La IA usa esto como referencia para responder como tú.
+                    </p>
+                    <textarea id="ai-sales-doc" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;" placeholder="Ejemplo: Siempre empiezo preguntando qué tipo de auto buscan y para qué lo necesitan. Cuando dicen que es muy caro, les pregunto cuánto traen de enganche y les muestro que con facilidades queda accesible..."></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                        <button onclick="guardarAIConfig()" style="padding:8px 18px;background:var(--cyan);color:white;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
+                            💾 Guardar Documento
+                        </button>
+                        <span id="ai-config-status" style="font-size:12px;color:var(--gray);"></span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -3779,14 +3808,16 @@
                 var html = '';
                 msgs.forEach(function(m) {
                     var isOut = m.direccion === 'out';
+                    var isAI = m.ai_generated === 1 || m.ai_generated === '1';
                     var time = new Date(m.timestamp * 1000);
                     var timeStr = time.getHours() + ':' + (time.getMinutes() < 10 ? '0' : '') + time.getMinutes();
                     var align = isOut ? 'flex-end' : 'flex-start';
-                    var bg = isOut ? '#dcf8c6' : '#fff';
-                    var label = isOut ? 'FYRADRIVE' : (m.nombre || m.telefono);
+                    var bg = isOut ? (isAI ? '#e0f2fe' : '#dcf8c6') : '#fff';
+                    var label = isOut ? (isAI ? '🤖 FYRA-IA' : 'FYRADRIVE') : (m.nombre || m.telefono);
+                    var labelColor = isOut ? (isAI ? '#0369a1' : '#128c7e') : '#e74c3c';
 
                     html += '<div style="align-self:' + align + ';max-width:80%;background:' + bg + ';padding:6px 10px;border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,0.1);">';
-                    html += '<div style="font-size:10px;color:' + (isOut ? '#128c7e' : '#e74c3c') + ';font-weight:bold;margin-bottom:2px;">' + label + '</div>';
+                    html += '<div style="font-size:10px;color:' + labelColor + ';font-weight:bold;margin-bottom:2px;">' + label + '</div>';
                     html += '<div style="font-size:13px;word-break:break-word;">' + m.mensaje + '</div>';
                     html += '<div style="font-size:9px;color:#999;text-align:right;margin-top:2px;">' + timeStr + '</div>';
                     html += '</div>';
@@ -3968,6 +3999,7 @@
         function startBMPolling() {
             if (bmPollingInterval) clearInterval(bmPollingInterval);
             cargarBolaMagica();
+            cargarAIConfig();
             bmPollingInterval = setInterval(cargarBolaMagica, 5000);
         }
 
@@ -3976,6 +4008,72 @@
                 clearInterval(bmPollingInterval);
                 bmPollingInterval = null;
             }
+        }
+
+        // ===== AI CONFIG FUNCTIONS =====
+        function cargarAIConfig() {
+            fetch('/api/ai-config', { headers: { 'x-api-key': 'fyradrive2026' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.config) {
+                    var doc = document.getElementById('ai-sales-doc');
+                    if (doc) doc.value = data.config.sales_document || '';
+                    var btn = document.getElementById('ai-toggle-btn');
+                    if (btn) {
+                        var enabled = data.config.ai_enabled;
+                        btn.textContent = enabled ? '● ACTIVO' : '○ DESACTIVADO';
+                        btn.style.background = enabled ? '#d4edda' : '#f8d7da';
+                        btn.style.color = enabled ? '#155724' : '#721c24';
+                    }
+                }
+            })
+            .catch(function(err) {
+                console.error('Error cargando AI config:', err);
+            });
+        }
+
+        function toggleAI() {
+            var btn = document.getElementById('ai-toggle-btn');
+            var currentlyActive = btn.textContent.includes('ACTIVO');
+            var newState = currentlyActive ? 0 : 1;
+            btn.textContent = '⏳...';
+            fetch('/api/ai-config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
+                body: JSON.stringify({ ai_enabled: newState })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    btn.textContent = newState ? '● ACTIVO' : '○ DESACTIVADO';
+                    btn.style.background = newState ? '#d4edda' : '#f8d7da';
+                    btn.style.color = newState ? '#155724' : '#721c24';
+                    showNotif(newState ? '🤖 IA activada' : '🤖 IA desactivada');
+                }
+            })
+            .catch(function() { btn.textContent = '⚠️ Error'; });
+        }
+
+        function guardarAIConfig() {
+            var doc = document.getElementById('ai-sales-doc').value;
+            var statusEl = document.getElementById('ai-config-status');
+            statusEl.textContent = '⏳ Guardando...';
+            fetch('/api/ai-config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
+                body: JSON.stringify({ sales_document: doc })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    statusEl.textContent = '✅ Guardado';
+                    showNotif('📝 Documento de ventas guardado');
+                    setTimeout(function() { statusEl.textContent = ''; }, 3000);
+                } else {
+                    statusEl.textContent = '❌ Error';
+                }
+            })
+            .catch(function() { statusEl.textContent = '❌ Error de conexión'; });
         }
 
         function cargarBolaMagica() {
