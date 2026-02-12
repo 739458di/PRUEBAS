@@ -368,19 +368,15 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         });
 
         if (esCotizacion) {
+            // Saltar directo a pedir precio — no hacer perder tiempo al cliente
             await setConversation(telefono, {
-                estado: 'ofreciendo_cotizacion', nombre: nombre,
-                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: ''
+                estado: 'pidiendo_precio', nombre: nombre,
+                dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: 'precio'
             });
             await sendMessage(telefono,
-                '🚗 *FYRADRIVE - Cotizador de Crédito Automotriz*\n\n' +
-                'Con gusto te cotizamos tu crédito! 📊\n\n' +
-                'Manejamos financiamiento bancario con:\n' +
-                '✅ Tasa competitiva\n' +
-                '✅ Plazos de 24 a 60 meses\n' +
-                '✅ Enganche desde 25%\n\n' +
-                '¿Te gustaría que te hagamos una cotización personalizada? 🤔\n\n' +
-                '_Responde *SI* para continuar_',
+                'Va! Te armo la cotizacion 📊\n\n' +
+                'Cual es el precio del vehiculo?\n\n' +
+                'Ej: 350000 o 350k',
                 false, platform
             );
             return;
@@ -401,18 +397,13 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
                 if (aiResult && aiResult.trigger_cotizacion) {
                     console.log('[FYRA-AI] Trigger cotización detectado por IA');
                     await setConversation(telefono, {
-                        estado: 'ofreciendo_cotizacion', nombre: nombre,
-                        dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: ''
+                        estado: 'pidiendo_precio', nombre: nombre,
+                        dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: 'precio'
                     });
                     await sendMessage(telefono,
-                        '🚗 *FYRADRIVE - Cotizador de Crédito Automotriz*\n\n' +
-                        'Con gusto te cotizamos tu crédito! 📊\n\n' +
-                        'Manejamos financiamiento bancario con:\n' +
-                        '✅ Tasa competitiva\n' +
-                        '✅ Plazos de 24 a 60 meses\n' +
-                        '✅ Enganche desde 25%\n\n' +
-                        '¿Te gustaría que te hagamos una cotización personalizada? 🤔\n\n' +
-                        '_Responde *SI* para continuar_',
+                        'Va! Te armo la cotizacion 📊\n\n' +
+                        'Cual es el precio del vehiculo?\n\n' +
+                        'Ej: 350000 o 350k',
                         false, platform
                     );
                     return;
@@ -428,15 +419,14 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
             console.error('[FYRA-AI] Error chatbot IA:', aiErr.message);
         }
 
-        // FALLBACK
+        // FALLBACK — Vendedor Estrella
         await setConversation(telefono, { estado: 'idle', nombre: nombre });
+        var primerNombre = nombre ? nombre.split(' ')[0] : '';
+        var saludo = primerNombre ? 'Que tal ' + primerNombre + '!' : 'Que tal!';
         await sendMessage(telefono,
-            '¡Hola' + (nombre ? ' ' + nombre.split(' ')[0] : '') + '! 👋\n\n' +
-            'Bienvenido a *FYRADRIVE* 🚗\n' +
-            'Somos especialistas en compra y venta de autos.\n\n' +
-            '¿En qué te podemos ayudar?\n\n' +
-            '📊 Escribe *"cotización"* para cotizar un crédito automotriz\n' +
-            '📞 O un asesor se comunicará contigo pronto',
+            saludo + ' Soy Seb de Fyradrive 🚗\n\n' +
+            'Te interesa comprar, vender, o cotizar un credito?\n\n' +
+            'Dime en que te ayudo y lo resolvemos',
             false, platform
         );
         return;
@@ -453,9 +443,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
                 dato_precio: 0, dato_enganche: 0, dato_plazo: 0, dato_vehiculo: '', paso: 'precio'
             });
             await sendMessage(telefono,
-                '¡Perfecto! Vamos a armar tu cotización 📋\n\n' +
-                '*Paso 1 de 3:* 💰 ¿Cuál es el *precio del vehículo*?\n\n' +
-                '_Ejemplo: 350000 o 350k_',
+                'Va! Cual es el precio del vehiculo?\n\nEj: 350000 o 350k',
                 false, platform
             );
             return;
@@ -464,13 +452,13 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         if (esNo) {
             await setConversation(telefono, { estado: 'idle', nombre: nombre || (conv ? conv.nombre : '') });
             await sendMessage(telefono,
-                'Sin problema! 👍\n\nCuando quieras cotizar, solo escribe *"cotización"* y con gusto te ayudamos.\n\n¡Estamos para servirte! 🚗',
+                'Sin problema 👍 Cuando quieras cotizar solo dime. Aqui estoy.',
                 false, platform
             );
             return;
         }
 
-        await sendMessage(telefono, '¿Te gustaría que te hagamos la cotización? Responde *SI* o *NO* 🤔', false, platform);
+        await sendMessage(telefono, 'Te armo la cotizacion? Solo dime si o no', false, platform);
         return;
     }
 
@@ -480,11 +468,11 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         if (precio > 0 && precio < 1000) precio = precio * 1000;
 
         if (precio < 50000) {
-            await sendMessage(telefono, 'Hmm, ese precio parece muy bajo 🤔\n\n¿Cuál es el *precio del vehículo*? (ej: 350000)', false, platform);
+            await sendMessage(telefono, 'Ese precio esta muy bajo. Cual es el precio del vehiculo? Ej: 350000', false, platform);
             return;
         }
         if (precio > 5000000) {
-            await sendMessage(telefono, 'Ese precio parece muy alto 🤔\n\n¿Cuál es el *precio del vehículo*? (ej: 350000)', false, platform);
+            await sendMessage(telefono, 'Ese precio es muy alto para el rango que manejamos. Cual seria el precio correcto?', false, platform);
             return;
         }
 
@@ -493,10 +481,10 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
             dato_precio: precio, dato_vehiculo: conv ? conv.dato_vehiculo : '', paso: 'enganche'
         });
         await sendMessage(telefono,
-            '✅ Precio: *' + formatMoney(precio) + '*\n\n' +
-            '*Paso 2 de 3:* 💵 ¿Cuánto darías de *enganche*?\n\n' +
-            'Mínimo el 25% = ' + formatMoney(precio * 0.25) + '\n\n' +
-            '_Ejemplo: ' + Math.round(precio * 0.30 / 1000) + '000 o ' + Math.round(precio * 0.30 / 1000) + 'k_',
+            'Listo, ' + formatMoney(precio) + ' ✅\n\n' +
+            'Cuanto darias de enganche?\n' +
+            'Minimo 25% = ' + formatMoney(precio * 0.25) + '\n\n' +
+            'Ej: ' + Math.round(precio * 0.30 / 1000) + '000 o ' + Math.round(precio * 0.30 / 1000) + 'k',
             false, platform
         );
         return;
@@ -516,14 +504,13 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         var minEnganche = precioActual * 0.25;
         if (enganche < minEnganche) {
             await sendMessage(telefono,
-                '⚠️ El enganche mínimo es *25%* del precio = *' + formatMoney(minEnganche) + '*\n\n' +
-                '¿Cuánto darías de enganche?\n_Puedes escribir el monto o el porcentaje (ej: 30%)_',
+                'El minimo de enganche es 25% = ' + formatMoney(minEnganche) + '\n\nCuanto podrias dar? Puedes poner monto o porcentaje (ej: 30%)',
                 false, platform
             );
             return;
         }
         if (enganche >= precioActual) {
-            await sendMessage(telefono, '⚠️ El enganche no puede ser mayor al precio 🤔\n\n¿Cuánto darías de *enganche*?', false, platform);
+            await sendMessage(telefono, 'El enganche no puede ser mayor al precio. Cuanto darias de enganche?', false, platform);
             return;
         }
 
@@ -533,10 +520,9 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
             dato_vehiculo: conv ? conv.dato_vehiculo : '', paso: 'plazo'
         });
         await sendMessage(telefono,
-            '✅ Enganche: *' + formatMoney(enganche) + '* (' + Math.round(enganche / precioActual * 100) + '%)\n\n' +
-            '*Paso 3 de 3:* 📅 ¿A cuántos *meses* te gustaría pagarlo?\n\n' +
-            '• 24 meses (2 años)\n• 36 meses (3 años)\n• 48 meses (4 años)\n• 60 meses (5 años)\n\n' +
-            '_Escribe el número de meses_',
+            'Enganche: ' + formatMoney(enganche) + ' (' + Math.round(enganche / precioActual * 100) + '%) ✅\n\n' +
+            'Ultimo paso! A cuantos meses?\n\n' +
+            '24 | 36 | 48 | 60 meses',
             false, platform
         );
         return;
@@ -546,7 +532,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     if (estado === 'pidiendo_plazo') {
         var plazo = extraerPlazo(textoLower);
         if (plazo < 12 || plazo > 72) {
-            await sendMessage(telefono, '⚠️ El plazo debe ser entre *12 y 60 meses*\n\n¿A cuántos meses? (24, 36, 48 o 60)', false, platform);
+            await sendMessage(telefono, 'El plazo va de 12 a 60 meses. Cual prefieres? 24, 36, 48 o 60', false, platform);
             return;
         }
 
@@ -561,29 +547,19 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         });
 
         await sendMessage(telefono,
-            '🎉 *¡Tu Cotización FYRADRIVE está lista!*\n\n' +
-            '━━━━━━━━━━━━━━━━━━━\n' +
-            '📊 *COTIZACIÓN DE CRÉDITO*\n' +
-            '━━━━━━━━━━━━━━━━━━━\n\n' +
-            '🚗 *Precio del vehículo:* ' + formatMoney(cot.precio) + '\n' +
-            '💵 *Enganche:* ' + formatMoney(cot.enganche) + ' (' + Math.round(cot.enganche / cot.precio * 100) + '%)\n' +
-            '🏦 *Financiamiento:* ' + formatMoney(cot.financiamiento) + '\n' +
-            '📋 *IVA:* ' + formatMoney(cot.iva) + '\n' +
-            '💰 *Monto a financiar:* ' + formatMoney(cot.montoFinanciar) + '\n\n' +
-            '━━━━━━━━━━━━━━━━━━━\n' +
-            '📅 *Plazo:* ' + cot.plazo + ' meses\n' +
-            '💳 *MENSUALIDAD:* *' + formatMoney(cot.mensualidad) + '*\n' +
-            '━━━━━━━━━━━━━━━━━━━\n\n' +
-            '📌 *Desembolso inicial:*\n' +
-            '   Enganche: ' + formatMoney(cot.enganche) + '\n' +
-            '   Comisión apertura: ' + formatMoney(cot.comision) + '\n' +
-            '   *Total desembolso: ' + formatMoney(cot.desembolso) + '*\n\n' +
-            '━━━━━━━━━━━━━━━━━━━\n' +
-            '_Tasa anual: 15.99% | Incluye seguro de vida_\n' +
-            '_Cotización sujeta a aprobación crediticia_\n\n' +
-            '¿Te gustaría agendar una cita para ver el vehículo? 🤝\n' +
-            'Escribe *"SI"* y un asesor te contactará\n\n' +
-            '¿Quieres cotizar con otros montos? Escribe *"cotización"*',
+            '🚗 COTIZACION FYRADRIVE\n\n' +
+            'Precio: ' + formatMoney(cot.precio) + '\n' +
+            'Enganche: ' + formatMoney(cot.enganche) + ' (' + Math.round(cot.enganche / cot.precio * 100) + '%)\n' +
+            'Financiamiento: ' + formatMoney(cot.financiamiento) + '\n' +
+            'Plazo: ' + cot.plazo + ' meses\n\n' +
+            '💳 Mensualidad: ' + formatMoney(cot.mensualidad) + '\n\n' +
+            'Desembolso inicial:\n' +
+            '  Enganche: ' + formatMoney(cot.enganche) + '\n' +
+            '  Comision apertura: ' + formatMoney(cot.comision) + '\n' +
+            '  Total: ' + formatMoney(cot.desembolso) + '\n\n' +
+            'Tasa 15.99% anual | Incluye seguro de vida\n' +
+            'Sujeto a aprobacion crediticia\n\n' +
+            'Te agendo cita para verlo? O quieres cotizar con otros montos?',
             false, platform
         );
         return;
@@ -600,7 +576,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
                 dato_precio: 0, dato_enganche: 0, dato_plazo: 0, paso: 'precio'
             });
             await sendMessage(telefono,
-                '📋 ¡Vamos con otra cotización!\n\n*Paso 1 de 3:* 💰 ¿Cuál es el *precio del vehículo*?\n\n_Ejemplo: 350000 o 350k_',
+                'Va! Otra cotizacion. Cual es el precio del vehiculo?',
                 false, platform
             );
             return;
@@ -609,7 +585,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         if (esSi2) {
             await setConversation(telefono, { estado: 'idle', nombre: conv ? conv.nombre : nombre });
             await sendMessage(telefono,
-                '🤝 *¡Excelente!*\n\nUn asesor de FYRADRIVE se pondrá en contacto contigo muy pronto para agendar tu cita.\n\n📞 También puedes llamarnos directamente.\n\n¡Gracias por tu interés! 🚗✨',
+                'Excelente! 🤝 Yo me encargo de agendarte. Te contacto en breve para coordinar dia y hora.',
                 false, platform
             );
             return;
@@ -634,7 +610,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
             console.error('[FYRA-AI] Error post-cotización:', aiPostErr.message);
         }
         await sendMessage(telefono,
-            '¡Gracias por tu interés! 😊\n\nSi necesitas otra cotización, escribe *"cotización"*\nUn asesor te contactará pronto 📞',
+            'Cualquier duda aqui estoy. Si quieres otra cotizacion solo dime 👍',
             false, platform
         );
         return;
@@ -643,7 +619,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     // ---- ESTADO NO RECONOCIDO ----
     await setConversation(telefono, { estado: 'idle', nombre: nombre });
     await sendMessage(telefono,
-        '¡Hola! 👋 Bienvenido a *FYRADRIVE* 🚗\n\nEscribe *"cotización"* para cotizar un crédito automotriz 📊',
+        'Que tal! Soy Seb de Fyradrive 🚗 En que te ayudo?',
         false, platform
     );
 }
