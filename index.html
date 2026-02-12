@@ -3965,7 +3965,7 @@
         // ==========================================
         function cargarBolaMagica() {
             var periodo = document.getElementById('bm-periodo').value;
-            fetch(API_BASE + '/api/bola-magica?periodo=' + periodo, {
+            fetch('/api/bola-magica?periodo=' + periodo, {
                 headers: { 'x-api-key': 'fyradrive2026' }
             })
             .then(function(r) { return r.json(); })
@@ -4075,7 +4075,7 @@
             var tipo = document.getElementById('intuicion-tipo').value;
             var telefono = document.getElementById('intuicion-telefono').value.trim();
 
-            fetch(API_BASE + '/api/intuiciones', {
+            fetch('/api/intuiciones', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
                 body: JSON.stringify({ texto: texto, tipo: tipo, telefono: telefono })
@@ -4100,7 +4100,7 @@
             btn.textContent = '⏳ Generando reporte...';
             document.getElementById('bm-licuadora').innerHTML = '<em style="color:var(--gray);">La IA está analizando todos los datos de la semana... Esto toma 15-30 segundos.</em>';
 
-            fetch(API_BASE + '/api/bola-magica', {
+            fetch('/api/bola-magica', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' }
             })
