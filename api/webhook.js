@@ -345,16 +345,15 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     platform = platform || 'whatsapp';
     telefono = cleanPhone(telefono);
 
-    // Messenger: solo registrar + analizar (Bola Mágica), NO responder
+    // Messenger: analizar para Bola Mágica + responder como Vendedor Estrella
     if (platform === 'messenger') {
-        console.log('[FYRA-BOT] Messenger modo escucha — solo registro y análisis para', telefono);
+        console.log('[FYRA-BOT] Messenger activo — Vendedor Estrella para', telefono);
         try {
             await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre, 'messenger');
         } catch(ae) {
             console.error('[FYRA-BOT] Error análisis Messenger:', ae.message);
         }
-        await setConversation(telefono, { estado: 'idle', nombre: nombre });
-        return;
+        // Continuar al flujo normal (ya no return)
     }
 
     var conv = await getConversation(telefono);
