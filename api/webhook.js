@@ -345,15 +345,13 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     platform = platform || 'whatsapp';
     telefono = cleanPhone(telefono);
 
-    // Messenger: analizar para Bola Mágica + responder como Vendedor Estrella
+    // Messenger: análisis en background + responder como Vendedor Estrella
     if (platform === 'messenger') {
         console.log('[FYRA-BOT] Messenger activo — Vendedor Estrella para', telefono);
-        try {
-            await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre, 'messenger');
-        } catch(ae) {
+        // Fire-and-forget: no esperar análisis
+        analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre, 'messenger').catch(function(ae) {
             console.error('[FYRA-BOT] Error análisis Messenger:', ae.message);
-        }
-        // Continuar al flujo normal (ya no return)
+        });
     }
 
     var conv = await getConversation(telefono);
@@ -385,13 +383,12 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         try {
             var config = await getAIConfig();
             if (config && config.ai_enabled) {
-                var analisis = null;
-                try {
-                    analisis = await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre);
-                } catch(ae) {
-                    console.error('[FYRA-AI] Error análisis previo:', ae.message);
-                }
-                var aiResult = await generarRespuestaAI(telefono, texto, nombre, analisis);
+                // Fire-and-forget: análisis emocional en background (no bloquea respuesta)
+                analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre).catch(function(ae) {
+                    console.error('[FYRA-AI] Error análisis background:', ae.message);
+                });
+                // Generar respuesta IA sin esperar análisis (más rápido)
+                var aiResult = await generarRespuestaAI(telefono, texto, nombre, null);
 
                 if (aiResult && aiResult.trigger_cotizacion) {
                     console.log('[FYRA-AI] Trigger cotización detectado por IA');

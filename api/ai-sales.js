@@ -357,7 +357,6 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
     var startTime = Date.now();
 
     try {
-        await initAITables();
         var config = await getAIConfig();
 
         if (!config.ai_enabled) {
@@ -370,11 +369,13 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
             return null;
         }
 
-        // 1. Traer historial de conversacion
-        var history = await getConversationHistory(telefono, config.max_history_messages || 20);
-
-        // 2. Traer muestras de estilo
-        var styleSamples = await getStyleSamples(telefono, config.style_sample_count || 15);
+        // 1+2. Traer historial y estilos EN PARALELO (más rápido)
+        var results = await Promise.all([
+            getConversationHistory(telefono, config.max_history_messages || 10),
+            getStyleSamples(telefono, config.style_sample_count || 8)
+        ]);
+        var history = results[0];
+        var styleSamples = results[1];
 
         // 3. Construir system prompt completo
         var systemPrompt = SYSTEM_PROMPT_BASE;
@@ -439,7 +440,7 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
             },
             body: JSON.stringify({
                 model: 'claude-haiku-4-5-20251001',
-                max_tokens: 400,
+                max_tokens: 250,
                 system: systemPrompt,
                 messages: [{ role: 'user', content: userPrompt }]
             })
