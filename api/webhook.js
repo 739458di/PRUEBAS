@@ -4,6 +4,7 @@
 // POST /api/webhook = mensaje entrante + respuesta automática
 
 const { createClient } = require('@libsql/client');
+const { analizarMensaje } = require('./analyze.js');
 
 const client = createClient({
     url: 'libsql://crm-fyradrive-739458di.aws-us-west-2.turso.io',
@@ -549,9 +550,14 @@ module.exports = async function handler(req, res) {
                                     mensaje_id: msg.id || ''
                                 });
 
-                                // Procesar con chatbot (solo texto)
+                                // Procesar con chatbot (solo texto) + análisis emocional en paralelo
                                 if (msg.type === 'text' && texto) {
+                                    // Chatbot responde inmediato, análisis corre en background
                                     await procesarMensaje(telefono, nombre, texto);
+                                    // Análisis emocional (no bloquea la respuesta)
+                                    analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre).catch(function(err) {
+                                        console.error('[FYRA-BOT] Error análisis emocional:', err.message);
+                                    });
                                 }
                             }
                         }

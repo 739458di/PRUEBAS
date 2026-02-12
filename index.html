@@ -1048,6 +1048,7 @@
             <a id="nav-cotizador" onclick="switchCRMTab('cotizador')">COTIZADOR</a>
             <a id="nav-proyectos" onclick="switchCRMTab('proyectos')">PROYECTOS</a>
             <a id="nav-calendario" onclick="switchCRMTab('calendario')">CALENDARIO</a>
+            <a id="nav-bolamagica" onclick="switchCRMTab('bolamagica')" style="color:var(--purple);">🔮 BOLA MÁGICA</a>
         </div>
         <div class="user-badge" id="user-badge" onclick="toggleUser()">
             <span id="user-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
@@ -1108,6 +1109,9 @@
         </button>
         <button class="tab-btn" id="tab-btn-calendario" onclick="switchCRMTab('calendario')">
             Calendario
+        </button>
+        <button class="tab-btn" id="tab-btn-bolamagica" onclick="switchCRMTab('bolamagica')" style="font-weight:800;">
+            🔮 Bola Mágica
         </button>
     </div>
 
@@ -1415,6 +1419,126 @@
                 <button class="btn-new" style="background:var(--purple);" onclick="openProyectoModal()">+ Nuevo Proyecto</button>
             </div>
             <div class="proy-grid" id="proy-grid"></div>
+        </div>
+    </div>
+
+    <!-- ======================== -->
+    <!-- 🔮 BOLA MÁGICA TAB       -->
+    <!-- ======================== -->
+    <div id="tab-bolamagica" style="display:none;">
+        <div style="max-width:1200px;margin:0 auto;padding:20px 32px;">
+            <!-- HEADER -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+                <div>
+                    <h2 style="font-size:28px;font-weight:900;">🔮 La Bola Mágica</h2>
+                    <p style="color:var(--gray);font-size:13px;margin-top:4px;">Cerebro estratégico — Comportamientos, emociones y patrones de tus clientes</p>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <select id="bm-periodo" onchange="cargarBolaMagica()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);font-size:13px;font-weight:600;">
+                        <option value="7">Últimos 7 días</option>
+                        <option value="14">Últimos 14 días</option>
+                        <option value="30">Últimos 30 días</option>
+                        <option value="90">Últimos 90 días</option>
+                    </select>
+                    <button onclick="generarLicuadora()" style="padding:8px 18px;background:var(--purple);color:white;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
+                        🧠 Generar Licuadora Semanal
+                    </button>
+                </div>
+            </div>
+
+            <!-- MÉTRICAS DURAS -->
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;" id="bm-metricas">
+                <div style="background:white;border-radius:12px;padding:18px;border:1px solid var(--border);">
+                    <div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;">Conversaciones</div>
+                    <div style="font-size:32px;font-weight:900;color:var(--cyan);" id="bm-total-convs">0</div>
+                    <div style="font-size:11px;color:var(--gray);">clientes únicos</div>
+                </div>
+                <div style="background:white;border-radius:12px;padding:18px;border:1px solid var(--border);">
+                    <div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;">Pidieron Cotización</div>
+                    <div style="font-size:32px;font-weight:900;color:var(--green);" id="bm-cotizaciones">0</div>
+                    <div style="font-size:11px;color:var(--gray);" id="bm-tasa-cot">0% de conversaciones</div>
+                </div>
+                <div style="background:white;border-radius:12px;padding:18px;border:1px solid var(--border);">
+                    <div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;">Completaron Cotización</div>
+                    <div style="font-size:32px;font-weight:900;color:var(--purple);" id="bm-completadas">0</div>
+                    <div style="font-size:11px;color:var(--gray);" id="bm-tasa-comp">0% de los que pidieron</div>
+                </div>
+                <div style="background:white;border-radius:12px;padding:18px;border:1px solid var(--border);">
+                    <div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;">Seriedad Promedio</div>
+                    <div style="font-size:32px;font-weight:900;" id="bm-seriedad">0</div>
+                    <div style="font-size:11px;color:var(--gray);">de 10</div>
+                </div>
+            </div>
+
+            <!-- FILA EMOCIONAL -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;">
+                <!-- EMOCIONES -->
+                <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);">
+                    <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">💛 Emociones Dominantes</h3>
+                    <div id="bm-emociones" style="font-size:13px;line-height:2;"></div>
+                </div>
+                <!-- MIEDOS -->
+                <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);">
+                    <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">😰 Miedos que Frenan</h3>
+                    <div id="bm-miedos" style="font-size:13px;line-height:2;"></div>
+                </div>
+                <!-- DESEOS -->
+                <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);">
+                    <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">🌟 Deseos Reales</h3>
+                    <div id="bm-deseos" style="font-size:13px;line-height:2;"></div>
+                </div>
+            </div>
+
+            <!-- SEÑALES + INTENCIONES -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+                <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);">
+                    <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">🚦 Señales Detectadas</h3>
+                    <div id="bm-senales" style="font-size:13px;line-height:2;"></div>
+                </div>
+                <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);">
+                    <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">🎯 Intenciones</h3>
+                    <div id="bm-intenciones" style="font-size:13px;line-height:2;"></div>
+                </div>
+            </div>
+
+            <!-- ÚLTIMOS ANÁLISIS IA -->
+            <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);margin-bottom:24px;">
+                <h3 style="font-size:14px;font-weight:800;margin-bottom:16px;">🧠 Últimos Análisis de la IA</h3>
+                <div id="bm-analisis" style="max-height:400px;overflow-y:auto;"></div>
+            </div>
+
+            <!-- BARRA DE INTUICIONES -->
+            <div style="background:linear-gradient(135deg,#7c3aed11,#ec489911);border-radius:12px;padding:20px;border:2px solid var(--purple);margin-bottom:24px;">
+                <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">✍️ Tu Barra de Intuiciones</h3>
+                <p style="font-size:12px;color:var(--gray);margin-bottom:12px;">Escribe lo que percibiste, lo que sentiste en la conversación, lo que crees que estaba viviendo el cliente. Esto alimenta la Bola Mágica.</p>
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                    <select id="intuicion-tipo" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;">
+                        <option value="general">💭 General</option>
+                        <option value="cliente">👤 Sobre un cliente</option>
+                        <option value="mercado">📊 Mercado</option>
+                        <option value="objecion">🛡️ Objeción frecuente</option>
+                        <option value="cierre">🎯 Insight de cierre</option>
+                        <option value="producto">💡 Idea de producto</option>
+                    </select>
+                    <input id="intuicion-telefono" type="text" placeholder="Tel. del cliente (opcional)" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;width:160px;">
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <textarea id="intuicion-texto" placeholder="Escribe tu intuición, observación o feeling..." style="flex:1;padding:12px;border-radius:8px;border:1px solid var(--border);font-size:13px;min-height:60px;resize:vertical;font-family:Inter,sans-serif;"></textarea>
+                    <button onclick="guardarIntuicion()" style="padding:12px 20px;background:var(--purple);color:white;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;align-self:flex-end;">
+                        Guardar 💾
+                    </button>
+                </div>
+                <div id="intuiciones-lista" style="margin-top:16px;"></div>
+            </div>
+
+            <!-- LICUADORA SEMANAL -->
+            <div style="background:white;border-radius:12px;padding:20px;border:1px solid var(--border);">
+                <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">🧃 Licuadora Semanal</h3>
+                <p style="font-size:12px;color:var(--gray);margin-bottom:16px;">Reporte generado por la IA mezclando datos reales + tus intuiciones</p>
+                <div id="bm-licuadora" style="font-size:14px;line-height:1.8;white-space:pre-wrap;color:#374151;">
+                    <em style="color:var(--gray);">Haz clic en "🧠 Generar Licuadora Semanal" para generar tu reporte</em>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1930,7 +2054,7 @@
         // TABS
         // ==========================================
         function switchCRMTab(tab) {
-            var tabs = ['vendedores','compradores','cotizador','proyectos','calendario'];
+            var tabs = ['vendedores','compradores','cotizador','proyectos','calendario','bolamagica'];
             tabs.forEach(function(t) {
                 var btn = document.getElementById('tab-btn-' + t);
                 var nav = document.getElementById('nav-' + t);
@@ -1947,6 +2071,7 @@
 
             if (tab === 'proyectos') renderProyectos();
             if (tab === 'calendario') renderCalendar();
+            if (tab === 'bolamagica') cargarBolaMagica();
         }
 
         // ==========================================
@@ -3833,6 +3958,168 @@
             var url = waLink(tel, 'Te comparto mi ubicacion en vivo para la cita del ' + c.vehiculo + '. Token de seguridad: ' + (c.tokenSeguridad || 'N/A'));
             window.open(url, '_blank');
             showNotif('Abre WhatsApp y comparte tu ubicacion en vivo');
+        }
+
+        // ==========================================
+        // 🔮 BOLA MÁGICA FUNCTIONS
+        // ==========================================
+        function cargarBolaMagica() {
+            var periodo = document.getElementById('bm-periodo').value;
+            fetch(API_BASE + '/api/bola-magica?periodo=' + periodo, {
+                headers: { 'x-api-key': 'fyradrive2026' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (!res.ok || !res.data) return;
+                var d = res.data;
+                var m = d.metricas;
+
+                // Métricas duras
+                document.getElementById('bm-total-convs').textContent = m.conversaciones_total;
+                document.getElementById('bm-cotizaciones').textContent = m.llegaron_cotizacion;
+                document.getElementById('bm-completadas').textContent = m.completaron_cotizacion;
+                document.getElementById('bm-tasa-cot').textContent = m.tasa_cotizacion + '% de conversaciones';
+                document.getElementById('bm-tasa-comp').textContent = m.tasa_completado + '% de los que pidieron';
+                document.getElementById('bm-seriedad').textContent = d.emocional.seriedad_promedio || '—';
+                var seriedadEl = document.getElementById('bm-seriedad');
+                var sp = d.emocional.seriedad_promedio;
+                seriedadEl.style.color = sp >= 7 ? 'var(--green)' : sp >= 4 ? 'var(--orange)' : 'var(--red)';
+
+                // Emociones
+                var emoHtml = '';
+                var emoEmojis = { interes: '😃', miedo: '😨', duda: '🤔', entusiasmo: '🤩', desconfianza: '😒', frustracion: '😤', urgencia: '⏰', indiferencia: '😐' };
+                d.emocional.emociones.forEach(function(e) {
+                    emoHtml += '<div>' + (emoEmojis[e.nombre] || '💭') + ' <strong>' + e.nombre + '</strong> — ' + e.total + ' veces</div>';
+                });
+                document.getElementById('bm-emociones').innerHTML = emoHtml || '<em style="color:var(--gray)">Sin datos aún</em>';
+
+                // Miedos
+                var miedoHtml = '';
+                var miedoEmojis = { financiero: '💸', compromiso: '🔗', 'engaño': '🎭', rechazo: '🚫', familiar: '👨‍👩‍👧', ninguno: '✅' };
+                d.emocional.miedos.forEach(function(e) {
+                    miedoHtml += '<div>' + (miedoEmojis[e.nombre] || '😰') + ' <strong>' + e.nombre + '</strong> — ' + e.total + ' veces</div>';
+                });
+                document.getElementById('bm-miedos').innerHTML = miedoHtml || '<em style="color:var(--gray)">Sin datos aún</em>';
+
+                // Deseos
+                var deseoHtml = '';
+                var deseoEmojis = { auto: '🚗', estatus: '👔', solucion_transporte: '🚌', independencia: '🦅', mejor_vida: '🌟', ninguno: '—' };
+                d.emocional.deseos.forEach(function(e) {
+                    deseoHtml += '<div>' + (deseoEmojis[e.nombre] || '🌟') + ' <strong>' + e.nombre + '</strong> — ' + e.total + ' veces</div>';
+                });
+                document.getElementById('bm-deseos').innerHTML = deseoHtml || '<em style="color:var(--gray)">Sin datos aún</em>';
+
+                // Señales
+                var senalHtml = '';
+                var senalEmojis = { compra: '🟢', abandono: '🔴', neutral: '🟡' };
+                var senalLabels = { compra: 'Señales de compra', abandono: 'Señales de abandono', neutral: 'Neutrales' };
+                d.emocional.senales.forEach(function(e) {
+                    senalHtml += '<div>' + (senalEmojis[e.tipo] || '⚪') + ' <strong>' + (senalLabels[e.tipo] || e.tipo) + '</strong> — ' + e.total + '</div>';
+                });
+                document.getElementById('bm-senales').innerHTML = senalHtml || '<em style="color:var(--gray)">Sin datos aún</em>';
+
+                // Intenciones
+                var intHtml = '';
+                var intEmojis = { informarse: '📖', negociar: '🤝', cerrar: '✅', huir: '🏃', validar: '🔍', comparar: '⚖️' };
+                d.emocional.intenciones.forEach(function(e) {
+                    intHtml += '<div>' + (intEmojis[e.nombre] || '🎯') + ' <strong>' + e.nombre + '</strong> — ' + e.total + '</div>';
+                });
+                document.getElementById('bm-intenciones').innerHTML = intHtml || '<em style="color:var(--gray)">Sin datos aún</em>';
+
+                // Últimos análisis IA
+                var anaHtml = '';
+                d.ultimos_analisis.forEach(function(a) {
+                    var serColor = a.seriedad >= 7 ? '#10b981' : a.seriedad >= 4 ? '#f59e0b' : '#ef4444';
+                    anaHtml += '<div style="padding:12px;margin-bottom:8px;border-radius:8px;background:#f9fafb;border-left:4px solid ' + serColor + ';">';
+                    anaHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+                    anaHtml += '<strong style="font-size:12px;">📱 ' + (a.telefono || 'Desconocido') + '</strong>';
+                    anaHtml += '<span style="font-size:11px;background:' + serColor + '22;color:' + serColor + ';padding:2px 8px;border-radius:12px;font-weight:700;">Seriedad: ' + a.seriedad + '/10</span>';
+                    anaHtml += '</div>';
+                    anaHtml += '<div style="font-size:13px;color:#374151;margin-bottom:6px;">"' + a.mensaje + '"</div>';
+                    anaHtml += '<div style="font-size:12px;color:#6b7280;margin-bottom:4px;">🧠 ' + a.resumen + '</div>';
+                    anaHtml += '<div style="font-size:12px;color:var(--purple);font-weight:600;">💡 ' + a.sugerencia + '</div>';
+                    anaHtml += '</div>';
+                });
+                document.getElementById('bm-analisis').innerHTML = anaHtml || '<em style="color:var(--gray)">Cuando lleguen mensajes de clientes, aquí verás el análisis emocional de cada uno</em>';
+
+                // Intuiciones
+                renderIntuiciones(d.intuiciones);
+            })
+            .catch(function(err) {
+                console.error('Error cargando Bola Mágica:', err);
+            });
+        }
+
+        function renderIntuiciones(lista) {
+            var html = '';
+            if (lista && lista.length > 0) {
+                var tipoEmojis = { general: '💭', cliente: '👤', mercado: '📊', objecion: '🛡️', cierre: '🎯', producto: '💡' };
+                lista.forEach(function(i) {
+                    var fecha = new Date(i.fecha || Date.now());
+                    var fechaStr = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                    html += '<div style="padding:8px 12px;margin-bottom:6px;border-radius:8px;background:white;border:1px solid #e5e7eb;font-size:13px;">';
+                    html += '<span>' + (tipoEmojis[i.tipo] || '💭') + '</span> ';
+                    html += '<strong style="color:var(--purple);">' + i.texto + '</strong>';
+                    if (i.telefono) html += ' <span style="color:var(--gray);font-size:11px;">(📱' + i.telefono + ')</span>';
+                    html += ' <span style="color:var(--gray-light);font-size:10px;float:right;">' + fechaStr + '</span>';
+                    html += '</div>';
+                });
+            }
+            document.getElementById('intuiciones-lista').innerHTML = html || '<em style="color:var(--gray);font-size:12px;">Tus intuiciones aparecerán aquí...</em>';
+        }
+
+        function guardarIntuicion() {
+            var texto = document.getElementById('intuicion-texto').value.trim();
+            if (!texto) { showNotif('Escribe algo primero', true); return; }
+
+            var tipo = document.getElementById('intuicion-tipo').value;
+            var telefono = document.getElementById('intuicion-telefono').value.trim();
+
+            fetch(API_BASE + '/api/intuiciones', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
+                body: JSON.stringify({ texto: texto, tipo: tipo, telefono: telefono })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.ok) {
+                    showNotif('💾 Intuición guardada');
+                    document.getElementById('intuicion-texto').value = '';
+                    document.getElementById('intuicion-telefono').value = '';
+                    cargarBolaMagica();
+                } else {
+                    showNotif('Error guardando', true);
+                }
+            })
+            .catch(function() { showNotif('Error de conexión', true); });
+        }
+
+        function generarLicuadora() {
+            var btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Generando reporte...';
+            document.getElementById('bm-licuadora').innerHTML = '<em style="color:var(--gray);">La IA está analizando todos los datos de la semana... Esto toma 15-30 segundos.</em>';
+
+            fetch(API_BASE + '/api/bola-magica', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                btn.disabled = false;
+                btn.textContent = '🧠 Generar Licuadora Semanal';
+                if (res.ok && res.reporte) {
+                    document.getElementById('bm-licuadora').textContent = res.reporte;
+                    showNotif('🧃 Licuadora Semanal generada');
+                } else {
+                    document.getElementById('bm-licuadora').innerHTML = '<em style="color:var(--red);">Error generando reporte: ' + (res.error || 'Intenta de nuevo') + '</em>';
+                }
+            })
+            .catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = '🧠 Generar Licuadora Semanal';
+                document.getElementById('bm-licuadora').innerHTML = '<em style="color:var(--red);">Error de conexión</em>';
+            });
         }
 
         // ==========================================
