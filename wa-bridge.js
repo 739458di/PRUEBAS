@@ -4,15 +4,20 @@
 
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
+const http = require('http');
 
 // Config
 const BRIDGE_URL = 'https://pruebas-ruby.vercel.app/api/bridge';
 const BRIDGE_KEY = process.env.BRIDGE_KEY || 'fyradrive-bridge-2026';
 const AUTH_DIR = './auth_info_baileys';
+const QR_PORT = 3000;
 
 // Control: evitar procesar mensajes viejos al reconectar
 var startTimestamp = Math.floor(Date.now() / 1000);
 var isReady = false;
+var currentQR = null;
+var connectionStatus = 'disconnected';
 
 async function startBridge() {
     console.log('🚗 FyraDrive WA-Bridge iniciando...');
@@ -37,15 +42,18 @@ async function startBridge() {
         var lastDisconnect = update.lastDisconnect;
 
         if (qr) {
+            currentQR = qr;
+            connectionStatus = 'waiting_qr';
             console.log('\n═══════════════════════════════════');
-            console.log('📱 ESCANEA ESTE QR CON TU WHATSAPP');
+            console.log('📱 ESCANEA QR EN: http://134.209.51.172:' + QR_PORT);
             console.log('═══════════════════════════════════\n');
             qrcode.generate(qr, { small: true });
-            console.log('\n═══════════════════════════════════\n');
         }
 
         if (connection === 'open') {
             isReady = true;
+            currentQR = null;
+            connectionStatus = 'connected';
             startTimestamp = Math.floor(Date.now() / 1000);
             console.log('✅ WhatsApp conectado! FyraDrive Bridge activo.');
             console.log('🕐 Timestamp inicio:', new Date().toISOString());
@@ -53,6 +61,7 @@ async function startBridge() {
 
         if (connection === 'close') {
             isReady = false;
+            connectionStatus = 'disconnected';
             var statusCode = lastDisconnect && lastDisconnect.error
                 ? lastDisconnect.error.output && lastDisconnect.error.output.statusCode
                 : null;
@@ -175,6 +184,41 @@ async function startBridge() {
         }
     });
 }
+
+// Mini servidor HTTP para mostrar QR en navegador (server-side rendering)
+http.createServer(async function(req, res) {
+    // Ruta /qr.png — imagen directa del QR
+    if (req.url === '/qr.png' && currentQR) {
+        try {
+            var pngBuffer = await QRCode.toBuffer(currentQR, { width: 400, margin: 2 });
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+            res.end(pngBuffer);
+            return;
+        } catch(e) {}
+    }
+
+    if (connectionStatus === 'connected') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body style="background:#111;color:#0f0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:monospace;font-size:2em"><div style="text-align:center">WhatsApp Conectado<br><br>FyraDrive Bridge Activo</div></body></html>');
+        return;
+    }
+    if (!currentQR) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body style="background:#111;color:#ff0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:monospace;font-size:1.5em"><div style="text-align:center">Esperando QR...<br><br>Recarga en unos segundos</div></body></html>');
+        return;
+    }
+    // Generar QR como imagen PNG del lado del servidor
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+        '<body style="background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace">' +
+        '<h1 style="margin-bottom:20px">Escanea con WhatsApp</h1>' +
+        '<img src="/qr.png" style="width:300px;height:300px;border-radius:12px;background:#fff;padding:10px" />' +
+        '<p style="color:#888;margin-top:20px">FyraDrive WA-Bridge</p>' +
+        '<script>setTimeout(function(){location.reload()},25000);</script>' +
+        '</body></html>');
+}).listen(QR_PORT, '0.0.0.0', function() {
+    console.log('QR Server: http://134.209.51.172:' + QR_PORT);
+});
 
 // Iniciar
 startBridge().catch(function(err) {

@@ -1,6 +1,7 @@
 // Bridge endpoint: recibe mensajes del WA-Bridge (Baileys en DigitalOcean)
 // POST /api/bridge — procesa mensaje y devuelve respuesta de Claw
-// No depende de Meta Business API — Baileys envía/recibe directamente
+// No depende de Meta Business API — Baileys envia/recibe directamente
+// v1.0
 
 const { generarRespuestaAI, getAIConfig, initAITables } = require('./ai-sales.js');
 const { createClient } = require('@libsql/client');
