@@ -1,8 +1,9 @@
-// WhatsApp + Messenger Webhook + Chatbot FYRADRIVE
-// Recibe mensajes de WhatsApp y Messenger, detecta intención de cotización,
-// captura datos, genera cotización, responde con IA
-// GET  /api/webhook = verificación del webhook (WhatsApp)
-// POST /api/webhook = mensaje entrante WhatsApp + respuesta automática
+// WhatsApp + Messenger Webhook + Chatbot FYRADRIVE + WA-Bridge
+// Recibe mensajes de WhatsApp, Messenger, y WA-Bridge (Baileys)
+// Detecta intencion de cotizacion, captura datos, genera cotizacion, responde con IA
+// GET  /api/webhook = verificacion del webhook (WhatsApp)
+// POST /api/webhook = mensaje entrante WhatsApp/Bridge + respuesta automatica
+// POST /api/webhook con source:'wa-bridge' = Bridge mode (devuelve JSON)
 
 const { createClient } = require('@libsql/client');
 const { analizarMensaje } = require('./analyze.js');
