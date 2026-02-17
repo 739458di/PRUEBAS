@@ -638,11 +638,170 @@ module.exports = async function handler(req, res) {
         return res.status(403).send('Token invalido');
     }
 
-    // POST = Mensaje entrante WhatsApp
+    // POST = Mensaje entrante WhatsApp o Bridge
     if (req.method === 'POST') {
         try {
             await initTables();
             var body = req.body;
+
+            // ===== BRIDGE MODE: mensaje del WA-Bridge (Baileys en DigitalOcean) =====
+            if (body.source === 'wa-bridge' && req.headers['x-bridge-key'] === (process.env.BRIDGE_KEY || 'fyradrive-bridge-2026')) {
+                var bridgeTel = cleanPhone(body.telefono || '');
+                var bridgeNombre = body.nombre || '';
+                var bridgeTexto = body.texto || '';
+                console.log('[BRIDGE] Mensaje de', bridgeTel, ':', bridgeTexto.substring(0, 80));
+
+                if (!bridgeTel || !bridgeTexto) {
+                    return res.status(400).json({ error: 'Missing telefono or texto' });
+                }
+
+                // Guardar mensaje entrante
+                await saveMessage({
+                    wa_id: bridgeTel, telefono: bridgeTel, nombre: bridgeNombre,
+                    mensaje: bridgeTexto, tipo: 'text', direccion: 'in',
+                    timestamp: Math.floor(Date.now() / 1000), mensaje_id: 'bridge-' + Date.now(),
+                    platform: 'whatsapp'
+                });
+
+                // Procesar con el mismo flujo que WhatsApp pero capturar respuestas en vez de enviar por Meta
+                var bridgeResponses = [];
+                var origSendMessage = sendMessage;
+
+                // Interceptar sendMessage para capturar respuestas
+                var capturedMessages = [];
+                var fakeSend = async function(to, text, aiGenerated, platform) {
+                    capturedMessages.push({ text: text, aiGenerated: aiGenerated ? true : false });
+                    // Guardar en DB como out
+                    await saveMessage({
+                        wa_id: cleanPhone(to), telefono: cleanPhone(to), nombre: 'FYRADRIVE',
+                        mensaje: text, tipo: 'text', direccion: 'out',
+                        timestamp: Math.floor(Date.now() / 1000), mensaje_id: 'bridge-out-' + Date.now(),
+                        platform: 'whatsapp'
+                    });
+                };
+
+                // Monkey-patch sendMessage temporalmente
+                // No podemos monkey-patch directamente porque procesarMensaje usa closure
+                // Mejor: procesar manualmente igual que procesarMensaje pero devolver
+
+                try { await initAITables(); } catch(e) {}
+
+                // Análisis en background
+                analizarMensaje(bridgeTel, bridgeTexto, 'in', 'Nombre: ' + bridgeNombre).catch(function(ae) {
+                    console.error('[BRIDGE] Error análisis:', ae.message);
+                });
+
+                var conv = await getConversation(bridgeTel);
+                var estado = conv ? conv.estado : 'idle';
+                var textoLower = bridgeTexto.toLowerCase().trim();
+
+                // ---- IDLE: usar Claw IA ----
+                if (estado === 'idle' || !estado) {
+                    var esCotizacion = COTIZACION_KEYWORDS.some(function(kw) { return textoLower.includes(kw); });
+
+                    if (esCotizacion) {
+                        await setConversation(bridgeTel, { estado: 'pidiendo_precio', nombre: bridgeNombre, paso: 'precio' });
+                        return res.status(200).json({ ok: true, respuestas: ['Va! Te armo la cotizacion 📊\n\nCual es el precio del vehiculo?\n\nEj: 350000 o 350k'], aiGenerated: false });
+                    }
+
+                    try {
+                        var config = await getAIConfig();
+                        if (config && config.ai_enabled) {
+                            var aiResult = await generarRespuestaAI(bridgeTel, bridgeTexto, bridgeNombre, null);
+                            if (aiResult && aiResult.trigger_cotizacion) {
+                                await setConversation(bridgeTel, { estado: 'pidiendo_precio', nombre: bridgeNombre, paso: 'precio' });
+                                return res.status(200).json({ ok: true, respuestas: ['Va! Te armo la cotizacion 📊\n\nCual es el precio del vehiculo?\n\nEj: 350000 o 350k'], aiGenerated: false });
+                            }
+                            if (aiResult && aiResult.respuesta) {
+                                await setConversation(bridgeTel, { estado: 'idle', nombre: bridgeNombre });
+                                return res.status(200).json({ ok: true, respuestas: [aiResult.respuesta], aiGenerated: true });
+                            }
+                        }
+                    } catch(aiErr) { console.error('[BRIDGE] Error IA:', aiErr.message); }
+
+                    // Fallback
+                    await setConversation(bridgeTel, { estado: 'idle', nombre: bridgeNombre });
+                    var primerNombre = bridgeNombre ? bridgeNombre.split(' ')[0] : '';
+                    var saludo = primerNombre ? 'Que tal ' + primerNombre + '!' : 'Que tal!';
+                    return res.status(200).json({ ok: true, respuestas: [saludo + ' Soy Seb de Fyradrive 🚗\n\nTe interesa comprar, vender, o cotizar un credito?\n\nDime en que te ayudo y lo resolvemos'], aiGenerated: false });
+                }
+
+                // ---- PIDIENDO PRECIO ----
+                if (estado === 'pidiendo_precio') {
+                    var precio = extraerNumero(textoLower);
+                    if (precio > 0 && precio < 1000) precio = precio * 1000;
+                    if (precio < 50000) return res.status(200).json({ ok: true, respuestas: ['Ese precio esta muy bajo. Cual es el precio del vehiculo? Ej: 350000'], aiGenerated: false });
+                    if (precio > 5000000) return res.status(200).json({ ok: true, respuestas: ['Ese precio es muy alto. Cual seria el precio correcto?'], aiGenerated: false });
+                    await setConversation(bridgeTel, { estado: 'pidiendo_enganche', nombre: conv ? conv.nombre : bridgeNombre, dato_precio: precio, paso: 'enganche' });
+                    return res.status(200).json({ ok: true, respuestas: ['Listo, ' + formatMoney(precio) + ' ✅\n\nCuanto darias de enganche?\nMinimo 25% = ' + formatMoney(precio * 0.25) + '\n\nEj: ' + Math.round(precio * 0.30 / 1000) + '000 o ' + Math.round(precio * 0.30 / 1000) + 'k'], aiGenerated: false });
+                }
+
+                // ---- PIDIENDO ENGANCHE ----
+                if (estado === 'pidiendo_enganche') {
+                    var precioActual = conv ? conv.dato_precio : 0;
+                    var enganche = extraerNumero(textoLower);
+                    if (enganche > 0 && enganche < 1000) enganche = enganche * 1000;
+                    var matchPct = textoLower.match(/(\d+)\s*%/);
+                    if (matchPct) enganche = precioActual * (parseInt(matchPct[1]) / 100);
+                    var minEnganche = precioActual * 0.25;
+                    if (enganche < minEnganche) return res.status(200).json({ ok: true, respuestas: ['El minimo de enganche es 25% = ' + formatMoney(minEnganche) + '\n\nCuanto podrias dar?'], aiGenerated: false });
+                    if (enganche >= precioActual) return res.status(200).json({ ok: true, respuestas: ['El enganche no puede ser mayor al precio. Cuanto darias?'], aiGenerated: false });
+                    await setConversation(bridgeTel, { estado: 'pidiendo_plazo', nombre: conv ? conv.nombre : bridgeNombre, dato_precio: precioActual, dato_enganche: enganche, paso: 'plazo' });
+                    return res.status(200).json({ ok: true, respuestas: ['Enganche: ' + formatMoney(enganche) + ' (' + Math.round(enganche / precioActual * 100) + '%) ✅\n\nUltimo paso! A cuantos meses?\n\n24 | 36 | 48 | 60 meses'], aiGenerated: false });
+                }
+
+                // ---- PIDIENDO PLAZO ----
+                if (estado === 'pidiendo_plazo') {
+                    var plazo = extraerPlazo(textoLower);
+                    if (plazo < 12 || plazo > 72) return res.status(200).json({ ok: true, respuestas: ['El plazo va de 12 a 60 meses. Cual prefieres? 24, 36, 48 o 60'], aiGenerated: false });
+                    var precioFinal = conv ? conv.dato_precio : 0;
+                    var engancheFinal = conv ? conv.dato_enganche : 0;
+                    var cot = calcularCotizacion(precioFinal, engancheFinal, plazo);
+                    await setConversation(bridgeTel, { estado: 'cotizacion_enviada', nombre: conv ? conv.nombre : bridgeNombre, dato_precio: precioFinal, dato_enganche: engancheFinal, dato_plazo: plazo, paso: 'completado' });
+                    return res.status(200).json({ ok: true, respuestas: [
+                        '🚗 COTIZACION FYRADRIVE\n\nPrecio: ' + formatMoney(cot.precio) + '\nEnganche: ' + formatMoney(cot.enganche) + ' (' + Math.round(cot.enganche / cot.precio * 100) + '%)\nFinanciamiento: ' + formatMoney(cot.financiamiento) + '\nPlazo: ' + cot.plazo + ' meses\n\n💳 Mensualidad: ' + formatMoney(cot.mensualidad) + '\n\nDesembolso inicial:\n  Enganche: ' + formatMoney(cot.enganche) + '\n  Comision apertura: ' + formatMoney(cot.comision) + '\n  Total: ' + formatMoney(cot.desembolso) + '\n\nTasa 15.99% anual | Incluye seguro de vida\nSujeto a aprobacion crediticia\n\nTe agendo cita para verlo? O quieres cotizar con otros montos?'
+                    ], aiGenerated: false });
+                }
+
+                // ---- COTIZACION ENVIADA ----
+                if (estado === 'cotizacion_enviada') {
+                    var otraCot = COTIZACION_KEYWORDS.some(function(kw) { return textoLower.includes(kw); });
+                    if (otraCot) {
+                        await setConversation(bridgeTel, { estado: 'pidiendo_precio', nombre: conv ? conv.nombre : bridgeNombre, paso: 'precio' });
+                        return res.status(200).json({ ok: true, respuestas: ['Va! Otra cotizacion. Cual es el precio del vehiculo?'], aiGenerated: false });
+                    }
+                    var esSi2 = SI_KEYWORDS.some(function(kw) { return textoLower === kw || textoLower.startsWith(kw + ' '); });
+                    if (esSi2) {
+                        await setConversation(bridgeTel, { estado: 'idle', nombre: conv ? conv.nombre : bridgeNombre });
+                        return res.status(200).json({ ok: true, respuestas: ['Excelente! 🤝 Yo me encargo de agendarte. Te contacto en breve para coordinar dia y hora.'], aiGenerated: false });
+                    }
+                    await setConversation(bridgeTel, { estado: 'idle', nombre: conv ? conv.nombre : bridgeNombre });
+                    try {
+                        var aiPost = await generarRespuestaAI(bridgeTel, bridgeTexto, bridgeNombre, null);
+                        if (aiPost && aiPost.respuesta) return res.status(200).json({ ok: true, respuestas: [aiPost.respuesta], aiGenerated: true });
+                    } catch(e) {}
+                    return res.status(200).json({ ok: true, respuestas: ['Cualquier duda aqui estoy. Si quieres otra cotizacion solo dime 👍'], aiGenerated: false });
+                }
+
+                // ---- OFRECIENDO COTIZACION ----
+                if (estado === 'ofreciendo_cotizacion') {
+                    var esSi = SI_KEYWORDS.some(function(kw) { return textoLower === kw || textoLower.startsWith(kw + ' '); });
+                    if (esSi) {
+                        await setConversation(bridgeTel, { estado: 'pidiendo_precio', nombre: bridgeNombre, paso: 'precio' });
+                        return res.status(200).json({ ok: true, respuestas: ['Va! Cual es el precio del vehiculo?\n\nEj: 350000 o 350k'], aiGenerated: false });
+                    }
+                    var esNo = NO_KEYWORDS.some(function(kw) { return textoLower === kw || textoLower.startsWith(kw + ' '); });
+                    if (esNo) {
+                        await setConversation(bridgeTel, { estado: 'idle', nombre: bridgeNombre });
+                        return res.status(200).json({ ok: true, respuestas: ['Sin problema 👍 Cuando quieras cotizar solo dime.'], aiGenerated: false });
+                    }
+                    return res.status(200).json({ ok: true, respuestas: ['Te armo la cotizacion? Solo dime si o no'], aiGenerated: false });
+                }
+
+                // Default
+                await setConversation(bridgeTel, { estado: 'idle', nombre: bridgeNombre });
+                return res.status(200).json({ ok: true, respuestas: ['Que tal! Soy Seb de Fyradrive 🚗 En que te ayudo?'], aiGenerated: false });
+            }
 
             if (body.object === 'whatsapp_business_account') {
                 var entries = body.entry || [];

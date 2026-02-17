@@ -8,7 +8,7 @@ const QRCode = require('qrcode');
 const http = require('http');
 
 // Config
-const BRIDGE_URL = 'https://pruebas-ruby.vercel.app/api/bridge';
+const BRIDGE_URL = 'https://pruebas-ruby.vercel.app/api/webhook';
 const BRIDGE_KEY = process.env.BRIDGE_KEY || 'fyradrive-bridge-2026';
 const AUTH_DIR = './auth_info_baileys';
 const QR_PORT = 3000;
@@ -154,6 +154,7 @@ async function startBridge() {
                         'x-bridge-key': BRIDGE_KEY
                     },
                     body: JSON.stringify({
+                        source: 'wa-bridge',
                         telefono: telefono,
                         nombre: nombre,
                         texto: texto
