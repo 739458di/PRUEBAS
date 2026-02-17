@@ -636,17 +636,25 @@ module.exports = async function handler(req, res) {
         if (mode === 'subscribe' && token === VERIFY_TOKEN) {
             return res.status(200).send(challenge);
         }
+        // Version check for bridge debugging
+        if (req.query.version === '1') {
+            return res.status(200).json({ version: 'bridge-v2', timestamp: Date.now() });
+        }
         return res.status(403).send('Token invalido');
     }
 
     // POST = Mensaje entrante WhatsApp o Bridge
     if (req.method === 'POST') {
         try {
-            await initTables();
             var body = req.body;
 
             // ===== BRIDGE MODE: mensaje del WA-Bridge (Baileys en DigitalOcean) =====
-            var bridgeKey = req.headers['x-bridge-key'] || body.bridge_key || '';
+            var bridgeKey = (req.headers && req.headers['x-bridge-key']) || (body && body.bridge_key) || '';
+            if (body && body.source === 'wa-bridge') {
+                console.log('[WEBHOOK] Bridge detected! key:', bridgeKey ? 'present' : 'missing');
+            }
+
+            await initTables();
             if (body.source === 'wa-bridge' && bridgeKey === (process.env.BRIDGE_KEY || 'fyradrive-bridge-2026')) {
                 var bridgeTel = cleanPhone(body.telefono || '');
                 var bridgeNombre = body.nombre || '';
