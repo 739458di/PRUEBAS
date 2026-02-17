@@ -1,6 +1,7 @@
-// FYRADRIVE - Motor IA de Ventas
-// Genera respuestas inteligentes usando Claude Haiku
-// Aprende del estilo de Sebastian leyendo sus mensajes reales
+// FYRADRIVE - CLAW: Operador IA de FyraDrive
+// Claw es el operador de FyraDrive. Opera el sistema de afuera pa dentro y de dentro pa fuera.
+// Usa tools (function calling) para consultar el cerebro: buscar autos, cotizar, verificar REPUVE, proyectar precios.
+// Upgrade: Claude Haiku → Claude Sonnet 4.5 con tools
 
 const { createClient } = require('@libsql/client');
 
@@ -10,9 +11,154 @@ const client = createClient({
 });
 
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+const FYRADRIVE_API_URL = 'https://pruebas-ruby.vercel.app';
+const FYRADRIVE_API_KEY = 'fyradrive2026';
 
-// ===== SYSTEM PROMPT: VENDEDOR ESTRELLA FYRADRIVE =====
-var SYSTEM_PROMPT_BASE = `Eres el Vendedor Estrella de FYRADRIVE. No eres un chatbot. No eres un vendedor de lote tradicional. Eres Seb — la version digital de Sebastian Romero, fundador de Fyradrive.
+// ===== TOOLS DEL CEREBRO (FyraDrive APIs) =====
+const CLAW_TOOLS = [
+    {
+        name: "buscar_autos",
+        description: "Busca autos en el catalogo de FyraDrive. Puedes buscar por marca, modelo, año, rango de precio. Usa esto cuando un cliente pregunte por algun auto especifico o quiera ver opciones.",
+        input_schema: {
+            type: "object",
+            properties: {
+                marca: { type: "string", description: "Marca del auto (Honda, Toyota, BMW, etc.)" },
+                modelo: { type: "string", description: "Modelo del auto (Civic, Corolla, Serie 3, etc.)" },
+                precio_max: { type: "number", description: "Precio maximo en pesos" },
+                anio_min: { type: "number", description: "Año minimo del auto" }
+            },
+            required: []
+        }
+    },
+    {
+        name: "cotizar_financiamiento",
+        description: "Calcula cotizacion de financiamiento para un auto. Tasa 15.99% anual, enganche minimo 25%, plazos 12-60 meses. Usa esto cuando el cliente quiera saber cuanto pagaria a meses.",
+        input_schema: {
+            type: "object",
+            properties: {
+                precio: { type: "number", description: "Precio del vehiculo en pesos" },
+                enganche: { type: "number", description: "Monto de enganche en pesos (minimo 25% del precio)" },
+                plazo: { type: "number", description: "Plazo en meses (12, 24, 36, 48, 60)" }
+            },
+            required: ["precio", "enganche", "plazo"]
+        }
+    },
+    {
+        name: "proyeccion_precio",
+        description: "Obtiene proyeccion de precio de mercado usando IA. Usa esto cuando un vendedor quiera saber cuanto vale su auto o cuando necesites validar si un precio es justo.",
+        input_schema: {
+            type: "object",
+            properties: {
+                brand: { type: "string", description: "Marca del auto" },
+                model: { type: "string", description: "Modelo del auto" },
+                year: { type: "number", description: "Año del auto" },
+                km: { type: "number", description: "Kilometraje" }
+            },
+            required: ["brand", "model", "year"]
+        }
+    },
+    {
+        name: "verificar_niv",
+        description: "Verifica un vehiculo en REPUVE (Registro Publico Vehicular) para saber si tiene reporte de robo o adeudos. Usa esto cuando un vendedor quiera publicar su auto — siempre verificar antes.",
+        input_schema: {
+            type: "object",
+            properties: {
+                niv: { type: "string", description: "Numero de Identificacion Vehicular (17 caracteres)" }
+            },
+            required: ["niv"]
+        }
+    }
+];
+
+// ===== EJECUTAR TOOLS =====
+async function ejecutarTool(toolName, toolInput) {
+    try {
+        if (toolName === 'buscar_autos') {
+            var conditions = [];
+            var args = [];
+            if (toolInput.marca) { conditions.push("marca LIKE ?"); args.push('%' + toolInput.marca + '%'); }
+            if (toolInput.modelo) { conditions.push("modelo LIKE ?"); args.push('%' + toolInput.modelo + '%'); }
+            if (toolInput.precio_max) { conditions.push("precio <= ?"); args.push(toolInput.precio_max); }
+            if (toolInput.anio_min) { conditions.push("anio >= ?"); args.push(toolInput.anio_min); }
+            var where = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+            var sql = 'SELECT id, marca, modelo, anio, km, precio, transmision, estado, ciudad FROM Auto' + where + ' ORDER BY created_at DESC LIMIT 10';
+            var result = await client.execute({ sql: sql, args: args });
+            if (result.rows.length === 0) return JSON.stringify({ encontrados: 0, mensaje: "No hay autos que coincidan con esa busqueda" });
+            return JSON.stringify({ encontrados: result.rows.length, autos: result.rows });
+        }
+
+        if (toolName === 'cotizar_financiamiento') {
+            var precio = toolInput.precio;
+            var enganche = toolInput.enganche;
+            var plazo = toolInput.plazo;
+            if (enganche < precio * 0.25) return JSON.stringify({ error: "Enganche minimo es 25% del precio: $" + Math.round(precio * 0.25).toLocaleString() });
+            if (plazo < 12 || plazo > 60) return JSON.stringify({ error: "Plazo debe ser entre 12 y 60 meses" });
+            var financiamiento = precio - enganche;
+            var subtotal = financiamiento + 1800;
+            var iva = subtotal * 0.16;
+            var montoFinanciar = subtotal + iva;
+            var r = 0.1599 / 12;
+            var mensualidad = montoFinanciar * (r * Math.pow(1 + r, plazo)) / (Math.pow(1 + r, plazo) - 1) - 400;
+            var comision = precio * 0.0201;
+            return JSON.stringify({
+                precio: precio, enganche: enganche, plazo: plazo,
+                mensualidad: Math.round(mensualidad),
+                comision_apertura: Math.round(comision),
+                desembolso_inicial: Math.round(enganche + comision),
+                tasa_anual: "15.99%"
+            });
+        }
+
+        if (toolName === 'proyeccion_precio') {
+            var resp = await fetch(FYRADRIVE_API_URL + '/api/ai-projection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(toolInput)
+            });
+            var data = await resp.json();
+            return JSON.stringify(data);
+        }
+
+        if (toolName === 'verificar_niv') {
+            var resp = await fetch(FYRADRIVE_API_URL + '/api/verificar-niv', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ niv: toolInput.niv })
+            });
+            var data = await resp.json();
+            return JSON.stringify(data);
+        }
+
+        return JSON.stringify({ error: "Tool no reconocido: " + toolName });
+    } catch (err) {
+        console.error('[CLAW] Error ejecutando tool', toolName, ':', err.message);
+        return JSON.stringify({ error: "Error ejecutando " + toolName + ": " + err.message });
+    }
+}
+
+// ===== SYSTEM PROMPT: CLAW - OPERADOR FYRADRIVE =====
+var SYSTEM_PROMPT_BASE = `Eres Seb, el OPERADOR de FyraDrive. No eres un chatbot. No eres un vendedor de lote tradicional. Eres Seb — la version digital de Sebastian Romero, fundador de Fyradrive.
+
+═══════════════════════════════════
+0. TU ROL COMO OPERADOR
+═══════════════════════════════════
+Eres el operador de FyraDrive. Operas el sistema de afuera pa dentro y de dentro pa fuera:
+- Recibes mensajes de clientes y registras todo en FyraDrive
+- CONSULTAS DATOS REALES del sistema usando tus herramientas (tools): buscas autos, cotizas, verificas REPUVE, proyectas precios
+- NUNCA inventes datos. SIEMPRE usa tus tools para consultar informacion real antes de responder
+- Solo hablas de dos temas: COMPRAR un auto o VENDER/PUBLICAR un auto
+- No das informacion confidencial de FyraDrive (cuantas citas hay, quienes somos internamente, etc.)
+- Solo hablas cuando te hablan. No inicias contacto por tu cuenta.
+- 24/7 siempre disponible
+
+REGLAS DE AUTONOMIA:
+PUEDES HACER SOLO: responder preguntas sobre autos, dar cotizaciones, dar proyecciones de precio, verificar NIV en REPUVE, registrar leads, pedir fotos y datos a vendedores
+NECESITAS APROBACION DE SEBASTIAN: agendar citas, publicar autos, iniciar contacto proactivo, cambiar precios
+
+CUANDO UN CLIENTE PREGUNTA POR UN AUTO: USA la herramienta buscar_autos para buscar en el catalogo REAL. No inventes autos.
+CUANDO UN CLIENTE QUIERE COTIZAR: USA la herramienta cotizar_financiamiento con los datos reales.
+CUANDO UN VENDEDOR QUIERE SABER CUANTO VALE SU AUTO: USA la herramienta proyeccion_precio.
+CUANDO UN VENDEDOR QUIERE PUBLICAR: PIDE el NIV y USA verificar_niv antes de aceptar.
 
 ═══════════════════════════════════
 1. TU IDENTIDAD
@@ -241,7 +387,7 @@ async function initAITables() {
             args: [Date.now()]
         });
     } catch (err) {
-        console.error('[FYRA-AI] Error init tables:', err.message);
+        console.error('[CLAW] Error init tables:', err.message);
     }
 }
 
@@ -255,7 +401,7 @@ async function getAIConfig() {
         }
         return { ai_enabled: 1, sales_document: '', max_history_messages: 20, style_sample_count: 15 };
     } catch (err) {
-        console.error('[FYRA-AI] Error getConfig:', err.message);
+        console.error('[CLAW] Error getConfig:', err.message);
         return { ai_enabled: 1, sales_document: '', max_history_messages: 20, style_sample_count: 15 };
     }
 }
@@ -276,7 +422,7 @@ async function updateAIConfig(updates) {
         });
         return true;
     } catch (err) {
-        console.error('[FYRA-AI] Error updateConfig:', err.message);
+        console.error('[CLAW] Error updateConfig:', err.message);
         return false;
     }
 }
@@ -318,7 +464,7 @@ async function getConversationHistory(telefono, maxMessages) {
         var messages = result.rows.slice().reverse();
         return messages;
     } catch (err) {
-        console.error('[FYRA-AI] Error getHistory:', err.message);
+        console.error('[CLAW] Error getHistory:', err.message);
         return [];
     }
 }
@@ -347,7 +493,7 @@ async function getStyleSamples(currentTelefono, count) {
         });
         return result.rows;
     } catch (err) {
-        console.error('[FYRA-AI] Error getStyleSamples:', err.message);
+        console.error('[CLAW] Error getStyleSamples:', err.message);
         return [];
     }
 }
@@ -360,12 +506,12 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
         var config = await getAIConfig();
 
         if (!config.ai_enabled) {
-            console.log('[FYRA-AI] IA desactivada, saltando');
+            console.log('[CLAW] IA desactivada, saltando');
             return null;
         }
 
         if (!CLAUDE_API_KEY) {
-            console.error('[FYRA-AI] No hay CLAUDE_API_KEY');
+            console.error('[CLAW] No hay CLAUDE_API_KEY');
             return null;
         }
 
@@ -428,33 +574,73 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
 
         userPrompt += '\nGenera tu respuesta como Seb de FYRADRIVE.';
 
-        // 5. Llamar Claude Haiku
-        console.log('[FYRA-AI] Generando respuesta para', telefono, '| Mensaje:', texto.substring(0, 50));
+        // 5. Llamar Claude Sonnet con Tools
+        console.log('[CLAW] Generando respuesta para', telefono, '| Mensaje:', texto.substring(0, 50));
 
-        var response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': CLAUDE_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 250,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userPrompt }]
-            })
-        });
+        var messages = [{ role: 'user', content: userPrompt }];
+        var totalTokens = 0;
+        var maxToolRounds = 3;
+        var finalText = '';
 
-        var data = await response.json();
+        for (var round = 0; round < maxToolRounds; round++) {
+            var response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': CLAUDE_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-5-20250929',
+                    max_tokens: 1024,
+                    system: systemPrompt,
+                    tools: CLAW_TOOLS,
+                    messages: messages
+                })
+            });
 
-        if (!response.ok) {
-            console.error('[FYRA-AI] Error Claude API:', response.status, JSON.stringify(data));
-            return null;
+            var data = await response.json();
+
+            if (!response.ok) {
+                console.error('[CLAW] Error Claude API:', response.status, JSON.stringify(data));
+                return null;
+            }
+
+            totalTokens += (data.usage ? (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0) : 0);
+
+            // Procesar respuesta: puede tener text + tool_use
+            var hasToolUse = false;
+            var assistantContent = data.content || [];
+            messages.push({ role: 'assistant', content: assistantContent });
+
+            var toolResults = [];
+            for (var ci = 0; ci < assistantContent.length; ci++) {
+                var block = assistantContent[ci];
+                if (block.type === 'text') {
+                    finalText = block.text;
+                } else if (block.type === 'tool_use') {
+                    hasToolUse = true;
+                    console.log('[CLAW] Tool call:', block.name, JSON.stringify(block.input));
+                    var toolResult = await ejecutarTool(block.name, block.input);
+                    console.log('[CLAW] Tool result:', toolResult.substring(0, 200));
+                    toolResults.push({
+                        type: 'tool_result',
+                        tool_use_id: block.id,
+                        content: toolResult
+                    });
+                }
+            }
+
+            if (hasToolUse && toolResults.length > 0) {
+                messages.push({ role: 'user', content: toolResults });
+                continue; // siguiente ronda para que Claude procese los resultados
+            }
+
+            break; // no hay tool calls, terminamos
         }
 
-        var textoRespuesta = data.content && data.content[0] ? data.content[0].text : '';
-        var tokensUsed = (data.usage ? (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0) : 0);
+        var textoRespuesta = finalText;
+        var tokensUsed = totalTokens;
 
         // 6. Parsear JSON
         var result = null;
@@ -464,11 +650,10 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
                 result = JSON.parse(jsonMatch[0]);
             }
         } catch (parseErr) {
-            console.error('[FYRA-AI] Error parseando JSON:', parseErr.message);
-            console.error('[FYRA-AI] Respuesta raw:', textoRespuesta);
+            console.error('[CLAW] Error parseando JSON:', parseErr.message);
             // Fallback: usar toda la respuesta como mensaje
             result = {
-                respuesta: textoRespuesta.replace(/```json/g, '').replace(/```/g, '').trim(),
+                respuesta: textoRespuesta.replace(/```json/g, '').replace(/```/g, '').replace(/\*/g, '').trim(),
                 trigger_cotizacion: false,
                 razonamiento: 'Fallback: no se pudo parsear JSON'
             };
@@ -491,15 +676,15 @@ async function generarRespuestaAI(telefono, texto, nombre, analisisEmocional) {
                 ]
             });
         } catch(logErr) {
-            console.error('[FYRA-AI] Error guardando log:', logErr.message);
+            console.error('[CLAW] Error guardando log:', logErr.message);
         }
 
-        console.log('[FYRA-AI] Respuesta generada en', latencyMs, 'ms | Tokens:', tokensUsed, '| Trigger cot:', result ? result.trigger_cotizacion : false);
+        console.log('[CLAW] Respuesta generada en', latencyMs, 'ms | Tokens:', tokensUsed, '| Trigger cot:', result ? result.trigger_cotizacion : false);
 
         return result;
 
     } catch (err) {
-        console.error('[FYRA-AI] Error general:', err.message);
+        console.error('[CLAW] Error general:', err.message);
         return null;
     }
 }
