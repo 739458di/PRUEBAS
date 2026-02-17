@@ -155,6 +155,7 @@ async function startBridge() {
                     },
                     body: JSON.stringify({
                         source: 'wa-bridge',
+                        bridge_key: BRIDGE_KEY,
                         telefono: telefono,
                         nombre: nombre,
                         texto: texto

@@ -625,7 +625,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-bridge-key');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     // GET = Verificación del webhook por Meta
@@ -646,7 +646,8 @@ module.exports = async function handler(req, res) {
             var body = req.body;
 
             // ===== BRIDGE MODE: mensaje del WA-Bridge (Baileys en DigitalOcean) =====
-            if (body.source === 'wa-bridge' && req.headers['x-bridge-key'] === (process.env.BRIDGE_KEY || 'fyradrive-bridge-2026')) {
+            var bridgeKey = req.headers['x-bridge-key'] || body.bridge_key || '';
+            if (body.source === 'wa-bridge' && bridgeKey === (process.env.BRIDGE_KEY || 'fyradrive-bridge-2026')) {
                 var bridgeTel = cleanPhone(body.telefono || '');
                 var bridgeNombre = body.nombre || '';
                 var bridgeTexto = body.texto || '';
