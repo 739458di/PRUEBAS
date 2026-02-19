@@ -355,25 +355,6 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         });
     }
 
-    // 🔇 CHECK DEAL STATE — Si ya tiene cita agendada o posterior, el bot SE CALLA
-    // El bot solo sirve para agendar cita. Después de eso, solo mensajes manuales desde CRM.
-    try {
-        var dealCheck = await client.execute({
-            sql: 'SELECT estado FROM claw_deals WHERE comprador_telefono LIKE ? ORDER BY updated_at DESC LIMIT 1',
-            args: ['%' + telefono.slice(-10)]
-        });
-        if (dealCheck.rows.length > 0) {
-            var dealEstado = dealCheck.rows[0].estado;
-            var SILENCED_STATES = ['cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
-            if (SILENCED_STATES.includes(dealEstado)) {
-                console.log('[FYRA-BOT] 🔇 Deal en estado "' + dealEstado + '" — bot callado, solo CRM manual');
-                return; // No responder nada
-            }
-        }
-    } catch(dealErr) {
-        console.error('[FYRA-BOT] Error checking deal state:', dealErr.message);
-    }
-
     var conv = await getConversation(telefono);
     var estado = conv ? conv.estado : 'idle';
     var textoLower = texto.toLowerCase().trim();
@@ -719,24 +700,6 @@ module.exports = async function handler(req, res) {
                 analizarMensaje(bridgeTel, bridgeTexto, 'in', 'Nombre: ' + bridgeNombre).catch(function(ae) {
                     console.error('[BRIDGE] Error análisis:', ae.message);
                 });
-
-                // 🔇 CHECK DEAL STATE — Si ya tiene cita agendada o posterior, el bot SE CALLA
-                try {
-                    var bridgeDealCheck = await client.execute({
-                        sql: 'SELECT estado FROM claw_deals WHERE comprador_telefono LIKE ? ORDER BY updated_at DESC LIMIT 1',
-                        args: ['%' + bridgeTel.slice(-10)]
-                    });
-                    if (bridgeDealCheck.rows.length > 0) {
-                        var bridgeDealEstado = bridgeDealCheck.rows[0].estado;
-                        var BRIDGE_SILENCED = ['cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
-                        if (BRIDGE_SILENCED.includes(bridgeDealEstado)) {
-                            console.log('[BRIDGE] 🔇 Deal en estado "' + bridgeDealEstado + '" — bot callado, solo CRM manual');
-                            return res.status(200).json({ ok: true, respuestas: [], aiGenerated: false, silenced: true });
-                        }
-                    }
-                } catch(bridgeDealErr) {
-                    console.error('[BRIDGE] Error checking deal state:', bridgeDealErr.message);
-                }
 
                 var conv = await getConversation(bridgeTel);
                 var estado = conv ? conv.estado : 'idle';
