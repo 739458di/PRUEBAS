@@ -373,7 +373,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         });
         if (dealCheck.rows.length > 0) {
             var dealEstado = dealCheck.rows[0].estado;
-            var SILENCED_STATES = ['cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
+            var SILENCED_STATES = ['docs_credito', 'cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
             if (SILENCED_STATES.includes(dealEstado)) {
                 console.log('[FYRA-BOT] 🔇 Deal en estado "' + dealEstado + '" — bot callado para', telefono);
                 return;
@@ -743,7 +743,7 @@ module.exports = async function handler(req, res) {
                     });
                     if (bridgeDealCheck.rows.length > 0) {
                         var bridgeDealEstado = bridgeDealCheck.rows[0].estado;
-                        var BRIDGE_SILENCED = ['cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
+                        var BRIDGE_SILENCED = ['docs_credito', 'cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
                         if (BRIDGE_SILENCED.includes(bridgeDealEstado)) {
                             console.log('[BRIDGE] 🔇 Deal en estado "' + bridgeDealEstado + '" — bot callado para', bridgeTel);
                             return res.status(200).json({ ok: true, respuestas: [], aiGenerated: false, silenced: true });
