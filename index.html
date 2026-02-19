@@ -323,16 +323,20 @@ async function load() {
     renderPipeline();
 
     // Deals (Cita Segura pipeline)
-    deals = await tq("SELECT d.*, ct.fecha as joined_fecha, ct.lugar as joined_lugar, ct.auto as joined_auto FROM claw_deals d LEFT JOIN claw_citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
-    // Normalize: map momento_cita → ya_en_cita, merge cita data
+    deals = await tq("SELECT d.*, ct.fecha as ct_fecha, ct.hora as ct_hora, ct.punto_nombre as ct_lugar, ct.auto_nombre as ct_auto FROM claw_deals d LEFT JOIN citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
+    // Normalize: merge cita data, fix field names
     deals = deals.map(function(d) {
-        if (d.estado === 'momento_cita') d.estado = 'ya_en_cita';
-        // Use joined cita data or deal's own columns
-        d.cita_fecha = d.cita_fecha || d.joined_fecha || null;
-        d.cita_lugar = d.cita_lugar || d.joined_lugar || null;
+        if (d.estado === 'momento_cita') d.estado = 'en_camino';
+        // Build cita_fecha from joined FyraTrack citas table
+        if (!d.cita_fecha && d.ct_fecha && d.ct_hora) {
+            d.cita_fecha = d.ct_fecha + ' ' + d.ct_hora;
+        } else if (!d.cita_fecha && d.ct_fecha) {
+            d.cita_fecha = d.ct_fecha;
+        }
+        d.cita_lugar = d.cita_lugar || d.ct_lugar || null;
         d.nombre = d.comprador_nombre || 'Sin nombre';
         d.telefono = d.comprador_telefono || '';
-        d.interes = d.auto_nombre || d.joined_auto || '';
+        d.interes = d.auto_nombre || d.ct_auto || '';
         return d;
     });
     el('bCitaSeg').textContent = deals.length;
