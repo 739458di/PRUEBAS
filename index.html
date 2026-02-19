@@ -141,11 +141,37 @@
         .modal-msg .dir{font-size:10px;font-weight:600;color:var(--green)}
         .modal-msg .dir.in{color:var(--blue)}
 
+        /* ===== FYRATRACK PANEL ===== */
+        .ft-card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;margin-bottom:14px;overflow:hidden}
+        .ft-header{padding:12px 14px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between}
+        .ft-title{font-size:14px;font-weight:800}
+        .ft-meta{font-size:11px;color:var(--t3)}
+        .ft-estado{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px}
+        .ft-body{padding:14px}
+        .ft-info{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+        .ft-info-item{font-size:11px;color:var(--t2);padding:4px 8px;background:var(--s2);border-radius:4px}
+        .ft-links{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+        .ft-link-box{flex:1;min-width:200px;padding:8px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;cursor:pointer;transition:.15s}
+        .ft-link-box:hover{border-color:var(--green)}
+        .ft-link-label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--t3);margin-bottom:3px}
+        .ft-link-url{font-size:10px;word-break:break-all;color:var(--green)}
+        .ft-link-url.seller{color:var(--blue)}
+        .ft-actions{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+        .ft-iframes{display:flex;gap:10px}
+        .ft-iframe-wrap{flex:1;border:1px solid var(--b1);border-radius:8px;overflow:hidden;background:var(--s2);min-height:500px;position:relative}
+        .ft-iframe-label{position:absolute;top:8px;left:8px;z-index:10;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;backdrop-filter:blur(8px)}
+        .ft-iframe-label.buyer{background:rgba(34,197,94,.15);color:var(--green)}
+        .ft-iframe-label.seller{background:rgba(59,130,246,.15);color:var(--blue)}
+        .ft-iframe-wrap iframe{width:100%;height:100%;min-height:500px;border:none;border-radius:7px}
+
         @media(max-width:768px){
             .pipeline{flex-direction:column}
             .pipe-col{min-width:auto;max-height:none}
             .deal-btns{flex-direction:column}
             .topbar{flex-wrap:wrap}
+            .ft-iframes{flex-direction:column}
+            .ft-iframe-wrap{min-height:400px}
+            .ft-iframe-wrap iframe{min-height:400px}
         }
     </style>
 </head>
@@ -167,6 +193,7 @@
 <div class="nav">
     <div class="nav-item on" data-p="pipeline">Pipeline<span class="badge" id="bPipe">0</span></div>
     <div class="nav-item" data-p="citasegura">Cita Segura<span class="badge" id="bCitaSeg">0</span></div>
+    <div class="nav-item" data-p="fyratrack">📡 FyraTrack<span class="badge" id="bFyra">0</span></div>
     <div class="nav-item" data-p="boss">Boss Mode</div>
     <div class="nav-item" data-p="log">Actividad</div>
 </div>
@@ -180,6 +207,12 @@
 <div class="page" id="p-citasegura">
     <div class="pipeline" id="citaSeguraView"></div>
     <div class="empty" id="emptyCS" style="display:none"><div class="empty-i">🔒</div><div class="empty-t">No hay deals en pipeline de citas</div></div>
+</div>
+
+<!-- ===== FYRATRACK ===== -->
+<div class="page" id="p-fyratrack">
+    <div id="fyraTrackView"></div>
+    <div class="empty" id="emptyFyra" style="display:none"><div class="empty-i">📡</div><div class="empty-t">No hay citas activas con FyraTrack</div></div>
 </div>
 
 <!-- ===== BOSS ===== -->
@@ -323,7 +356,7 @@ async function load() {
     renderPipeline();
 
     // Deals (Cita Segura pipeline)
-    deals = await tq("SELECT d.*, ct.fecha as ct_fecha, ct.hora as ct_hora, ct.punto_nombre as ct_lugar, ct.auto_nombre as ct_auto FROM claw_deals d LEFT JOIN citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
+    deals = await tq("SELECT d.*, ct.fecha as ct_fecha, ct.hora as ct_hora, ct.punto_nombre as ct_lugar, ct.auto_nombre as ct_auto, ct.token as ct_token, ct.vendedor_telefono as ct_vendedor_tel FROM claw_deals d LEFT JOIN citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
     // Normalize: merge cita data, fix field names
     deals = deals.map(function(d) {
         if (d.estado === 'momento_cita') d.estado = 'en_camino';
@@ -334,6 +367,8 @@ async function load() {
             d.cita_fecha = d.ct_fecha;
         }
         d.cita_lugar = d.cita_lugar || d.ct_lugar || null;
+        d.cita_token = d.cita_token || d.ct_token || null;
+        d.vendedor_telefono = d.vendedor_telefono || d.ct_vendedor_tel || '528120066355';
         d.nombre = d.comprador_nombre || 'Sin nombre';
         d.telefono = d.comprador_telefono || '';
         d.interes = d.auto_nombre || d.ct_auto || '';
@@ -341,6 +376,11 @@ async function load() {
     });
     el('bCitaSeg').textContent = deals.length;
     renderCitaSegura();
+
+    // FyraTrack — citas activas con token (para panel de control)
+    var ftCitas = await tq("SELECT c.*, d.comprador_nombre as deal_nombre, d.id as deal_id FROM citas c LEFT JOIN claw_deals d ON d.cita_id = c.id WHERE c.estado NOT IN ('COMPLETADA','CANCELADA','NO_SHOW') AND c.token IS NOT NULL ORDER BY c.fecha_hora DESC LIMIT 20");
+    el('bFyra').textContent = ftCitas.length;
+    renderFyraTrack(ftCitas);
 
     // Log - últimos mensajes
     mensajes = await tq("SELECT telefono, nombre, mensaje, direccion, timestamp FROM wa_messages ORDER BY timestamp DESC LIMIT 40");
@@ -435,6 +475,103 @@ function renderCitaSegura() {
     el('citaSeguraView').innerHTML = html;
 }
 
+// ===== FYRATRACK PANEL =====
+function renderFyraTrack(citas) {
+    if (!citas.length) {
+        el('fyraTrackView').innerHTML = '';
+        el('emptyFyra').style.display = 'block';
+        return;
+    }
+    el('emptyFyra').style.display = 'none';
+
+    var baseUrl = 'https://fyradrive-three.vercel.app';
+
+    var html = citas.map(function(c) {
+        var token = c.token;
+        var buyerLink = baseUrl + '/track/' + token;
+        var sellerLink = baseUrl + '/seller/' + token;
+        var nombre = c.comprador_nombre || c.deal_nombre || 'Sin nombre';
+        var firstName = nombre.split(' ')[0];
+        var tel = c.comprador_telefono || '';
+        var vendedorTel = c.vendedor_telefono || '528120066355';
+        var auto = c.auto_nombre || '';
+        var lugar = c.punto_nombre || '';
+        var hora = c.hora || '';
+        var fecha = c.fecha || '';
+        var estado = c.estado || 'PROGRAMADA';
+
+        // Estado color
+        var estadoColor = 'var(--t3)';
+        var estadoBg = 'var(--s3)';
+        if (estado === 'EN_CAMINO') { estadoColor = 'var(--green)'; estadoBg = 'var(--green-bg)'; }
+        else if (estado === 'CERCA') { estadoColor = 'var(--orange)'; estadoBg = 'var(--orange-bg)'; }
+        else if (estado === 'LLEGO') { estadoColor = 'var(--green)'; estadoBg = 'var(--green-bg)'; }
+        else if (estado === 'PROGRAMADA' || estado === 'CONFIRMADA') { estadoColor = 'var(--blue)'; estadoBg = 'var(--blue-bg)'; }
+        else if (estado === 'SIN_SENAL') { estadoColor = 'var(--orange)'; estadoBg = 'var(--orange-bg)'; }
+
+        // Distance/ETA info
+        var distInfo = '';
+        if (c.distancia_metros) {
+            var dist = Number(c.distancia_metros);
+            distInfo = dist < 1000 ? Math.round(dist) + 'm' : (dist/1000).toFixed(1) + 'km';
+        }
+        var etaInfo = c.eta_minutos ? Math.round(Number(c.eta_minutos)) + ' min' : '';
+
+        return '<div class="ft-card">' +
+            '<div class="ft-header">' +
+                '<div>' +
+                    '<div class="ft-title">' + nombre + '</div>' +
+                    '<div class="ft-meta">' + auto + (fecha ? ' — ' + fecha + ' ' + hora : '') + '</div>' +
+                '</div>' +
+                '<span class="ft-estado" style="color:' + estadoColor + ';background:' + estadoBg + '">' + estado + '</span>' +
+            '</div>' +
+            '<div class="ft-body">' +
+                // Info chips
+                '<div class="ft-info">' +
+                    (lugar ? '<div class="ft-info-item">📍 ' + lugar + '</div>' : '') +
+                    (distInfo ? '<div class="ft-info-item">📏 ' + distInfo + '</div>' : '') +
+                    (etaInfo ? '<div class="ft-info-item">⏱️ ' + etaInfo + '</div>' : '') +
+                    '<div class="ft-info-item">📞 +' + tel + '</div>' +
+                '</div>' +
+
+                // Links
+                '<div class="ft-links">' +
+                    '<div class="ft-link-box" onclick="navigator.clipboard.writeText(\'' + buyerLink + '\');toast(\'Link comprador copiado ✓\')">' +
+                        '<div class="ft-link-label">🧑 Comprador</div>' +
+                        '<div class="ft-link-url">' + buyerLink + '</div>' +
+                    '</div>' +
+                    '<div class="ft-link-box" onclick="navigator.clipboard.writeText(\'' + sellerLink + '\');toast(\'Link vendedor copiado ✓\')">' +
+                        '<div class="ft-link-label">🏪 Vendedor</div>' +
+                        '<div class="ft-link-url seller">' + sellerLink + '</div>' +
+                    '</div>' +
+                '</div>' +
+
+                // Actions
+                '<div class="ft-actions">' +
+                    '<button class="btn btn-g" onclick="sendFyraTrackLink(\'' + (c.deal_id || '') + '\',\'' + tel + '\',\'buyer\',\'' + token + '\',\'' + firstName + '\',\'' + auto.replace(/'/g,'') + '\',\'' + lugar.replace(/'/g,'') + '\',\'' + hora + '\')">📲 Enviar al comprador</button>' +
+                    '<button class="btn btn-x" style="border-color:var(--blue);color:var(--blue)" onclick="sendFyraTrackLink(\'' + (c.deal_id || '') + '\',\'' + vendedorTel + '\',\'seller\',\'' + token + '\',\'' + firstName + '\',\'' + auto.replace(/'/g,'') + '\',\'' + lugar.replace(/'/g,'') + '\',\'' + hora + '\')">📲 Enviar al vendedor</button>' +
+                    '<a href="' + buyerLink + '" target="_blank" class="btn btn-x" style="text-decoration:none">↗ Abrir comprador</a>' +
+                    '<a href="' + sellerLink + '" target="_blank" class="btn btn-x" style="text-decoration:none">↗ Abrir vendedor</a>' +
+                '</div>' +
+
+                // Dual iframes — side by side
+                '<div class="ft-iframes">' +
+                    '<div class="ft-iframe-wrap">' +
+                        '<div class="ft-iframe-label seller">🏪 Vista Vendedor</div>' +
+                        '<iframe src="' + sellerLink + '" loading="lazy" allow="geolocation"></iframe>' +
+                    '</div>' +
+                    '<div class="ft-iframe-wrap">' +
+                        '<div class="ft-iframe-label buyer">🧑 Vista Comprador</div>' +
+                        '<iframe src="' + buyerLink + '" loading="lazy" allow="geolocation"></iframe>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+
+    el('fyraTrackView').innerHTML = html;
+}
+
 function renderDealCard(d, fase) {
     var nombre = d.nombre || d.comprador_nombre || 'Sin nombre';
     var tel = d.telefono || '';
@@ -487,11 +624,50 @@ function renderDealCard(d, fase) {
                 '<button class="btn btn-x" style="font-size:10px;padding:3px 8px" onclick="saveDealDraft(\'' + d.id + '\')">Guardar</button>' +
             '</div>' +
         '</div>';
+
+        // FyraTrack links section
+        if (d.cita_token) {
+            var buyerLink = 'https://fyradrive-three.vercel.app/track/' + d.cita_token;
+            var sellerLink = 'https://fyradrive-three.vercel.app/seller/' + d.cita_token;
+            draftHtml += '<div class="deal-draft" style="border-color:var(--green);border-style:dashed">' +
+                '<div class="deal-draft-label">📡 FyraTrack — Links del día</div>' +
+                '<div style="margin-bottom:8px">' +
+                    '<div style="font-size:10px;color:var(--t3);margin-bottom:2px">🧑 Link comprador:</div>' +
+                    '<div style="font-size:11px;color:var(--green);word-break:break-all;padding:4px 6px;background:var(--s3);border-radius:4px;cursor:pointer" onclick="navigator.clipboard.writeText(\'' + buyerLink + '\');toast(\'Link copiado ✓\')">' + buyerLink + '</div>' +
+                '</div>' +
+                '<div style="margin-bottom:8px">' +
+                    '<div style="font-size:10px;color:var(--t3);margin-bottom:2px">🏪 Link vendedor:</div>' +
+                    '<div style="font-size:11px;color:var(--blue);word-break:break-all;padding:4px 6px;background:var(--s3);border-radius:4px;cursor:pointer" onclick="navigator.clipboard.writeText(\'' + sellerLink + '\');toast(\'Link copiado ✓\')">' + sellerLink + '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:4px">' +
+                    '<button class="btn btn-g" style="font-size:10px;padding:5px 10px;flex:1" onclick="sendFyraTrackLink(\'' + d.id + '\',\'' + tel + '\',\'buyer\',\'' + d.cita_token + '\',\'' + nombre.split(' ')[0] + '\',\'' + (d.interes || '') + '\',\'' + (d.cita_lugar || '') + '\',\'' + (d.ct_hora || d.hora || '') + '\')">📲 Enviar al comprador</button>' +
+                    '<button class="btn btn-x" style="font-size:10px;padding:5px 10px;flex:1;border-color:var(--blue);color:var(--blue)" onclick="sendFyraTrackLink(\'' + d.id + '\',\'' + d.vendedor_telefono + '\',\'seller\',\'' + d.cita_token + '\',\'' + nombre.split(' ')[0] + '\',\'' + (d.interes || '') + '\',\'' + (d.cita_lugar || '') + '\',\'' + (d.ct_hora || d.hora || '') + '\')">📲 Enviar al vendedor</button>' +
+                '</div>' +
+            '</div>';
+        }
     } else if (d.estado === 'en_camino') {
         draftHtml = '<div class="deal-draft">' +
             '<div class="deal-draft-label">🚗 FyraTrack activo</div>' +
-            '<div style="font-size:11px;color:var(--green);padding:4px 0">Tracking en vivo enviado al comprador</div>' +
+            '<div style="font-size:11px;color:var(--green);padding:4px 0">Tracking en vivo — comprador en camino</div>' +
         '</div>';
+        // Show links for re-send if needed
+        if (d.cita_token) {
+            var buyerLink2 = 'https://fyradrive-three.vercel.app/track/' + d.cita_token;
+            var sellerLink2 = 'https://fyradrive-three.vercel.app/seller/' + d.cita_token;
+            draftHtml += '<div class="deal-draft" style="border-color:var(--green);border-style:dashed">' +
+                '<div class="deal-draft-label">📡 Links FyraTrack</div>' +
+                '<div style="display:flex;gap:4px;margin-bottom:4px">' +
+                    '<div style="flex:1;font-size:10px;color:var(--green);padding:4px 6px;background:var(--s3);border-radius:4px;cursor:pointer;word-break:break-all" onclick="navigator.clipboard.writeText(\'' + buyerLink2 + '\');toast(\'Link copiado ✓\')">' + buyerLink2 + '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:4px;margin-bottom:4px">' +
+                    '<div style="flex:1;font-size:10px;color:var(--blue);padding:4px 6px;background:var(--s3);border-radius:4px;cursor:pointer;word-break:break-all" onclick="navigator.clipboard.writeText(\'' + sellerLink2 + '\');toast(\'Link copiado ✓\')">' + sellerLink2 + '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:4px">' +
+                    '<button class="btn btn-x" style="font-size:9px;padding:3px 8px;flex:1" onclick="sendFyraTrackLink(\'' + d.id + '\',\'' + tel + '\',\'buyer\',\'' + d.cita_token + '\',\'' + nombre.split(' ')[0] + '\',\'' + (d.interes || '') + '\',\'' + (d.cita_lugar || '') + '\',\'' + (d.ct_hora || d.hora || '') + '\')">Reenviar al comprador</button>' +
+                    '<button class="btn btn-x" style="font-size:9px;padding:3px 8px;flex:1" onclick="sendFyraTrackLink(\'' + d.id + '\',\'' + d.vendedor_telefono + '\',\'seller\',\'' + d.cita_token + '\',\'' + nombre.split(' ')[0] + '\',\'' + (d.interes || '') + '\',\'' + (d.cita_lugar || '') + '\',\'' + (d.ct_hora || d.hora || '') + '\')">Reenviar al vendedor</button>' +
+                '</div>' +
+            '</div>';
+        }
     }
 
     // Force state buttons
@@ -632,6 +808,42 @@ async function saveDealDraft(id) {
     var msg = ta.value.trim();
     await te("UPDATE claw_deals SET draft_msg = '" + msg.replace(/'/g, "''") + "', updated_at = " + Date.now() + " WHERE id = " + id);
     toast('Draft guardado ✓');
+}
+
+// ===== FYRATRACK LINKS =====
+async function sendFyraTrackLink(dealId, telefono, tipo, token, nombre, auto, lugar, hora) {
+    var baseUrl = 'https://fyradrive-three.vercel.app';
+    var link, msg;
+
+    if (tipo === 'buyer') {
+        link = baseUrl + '/track/' + token;
+        msg = '¡Hola ' + nombre + '! 🚗\n\n' +
+              'Tu cita para ver el ' + (auto || 'auto') + ' es hoy' + (hora ? ' a las ' + hora : '') + '.\n\n' +
+              (lugar ? '📍 Punto de encuentro: ' + lugar + '\n\n' : '') +
+              'Abre este link para que te guiemos al punto:\n' +
+              '👉 ' + link + '\n\n' +
+              '(Activa tu ubicación al abrir el link para que el vendedor sepa cuando llegas)';
+    } else {
+        link = baseUrl + '/seller/' + token;
+        msg = '¡Hola! 🏪\n\n' +
+              'Tu comprador ' + nombre + ' tiene cita hoy' + (hora ? ' a las ' + hora : '') +
+              (auto ? ' para ver el ' + auto : '') + '.\n\n' +
+              (lugar ? '📍 Punto: ' + lugar + '\n\n' : '') +
+              'Abre este link para ver en tiempo real cuando salga y su ubicación:\n' +
+              '👉 ' + link + '\n\n' +
+              '(Verás el mapa en vivo cuando el comprador active su GPS)';
+    }
+
+    try {
+        await fetch(CLAW + '/api/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefono: telefono, mensaje: msg, api_key: 'fyradrive2026' })
+        });
+        toast((tipo === 'buyer' ? '📲 Link comprador' : '🏪 Link vendedor') + ' enviado ✓');
+    } catch(e) {
+        toast('Error enviando: ' + e.message);
+    }
 }
 
 // ===== BOSS =====
