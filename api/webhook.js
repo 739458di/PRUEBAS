@@ -359,6 +359,30 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     var estado = conv ? conv.estado : 'idle';
     var textoLower = texto.toLowerCase().trim();
 
+    // 🔇 BOT SILENCE — Si conversación ya registró cita, callar
+    if (estado === 'cita_registrada') {
+        console.log('[FYRA-BOT] 🔇 Conversación en cita_registrada — bot callado para', telefono);
+        return;
+    }
+
+    // 🔇 BOT SILENCE — Si deal en claw_deals tiene cita agendada o posterior, callar
+    try {
+        var dealCheck = await client.execute({
+            sql: 'SELECT estado FROM claw_deals WHERE comprador_telefono LIKE ? ORDER BY updated_at DESC LIMIT 1',
+            args: ['%' + telefono.slice(-10)]
+        });
+        if (dealCheck.rows.length > 0) {
+            var dealEstado = dealCheck.rows[0].estado;
+            var SILENCED_STATES = ['cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
+            if (SILENCED_STATES.includes(dealEstado)) {
+                console.log('[FYRA-BOT] 🔇 Deal en estado "' + dealEstado + '" — bot callado para', telefono);
+                return;
+            }
+        }
+    } catch(dealErr) {
+        console.error('[FYRA-BOT] Error checking deal state:', dealErr.message);
+    }
+
     // ---- ESTADO: IDLE ----
     if (estado === 'idle' || !estado) {
         var esCotizacion = COTIZACION_KEYWORDS.some(function(kw) {
@@ -704,6 +728,30 @@ module.exports = async function handler(req, res) {
                 var conv = await getConversation(bridgeTel);
                 var estado = conv ? conv.estado : 'idle';
                 var textoLower = bridgeTexto.toLowerCase().trim();
+
+                // 🔇 BOT SILENCE — Si conversación ya registró cita, callar
+                if (estado === 'cita_registrada') {
+                    console.log('[BRIDGE] 🔇 Conversación en cita_registrada — bot callado para', bridgeTel);
+                    return res.status(200).json({ ok: true, respuestas: [], aiGenerated: false, silenced: true });
+                }
+
+                // 🔇 BOT SILENCE — Si deal en claw_deals tiene cita agendada o posterior, callar
+                try {
+                    var bridgeDealCheck = await client.execute({
+                        sql: 'SELECT estado FROM claw_deals WHERE comprador_telefono LIKE ? ORDER BY updated_at DESC LIMIT 1',
+                        args: ['%' + bridgeTel.slice(-10)]
+                    });
+                    if (bridgeDealCheck.rows.length > 0) {
+                        var bridgeDealEstado = bridgeDealCheck.rows[0].estado;
+                        var BRIDGE_SILENCED = ['cita_agendada', 'dia_cita', 'en_camino', 'ya_en_cita', 'momento_cita'];
+                        if (BRIDGE_SILENCED.includes(bridgeDealEstado)) {
+                            console.log('[BRIDGE] 🔇 Deal en estado "' + bridgeDealEstado + '" — bot callado para', bridgeTel);
+                            return res.status(200).json({ ok: true, respuestas: [], aiGenerated: false, silenced: true });
+                        }
+                    }
+                } catch(bridgeDealErr) {
+                    console.error('[BRIDGE] Error checking deal state:', bridgeDealErr.message);
+                }
 
                 // ---- IDLE: usar Claw IA ----
                 if (estado === 'idle' || !estado) {
