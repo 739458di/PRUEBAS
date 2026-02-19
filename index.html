@@ -71,30 +71,33 @@
         .cc-photos{display:flex;gap:2px;margin-top:4px}
         .cc-photos span{font-size:10px;color:var(--green)}
 
-        /* ===== CITAS ===== */
-        .cita{background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:14px;margin-bottom:10px}
-        .cita:hover{border-color:var(--orange)}
-        .cita-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-        .cita-auto{font-size:14px;font-weight:700}
-        .cita-est{font-size:9px;font-weight:700;padding:3px 8px;border-radius:8px;text-transform:uppercase;letter-spacing:.3px}
-        .est-pendiente{background:var(--orange-bg);color:var(--orange)}
-        .est-confirmada{background:var(--green-bg);color:var(--green)}
-        .est-completada{background:var(--blue-bg);color:var(--blue)}
-        .est-cancelada{background:var(--red-bg);color:var(--red)}
-        .cita-cd{font-size:28px;font-weight:900;text-align:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:10px;letter-spacing:-1px}
-        .cita-cd.soon{color:var(--orange)}
-        .cita-cd.now{color:var(--green);animation:blink 1s infinite}
-        .cita-cd.past{color:var(--red)}
-        .cita-parts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-        .cita-part{padding:8px;background:var(--s2);border-radius:6px}
-        .cita-part-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:2px}
-        .cita-part-name{font-size:12px;font-weight:600}
-        .cita-part-tel{font-size:11px}
-        .cita-part-tel a{color:var(--green);text-decoration:none}
-        .cita-info{display:flex;gap:12px;font-size:11px;color:var(--t2);margin-bottom:10px;flex-wrap:wrap}
-        .cita-map{width:100%;height:160px;border-radius:8px;overflow:hidden;border:1px solid var(--b1);margin-bottom:10px}
-        .cita-map iframe{width:100%;height:100%;border:none}
-        .cita-btns{display:flex;gap:6px}
+        /* ===== CITA SEGURA ===== */
+        .deal-card{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px;margin-bottom:8px;transition:.15s}
+        .deal-card:hover{border-color:var(--green)}
+        .deal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+        .deal-name{font-size:13px;font-weight:700}
+        .deal-auto{font-size:11px;color:var(--t2);margin-bottom:4px}
+        .deal-tel{font-size:11px;color:var(--t3);margin-bottom:6px}
+        .deal-tel a{color:var(--green);text-decoration:none}
+        .deal-cd{font-size:20px;font-weight:800;text-align:center;padding:8px;background:var(--s3);border-radius:6px;margin-bottom:8px;letter-spacing:-.5px}
+        .deal-cd.soon{color:var(--orange)}
+        .deal-cd.now{color:var(--green);animation:blink 1s infinite}
+        .deal-cd.past{color:var(--red)}
+        .deal-fecha{font-size:10px;color:var(--t3);text-align:center;margin-bottom:8px}
+        .deal-lugar{font-size:10px;color:var(--t2);margin-bottom:6px;padding:4px 8px;background:var(--s3);border-radius:4px}
+        .deal-draft{background:var(--s1);border:1px solid var(--b1);border-radius:6px;padding:8px;margin-bottom:8px}
+        .deal-draft-label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--t3);margin-bottom:4px;display:flex;align-items:center;gap:4px}
+        .deal-draft-ta{width:100%;padding:6px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;color:var(--t1);font-family:inherit;font-size:11px;resize:vertical;min-height:40px}
+        .deal-draft-ta:focus{outline:none;border-color:var(--green)}
+        .deal-btns{display:flex;gap:4px;flex-wrap:wrap}
+        .deal-btns .btn{font-size:10px;padding:4px 8px}
+        .deal-source{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px}
+        .src-wa{background:var(--green-bg);color:var(--green)}
+        .src-msg{background:var(--blue-bg);color:var(--blue)}
+        .deal-notas{font-size:10px;color:var(--t3);margin-top:6px;padding-top:6px;border-top:1px solid var(--b1)}
+        .cs-state-btn{font-size:10px;padding:4px 10px;border-radius:4px;border:1px solid var(--b1);background:var(--s2);color:var(--t3);cursor:pointer;transition:.15s}
+        .cs-state-btn:hover{border-color:var(--green);color:var(--t1)}
+        .cs-state-btn.active{border-color:var(--green);color:var(--green);font-weight:700}
 
         /* ===== BUTTONS ===== */
         .btn{padding:7px 14px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s}
@@ -141,7 +144,7 @@
         @media(max-width:768px){
             .pipeline{flex-direction:column}
             .pipe-col{min-width:auto;max-height:none}
-            .cita-parts{grid-template-columns:1fr}
+            .deal-btns{flex-direction:column}
             .topbar{flex-wrap:wrap}
         }
     </style>
@@ -163,7 +166,7 @@
 
 <div class="nav">
     <div class="nav-item on" data-p="pipeline">Pipeline<span class="badge" id="bPipe">0</span></div>
-    <div class="nav-item" data-p="citas">Citas<span class="badge" id="bCitas">0</span></div>
+    <div class="nav-item" data-p="citasegura">Cita Segura<span class="badge" id="bCitaSeg">0</span></div>
     <div class="nav-item" data-p="boss">Boss Mode</div>
     <div class="nav-item" data-p="log">Actividad</div>
 </div>
@@ -173,10 +176,10 @@
     <div class="pipeline" id="pipelineView"></div>
 </div>
 
-<!-- ===== CITAS ===== -->
-<div class="page" id="p-citas">
-    <div id="citasView"></div>
-    <div class="empty" id="emptyCitas" style="display:none"><div class="empty-i">📅</div><div class="empty-t">No hay citas</div></div>
+<!-- ===== CITA SEGURA ===== -->
+<div class="page" id="p-citasegura">
+    <div class="pipeline" id="citaSeguraView"></div>
+    <div class="empty" id="emptyCS" style="display:none"><div class="empty-i">🔒</div><div class="empty-t">No hay deals en pipeline de citas</div></div>
 </div>
 
 <!-- ===== BOSS ===== -->
@@ -184,7 +187,7 @@
     <div class="boss">
         <h3>⚡ <em>Orden directa</em> a Claw</h3>
         <p style="font-size:11px;color:var(--t3);margin-bottom:8px">Escribe como si le hablaras por WhatsApp. Claw lo recibe como instruccion.</p>
-        <textarea class="boss-ta" id="bossMsg" rows="3" placeholder='Ej: "publica el BMW de Juan a $400,000" o "agenda cita mañana 4pm en Tampiquito"'></textarea>
+        <textarea class="boss-ta" id="bossMsg" rows="3" placeholder='Ej: "publica el BMW de Juan a $400,000" o "agenda cita mañana 4pm"'></textarea>
         <div class="boss-row">
             <button class="btn btn-g" onclick="bossOrder()">Enviar</button>
             <span class="boss-status" id="bossStatus"></span>
@@ -254,8 +257,22 @@ const FASES = [
     { id:'perdido',    label:'Perdido',    color:'var(--red)',    bg:'var(--red-bg)' }
 ];
 
+/*
+CITA SEGURA — Pipeline post-agendamiento:
+Cita Agendada    → Se agendó la cita, esperando el día
+Día de Cita      → Hoy es el día de la cita
+En Camino        → El comprador va en camino (FyraTrack activo)
+Ya en la Cita    → El comprador llegó al punto
+*/
+const CS_FASES = [
+    { id:'cita_agendada', label:'Cita Agendada', icon:'📅', color:'var(--green)',  bg:'var(--green-bg)' },
+    { id:'dia_cita',      label:'Día de Cita',   icon:'🌅', color:'var(--orange)', bg:'var(--orange-bg)' },
+    { id:'en_camino',     label:'En Camino',      icon:'🚗', color:'var(--blue)',   bg:'var(--blue-bg)' },
+    { id:'ya_en_cita',    label:'Ya en la Cita',  icon:'📍', color:'var(--purple)', bg:'var(--purple-bg)' }
+];
+
 var contactos = [];
-var citas = [];
+var deals = [];
 var mensajes = [];
 
 // ===== TURSO =====
@@ -305,10 +322,21 @@ async function load() {
     el('bPipe').textContent = contactos.length;
     renderPipeline();
 
-    // Citas
-    citas = await tq('SELECT * FROM claw_citas ORDER BY created_at DESC LIMIT 50');
-    el('bCitas').textContent = citas.length;
-    renderCitas();
+    // Deals (Cita Segura pipeline)
+    deals = await tq("SELECT d.*, ct.fecha as joined_fecha, ct.lugar as joined_lugar, ct.auto as joined_auto FROM claw_deals d LEFT JOIN claw_citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
+    // Normalize: map momento_cita → ya_en_cita, merge cita data
+    deals = deals.map(function(d) {
+        if (d.estado === 'momento_cita') d.estado = 'ya_en_cita';
+        // Use joined cita data or deal's own columns
+        d.cita_fecha = d.cita_fecha || d.joined_fecha || null;
+        d.cita_lugar = d.cita_lugar || d.joined_lugar || null;
+        d.nombre = d.comprador_nombre || 'Sin nombre';
+        d.telefono = d.comprador_telefono || '';
+        d.interes = d.auto_nombre || d.joined_auto || '';
+        return d;
+    });
+    el('bCitaSeg').textContent = deals.length;
+    renderCitaSegura();
 
     // Log - últimos mensajes
     mensajes = await tq("SELECT telefono, nombre, mensaje, direccion, timestamp FROM wa_messages ORDER BY timestamp DESC LIMIT 40");
@@ -379,33 +407,113 @@ function getSignal(c) {
     return null;
 }
 
-// ===== CITAS =====
-function renderCitas() {
-    if (!citas.length) { el('citasView').innerHTML = ''; el('emptyCitas').style.display = 'block'; return; }
-    el('emptyCitas').style.display = 'none';
-    el('citasView').innerHTML = citas.map(function(c) {
-        var ec = 'est-' + (c.estado || 'pendiente');
-        var cd = countdown(c.fecha);
-        var lat = c.lat || 25.6614, lng = c.lng || -100.3491;
-        var mapEmbed = 'https://maps.google.com/maps?q=' + lat + ',' + lng + '&z=15&output=embed';
-        var mapLink = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-        return '<div class="cita">' +
-            '<div class="cita-row"><span class="cita-auto">' + (c.auto||'—') + '</span><span class="cita-est ' + ec + '">' + (c.estado||'pendiente') + '</span></div>' +
-            '<div class="cita-cd ' + cd.cls + '">' + cd.txt + '</div>' +
-            '<div class="cita-parts">' +
-                '<div class="cita-part"><div class="cita-part-label">Comprador</div><div class="cita-part-name">' + (c.comprador_nombre||'—') + '</div><div class="cita-part-tel"><a href="https://wa.me/' + (c.comprador_telefono||'') + '" target="_blank">+' + (c.comprador_telefono||'') + '</a></div></div>' +
-                '<div class="cita-part"><div class="cita-part-label">Vendedor</div><div class="cita-part-name">' + (c.vendedor_nombre||'—') + '</div><div class="cita-part-tel"><a href="https://wa.me/' + (c.vendedor_telefono||'') + '" target="_blank">+' + (c.vendedor_telefono||'') + '</a></div></div>' +
+// ===== CITA SEGURA =====
+function renderCitaSegura() {
+    if (!deals.length) {
+        el('citaSeguraView').innerHTML = '';
+        el('emptyCS').style.display = 'block';
+        return;
+    }
+    el('emptyCS').style.display = 'none';
+
+    var html = CS_FASES.map(function(f) {
+        var items = deals.filter(function(d) { return d.estado === f.id; });
+        return '<div class="pipe-col">' +
+            '<div class="pipe-head">' +
+                '<span class="pipe-title" style="color:' + f.color + '">' + f.icon + ' ' + f.label + '</span>' +
+                '<span class="pipe-count">' + items.length + '</span>' +
             '</div>' +
-            '<div class="cita-info"><span>📅 ' + (c.fecha||'—') + '</span><span>📍 ' + (c.lugar||'—') + '</span></div>' +
-            '<div class="cita-map"><iframe src="' + mapEmbed + '" loading="lazy"></iframe></div>' +
-            '<div class="cita-btns">' +
-                '<a href="' + mapLink + '" target="_blank" class="btn btn-g">Maps</a>' +
-                '<button class="btn btn-x" onclick="citaAction(\'' + c.id + '\',\'confirmada\')">Confirmar</button>' +
-                '<button class="btn btn-r" onclick="citaAction(\'' + c.id + '\',\'cancelada\')">Cancelar</button>' +
-                '<button class="btn btn-x" onclick="citaAction(\'' + c.id + '\',\'completada\')">Completada</button>' +
+            '<div class="pipe-body">' +
+                (items.length ? items.map(function(d) { return renderDealCard(d, f); }).join('') : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">—</div>') +
             '</div>' +
         '</div>';
     }).join('');
+    el('citaSeguraView').innerHTML = html;
+}
+
+function renderDealCard(d, fase) {
+    var nombre = d.nombre || d.comprador_nombre || 'Sin nombre';
+    var tel = d.telefono || '';
+    var isFb = tel.startsWith('fb_');
+    var waLink = isFb ? '#' : 'https://wa.me/' + tel;
+    var telDisplay = isFb ? '📘 Messenger' : '+' + tel;
+    var src = d.fuente || (isFb ? 'messenger' : 'whatsapp');
+    var srcClass = isFb ? 'src-msg' : 'src-wa';
+    var srcLabel = isFb ? 'MSG' : 'WA';
+
+    // Countdown to cita
+    var cd = countdown(d.cita_fecha);
+
+    // Fecha legible
+    var fechaStr = '';
+    if (d.cita_fecha) {
+        try {
+            var fd = new Date(d.cita_fecha);
+            fechaStr = fd.toLocaleDateString('es-MX', { weekday:'short', day:'numeric', month:'short' }) + ' ' +
+                       fd.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+        } catch(e) { fechaStr = d.cita_fecha; }
+    }
+
+    // Next state button
+    var nextState = '';
+    var nextLabel = '';
+    if (d.estado === 'cita_agendada') { nextState = 'dia_cita'; nextLabel = '→ Día de Cita'; }
+    else if (d.estado === 'dia_cita') { nextState = 'en_camino'; nextLabel = '🚗 En Camino'; }
+    else if (d.estado === 'en_camino') { nextState = 'ya_en_cita'; nextLabel = '📍 Ya en Cita'; }
+
+    // Draft section (editable notification)
+    var draftHtml = '';
+    if (d.estado === 'cita_agendada') {
+        var defaultDraft = '¡Hey ' + nombre.split(' ')[0] + '! Recuerda que tienes cita ' + (fechaStr || 'pronto') + '. ¿Todo en pie? 💪';
+        draftHtml = '<div class="deal-draft">' +
+            '<div class="deal-draft-label">✏️ Recordatorio (editable)</div>' +
+            '<textarea class="deal-draft-ta" id="draft_' + d.id + '">' + (d.draft_msg || defaultDraft) + '</textarea>' +
+            '<div style="display:flex;gap:4px;margin-top:4px">' +
+                '<button class="btn btn-g" style="font-size:10px;padding:3px 8px" onclick="sendDealDraft(\'' + d.id + '\',\'' + tel + '\')">Enviar</button>' +
+                '<button class="btn btn-x" style="font-size:10px;padding:3px 8px" onclick="saveDealDraft(\'' + d.id + '\')">Guardar</button>' +
+            '</div>' +
+        '</div>';
+    } else if (d.estado === 'dia_cita') {
+        var morningMsg = '¡Buenos días ' + nombre.split(' ')[0] + '! Hoy es el gran día 🔥 Nos vemos ' + (fechaStr || '') + '. ¿Listo?';
+        draftHtml = '<div class="deal-draft">' +
+            '<div class="deal-draft-label">🌅 Mensaje del día</div>' +
+            '<textarea class="deal-draft-ta" id="draft_' + d.id + '">' + (d.draft_msg || morningMsg) + '</textarea>' +
+            '<div style="display:flex;gap:4px;margin-top:4px">' +
+                '<button class="btn btn-g" style="font-size:10px;padding:3px 8px" onclick="sendDealDraft(\'' + d.id + '\',\'' + tel + '\')">Enviar</button>' +
+                '<button class="btn btn-x" style="font-size:10px;padding:3px 8px" onclick="saveDealDraft(\'' + d.id + '\')">Guardar</button>' +
+            '</div>' +
+        '</div>';
+    } else if (d.estado === 'en_camino') {
+        draftHtml = '<div class="deal-draft">' +
+            '<div class="deal-draft-label">🚗 FyraTrack activo</div>' +
+            '<div style="font-size:11px;color:var(--green);padding:4px 0">Tracking en vivo enviado al comprador</div>' +
+        '</div>';
+    }
+
+    // Force state buttons
+    var stateButtons = CS_FASES.map(function(f) {
+        var isActive = d.estado === f.id;
+        return '<button class="cs-state-btn' + (isActive ? ' active' : '') + '" onclick="moveDealState(\'' + d.id + '\',\'' + f.id + '\')">' + f.icon + '</button>';
+    }).join('');
+
+    return '<div class="deal-card">' +
+        '<div class="deal-top">' +
+            '<span class="deal-name">' + nombre + '</span>' +
+            '<span class="deal-source ' + srcClass + '">' + srcLabel + '</span>' +
+        '</div>' +
+        (d.interes ? '<div class="deal-auto">' + truncate(d.interes, 60) + '</div>' : '') +
+        '<div class="deal-tel"><a href="' + waLink + '" target="_blank" onclick="event.stopPropagation()">' + telDisplay + '</a></div>' +
+        (d.cita_fecha ? '<div class="deal-cd ' + cd.cls + '">' + cd.txt + '</div>' : '') +
+        (fechaStr ? '<div class="deal-fecha">📅 ' + fechaStr + '</div>' : '') +
+        (d.cita_lugar ? '<div class="deal-lugar">📍 ' + d.cita_lugar + '</div>' : '') +
+        draftHtml +
+        '<div class="deal-btns">' +
+            (nextState ? '<button class="btn btn-g" onclick="moveDealState(\'' + d.id + '\',\'' + nextState + '\')">' + nextLabel + '</button>' : '') +
+            '<button class="btn btn-r" onclick="cancelDeal(\'' + d.id + '\')">Cancelar</button>' +
+        '</div>' +
+        '<div style="display:flex;gap:4px;margin-top:6px;justify-content:center">' + stateButtons + '</div>' +
+        (d.notas ? '<div class="deal-notas">' + truncate(d.notas, 80) + '</div>' : '') +
+    '</div>';
 }
 
 // ===== LOG =====
@@ -471,11 +579,55 @@ async function moveFase(tel, fase) {
     load();
 }
 
-// ===== CITA ACTIONS =====
-async function citaAction(id, estado) {
-    await te("UPDATE claw_citas SET estado = '" + estado + "', updated_at = " + Date.now() + " WHERE id = '" + id + "'");
-    toast('Cita → ' + estado);
+// ===== CITA SEGURA ACTIONS =====
+async function moveDealState(id, estado) {
+    await te("UPDATE claw_deals SET estado = '" + estado + "', updated_at = " + Date.now() + " WHERE id = " + id);
+    var label = CS_FASES.find(function(f) { return f.id === estado; });
+    toast('→ ' + (label ? label.icon + ' ' + label.label : estado));
     load();
+}
+
+async function cancelDeal(id) {
+    if (!confirm('¿Cancelar este deal?')) return;
+    await te("UPDATE claw_deals SET estado = 'perdido', updated_at = " + Date.now() + " WHERE id = " + id);
+    toast('Deal cancelado');
+    load();
+}
+
+async function sendDealDraft(id, tel) {
+    var ta = el('draft_' + id);
+    if (!ta) return;
+    var msg = ta.value.trim();
+    if (!msg) return toast('Escribe un mensaje');
+    try {
+        var isFb = tel.startsWith('fb_');
+        if (isFb) {
+            await fetch(CLAW + '/api/messenger-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ psid: tel.replace('fb_',''), mensaje: msg })
+            });
+        } else {
+            await fetch(CLAW + '/api/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefono: tel, mensaje: msg, api_key: 'fyradrive2026' })
+            });
+        }
+        // Save draft as sent
+        await te("UPDATE claw_deals SET draft_msg = '" + msg.replace(/'/g, "''") + "', updated_at = " + Date.now() + " WHERE id = " + id);
+        toast('Mensaje enviado ✓');
+    } catch(e) {
+        toast('Error: ' + e.message);
+    }
+}
+
+async function saveDealDraft(id) {
+    var ta = el('draft_' + id);
+    if (!ta) return;
+    var msg = ta.value.trim();
+    await te("UPDATE claw_deals SET draft_msg = '" + msg.replace(/'/g, "''") + "', updated_at = " + Date.now() + " WHERE id = " + id);
+    toast('Draft guardado ✓');
 }
 
 // ===== BOSS =====
@@ -561,7 +713,7 @@ document.querySelectorAll('.nav-item').forEach(function(n) {
 // ===== INIT =====
 load();
 setInterval(load, 12000);
-setInterval(renderCitas, 60000);
+setInterval(renderCitaSegura, 60000);
 </script>
 </body>
 </html>
