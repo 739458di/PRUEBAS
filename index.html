@@ -435,6 +435,7 @@
 // ===== CONFIG =====
 const CLAW = 'http://134.209.51.172:3000';
 const TURSO = 'https://crm-fyradrive-739458di.aws-us-west-2.turso.io';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'https://pruebas-ruby.vercel.app' : '';
 const TURSO_T = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzA4MjUwMDYsImlkIjoiYTczOTliMjctYWFlNi00YjhmLWJmYjktODQ2M2JmMWU1MzljIiwicmlkIjoiNWVhMDBiM2QtNzNiNS00Njg3LWFjN2YtMTNhMGQzZmJlZmM1In0.ZVnn2UF2WdEw_yvQYGGB9Eyvbh_JRniPhkByn6Vxiavki0FkHVM8Xb0cwu1Ijrhti_j3iiOxS5jtt2IwCRWvDA';
 
 /*
@@ -1397,7 +1398,7 @@ async function pgSendBuyer() {
 
     try {
         var history = pgBuyerMsgs.filter(function(m) { return m.role !== 'system'; });
-        var res = await fetch('/api/playground', {
+        var res = await fetch(API_BASE + '/api/playground', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
             body: JSON.stringify({
