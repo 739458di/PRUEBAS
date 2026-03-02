@@ -99,6 +99,67 @@
         .cs-state-btn:hover{border-color:var(--green);color:var(--t1)}
         .cs-state-btn.active{border-color:var(--green);color:var(--green);font-weight:700}
 
+        /* ===== MATCH RECONFIRMACIÓN ===== */
+        .match-dash{padding:4px 0}
+        .match-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+        .match-header h2{font-size:16px;font-weight:900;letter-spacing:-.3px}
+        .match-header h2 em{font-style:normal;color:var(--green)}
+        .match-summary{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+        .match-stat{padding:10px 14px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;flex:1;min-width:100px;text-align:center}
+        .match-stat-num{font-size:22px;font-weight:800}
+        .match-stat-label{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-top:2px}
+        .match-card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;margin-bottom:14px;overflow:hidden}
+        .match-card.urgent{border-color:var(--orange);box-shadow:0 0 20px rgba(245,158,11,.08)}
+        .match-card-head{padding:12px 14px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+        .match-card-info{display:flex;align-items:center;gap:10px}
+        .match-card-name{font-size:14px;font-weight:800}
+        .match-card-auto{font-size:11px;color:var(--t2)}
+        .match-card-countdown{font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px}
+        .match-card-body{padding:14px}
+        .match-parties{display:flex;gap:12px;margin-bottom:14px}
+        .match-party{flex:1;padding:8px 10px;background:var(--s2);border-radius:6px;border:1px solid var(--b1)}
+        .match-party-label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--t3);margin-bottom:3px}
+        .match-party-name{font-size:12px;font-weight:600}
+        .match-party-tel{font-size:10px;color:var(--t3)}
+        .match-party-agent{font-size:10px;color:var(--t2);margin-top:2px}
+        .match-timeline{display:flex;align-items:flex-start;gap:0;margin-bottom:16px;padding:0 4px;position:relative}
+        .match-cp{display:flex;flex-direction:column;align-items:center;flex:1;position:relative;z-index:2}
+        .match-cp-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid var(--b2);background:var(--s2);transition:.2s;cursor:default}
+        .match-cp.done .match-cp-dot{border-color:var(--green);background:var(--green-bg)}
+        .match-cp.partial .match-cp-dot{border-color:var(--orange);background:var(--orange-bg)}
+        .match-cp.active .match-cp-dot{border-color:var(--orange);background:var(--orange-bg);animation:cpPulse 2s infinite}
+        .match-cp.missed .match-cp-dot{border-color:var(--red);background:var(--red-bg)}
+        .match-cp-label{font-size:9px;color:var(--t3);margin-top:4px;text-align:center;font-weight:600}
+        .match-cp.active .match-cp-label{color:var(--orange)}
+        .match-cp.done .match-cp-label{color:var(--green)}
+        .match-cp.missed .match-cp-label{color:var(--red)}
+        .match-timeline-line{position:absolute;top:14px;left:10%;right:10%;height:2px;background:var(--b1);z-index:1}
+        @keyframes cpPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 8px rgba(245,158,11,0)}}
+        .match-active-section{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px}
+        .match-active-title{font-size:12px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+        .match-active-title .icon{font-size:16px}
+        .match-confirm-row{display:flex;gap:10px}
+        .match-confirm-item{flex:1;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--s1);border:1px solid var(--b1);border-radius:6px;gap:6px}
+        .match-confirm-info{display:flex;align-items:center;gap:6px}
+        .match-confirm-role{font-size:11px;font-weight:600}
+        .match-confirm-target{font-size:10px;color:var(--t3)}
+        .match-cbtn{padding:5px 14px;border-radius:5px;font-size:10px;font-weight:700;border:none;cursor:pointer;transition:.15s;white-space:nowrap}
+        .match-cbtn-pending{background:var(--orange);color:#000}
+        .match-cbtn-pending:hover{background:#fbbf24}
+        .match-cbtn-done{background:var(--green-bg);color:var(--green);cursor:default;border:1px solid rgba(34,197,94,.2)}
+        .match-cbtn-missed{background:var(--red-bg);color:var(--red);cursor:pointer;border:1px solid rgba(239,68,68,.2)}
+        .match-cbtn-missed:hover{background:rgba(239,68,68,.2)}
+        .match-history{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
+        .match-hist-pill{font-size:9px;padding:2px 6px;border-radius:4px;background:var(--s3);color:var(--t3)}
+        .match-hist-pill.done{background:var(--green-bg);color:var(--green)}
+        .match-empty{text-align:center;padding:40px;color:var(--t3)}
+        .match-empty-icon{font-size:50px;margin-bottom:8px}
+        @media(max-width:768px){
+            .match-parties{flex-direction:column}
+            .match-confirm-row{flex-direction:column}
+            .match-summary{flex-direction:column}
+        }
+
         /* ===== BUTTONS ===== */
         .btn{padding:7px 14px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s}
         .btn-g{background:var(--green);color:#000}
@@ -173,6 +234,42 @@
             .ft-iframe-wrap{min-height:400px}
             .ft-iframe-wrap iframe{min-height:400px}
         }
+
+        /* ===== PLAYGROUND ===== */
+        .pg-layout{display:flex;gap:10px;height:calc(100vh - 220px);margin-top:10px}
+        .pg-col{flex:1;display:flex;flex-direction:column;background:var(--s1);border:1px solid var(--b1);border-radius:10px;overflow:hidden;min-width:0}
+        .pg-col-header{padding:10px 14px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between}
+        .pg-col-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+        .pg-chat{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
+        .pg-msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:12px;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}
+        .pg-msg.user{align-self:flex-end;background:var(--green);color:#000;border-bottom-right-radius:2px;font-weight:500}
+        .pg-msg.bot{align-self:flex-start;background:var(--s2);color:var(--t1);border:1px solid var(--b1);border-bottom-left-radius:2px}
+        .pg-msg.system{align-self:center;background:var(--s3);color:var(--t3);font-size:10px;border-radius:6px;max-width:100%}
+        .pg-input{padding:8px;border-top:1px solid var(--b1);display:flex;gap:6px}
+        .pg-input input{flex:1;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--t1);font-family:inherit;font-size:12px}
+        .pg-input input:focus{outline:none;border-color:var(--green)}
+        .pg-center{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px}
+        .pg-action{padding:6px 10px;border-radius:6px;font-size:10px;line-height:1.3;border-left:3px solid var(--b2)}
+        .pg-action.trigger{border-color:var(--orange);background:var(--orange-bg)}
+        .pg-action.msg-in{border-color:var(--blue);background:var(--blue-bg)}
+        .pg-action.msg-out{border-color:var(--green);background:var(--green-bg)}
+        .pg-action.notification{border-color:var(--purple);background:var(--purple-bg)}
+        .pg-action.pipeline{border-color:var(--cyan);background:var(--cyan-bg)}
+        .pg-action.error{border-color:var(--red);background:var(--red-bg)}
+        .pg-action.system{border-color:var(--t3);background:var(--s3)}
+        .pg-setup{padding:12px;background:var(--s1);border:1px solid var(--b1);border-radius:10px}
+        .pg-setup-row{display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center}
+        .pg-setup-row:last-child{margin-bottom:0}
+        .pg-setup-label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--t3);min-width:55px}
+        .pg-setup input{flex:1;padding:5px 8px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;color:var(--t1);font-size:11px;min-width:80px}
+        .pg-setup input:focus{outline:none;border-color:var(--green)}
+        .pg-train{padding:10px 12px;background:var(--s1);border:1px solid var(--b1);border-radius:10px;margin-top:10px}
+        .pg-train-title{font-size:11px;font-weight:700;color:var(--orange);margin-bottom:6px}
+        .pg-train-row{display:flex;gap:6px;align-items:center}
+        .pg-train-input{flex:1;padding:8px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--t1);font-family:inherit;font-size:11px}
+        .pg-train-input:focus{outline:none;border-color:var(--orange)}
+        .pg-typing{font-size:10px;color:var(--t3);padding:4px 10px;animation:blink 1s infinite}
+        @media(max-width:768px){.pg-layout{flex-direction:column;height:auto}.pg-col{min-height:300px}}
     </style>
 </head>
 <body>
@@ -194,8 +291,10 @@
     <div class="nav-item on" data-p="pipeline">Pipeline<span class="badge" id="bPipe">0</span></div>
     <div class="nav-item" data-p="citasegura">Cita Segura<span class="badge" id="bCitaSeg">0</span></div>
     <div class="nav-item" data-p="fyratrack">📡 FyraTrack<span class="badge" id="bFyra">0</span></div>
+    <div class="nav-item" data-p="match">🤝 Match<span class="badge" id="bMatch">0</span></div>
     <div class="nav-item" data-p="boss">Boss Mode</div>
     <div class="nav-item" data-p="log">Actividad</div>
+    <div class="nav-item" data-p="playground">Playground</div>
 </div>
 
 <!-- ===== PIPELINE ===== -->
@@ -249,6 +348,80 @@
 <div class="page" id="p-log">
     <div id="logView"></div>
     <div class="empty" id="emptyLog" style="display:none"><div class="empty-i">📋</div><div class="empty-t">Sin actividad reciente</div></div>
+</div>
+
+<!-- ===== MATCH RECONFIRMACIÓN ===== -->
+<div class="page" id="p-match">
+    <div class="match-dash" id="matchView"></div>
+    <div class="match-empty" id="emptyMatch" style="display:none">
+        <div class="match-empty-icon">🤝</div>
+        <div>No hay citas pendientes de reconfirmación</div>
+    </div>
+</div>
+
+<!-- ===== PLAYGROUND ===== -->
+<div class="page" id="p-playground">
+    <div class="pg-setup">
+        <div class="pg-setup-row">
+            <span class="pg-setup-label">Auto</span>
+            <input id="pgAuto" placeholder="Ej: Chirey Omoda 5 2024" value="Chirey Omoda 5 2024">
+            <span class="pg-setup-label">Precio</span>
+            <input id="pgPrecio" placeholder="380000" value="380000" style="max-width:100px">
+            <span class="pg-setup-label">Ubicacion</span>
+            <input id="pgUbicacion" placeholder="Dirección vendedor" value="San Jeronimo, Monterrey">
+        </div>
+        <div class="pg-setup-row">
+            <span class="pg-setup-label">Vendedor</span>
+            <input id="pgVendedor" placeholder="Nombre" value="Carlos">
+            <span class="pg-setup-label">Tel Vend</span>
+            <input id="pgVendedorTel" placeholder="5218112345678" value="5218112345678" style="max-width:130px">
+            <button class="btn btn-g" onclick="pgStart()">Iniciar sesion</button>
+            <button class="btn btn-r" onclick="pgReset()">Reset</button>
+        </div>
+    </div>
+    <div class="pg-layout">
+        <div class="pg-col">
+            <div class="pg-col-header">
+                <span class="pg-col-title" style="color:var(--green)">Comprador &harr; Seb</span>
+                <span style="font-size:10px;color:var(--t3)">Tu eres el comprador</span>
+            </div>
+            <div class="pg-chat" id="pgChatBuyer"><div style="text-align:center;padding:40px;color:var(--t3);font-size:12px">Configura y haz click en Iniciar</div></div>
+            <div class="pg-input">
+                <input id="pgInputBuyer" placeholder="Escribe como comprador..." onkeydown="if(event.key==='Enter')pgSendBuyer()" disabled>
+                <button class="btn btn-g" onclick="pgSendBuyer()">Enviar</button>
+            </div>
+        </div>
+        <div class="pg-col" style="max-width:300px;min-width:220px">
+            <div class="pg-col-header">
+                <span class="pg-col-title" style="color:var(--orange)">Canal de Agentes</span>
+            </div>
+            <div class="pg-center" id="pgCenter"><div style="text-align:center;padding:40px;color:var(--t3);font-size:11px">Esperando inicio...</div></div>
+        </div>
+        <div class="pg-col">
+            <div class="pg-col-header">
+                <span class="pg-col-title" style="color:var(--purple)">Vendedor &harr; Ignacio</span>
+                <span style="font-size:10px;color:var(--t3)">Tu eres el vendedor</span>
+            </div>
+            <div class="pg-chat" id="pgChatSeller"><div style="text-align:center;padding:40px;color:var(--t3);font-size:12px">Esperando inicio...</div></div>
+            <div class="pg-input">
+                <input id="pgInputSeller" placeholder="Escribe como vendedor..." onkeydown="if(event.key==='Enter')pgSendSeller()" disabled>
+                <button class="btn btn-x" style="border-color:var(--purple);color:var(--purple)" onclick="pgSendSeller()">Enviar</button>
+            </div>
+        </div>
+    </div>
+    <div class="pg-train">
+        <div class="pg-train-title">Entrenamiento de Agentes</div>
+        <div class="pg-train-row">
+            <select id="pgTrainTarget" style="padding:6px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;color:var(--t1);font-size:11px">
+                <option value="seb">Seb</option>
+                <option value="ignacio">Ignacio</option>
+                <option value="ambos">Ambos</option>
+            </select>
+            <input class="pg-train-input" id="pgTrainInput" placeholder="Instruccion de entrenamiento... Ej: 'Cuando pregunten por garantia, diles que damos 6 meses'" onkeydown="if(event.key==='Enter')pgTrain()">
+            <button class="btn btn-o" onclick="pgTrain()">Entrenar</button>
+        </div>
+        <div id="pgTrainStatus" style="font-size:10px;color:var(--t3);margin-top:4px"></div>
+    </div>
 </div>
 
 <!-- ===== DETAIL MODAL ===== -->
@@ -337,6 +510,214 @@ async function te(sql) {
     });
 }
 
+// ===== MATCH RECONFIRMACIÓN SYSTEM =====
+const MATCH_CPS = [
+    { id:'match_inicial', label:'Match',   icon:'\u{1F91D}', desc:'Primera confirmación' },
+    { id:'reconfirmacion',label:'Reconf.', icon:'\u{1F4CB}', desc:'2-3 días antes' },
+    { id:'vispera',       label:'Víspera', icon:'\u26A1',    desc:'Día anterior' },
+    { id:'dia_cita',      label:'Día D',   icon:'\u{1F305}', desc:'Mismo día de cita' },
+    { id:'navegacion',    label:'Final',   icon:'\u{1F680}', desc:'Inicia navegación' }
+];
+var matchConfs = [];
+
+async function initMatchTable() {
+    await te("CREATE TABLE IF NOT EXISTS match_reconfirmaciones (id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL, checkpoint TEXT NOT NULL, confirmado_por TEXT NOT NULL, confirmado_at INTEGER NOT NULL)");
+    try { await te("CREATE UNIQUE INDEX IF NOT EXISTS idx_match_uniq ON match_reconfirmaciones(deal_id, checkpoint, confirmado_por)"); } catch(e) {}
+}
+
+function matchActiveCP(citaFecha) {
+    if (!citaFecha) return 'match_inicial';
+    try {
+        var c = new Date(citaFecha), n = new Date();
+        var cd = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+        var td = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+        var diff = Math.round((cd - td) / 86400000);
+        if (diff > 3) return 'match_inicial';
+        if (diff > 1) return 'reconfirmacion';
+        if (diff === 1) return 'vispera';
+        if (diff === 0) return 'dia_cita';
+        return 'navegacion';
+    } catch(e) { return 'match_inicial'; }
+}
+
+function matchCPStatus(dealId, cpId, activeId) {
+    var c = matchConfs.filter(function(x) { return String(x.deal_id) === String(dealId) && x.checkpoint === cpId; });
+    var seb = c.some(function(x) { return x.confirmado_por === 'seb'; });
+    var ign = c.some(function(x) { return x.confirmado_por === 'ignacio'; });
+    var ci = MATCH_CPS.findIndex(function(x) { return x.id === cpId; });
+    var ai = MATCH_CPS.findIndex(function(x) { return x.id === activeId; });
+    if (seb && ign) return 'done';
+    if (ci < ai) return 'missed';
+    if (ci === ai) return (seb || ign) ? 'partial' : 'active';
+    return 'upcoming';
+}
+
+function tAgo(ts) {
+    if (!ts) return '';
+    var d = Date.now() - Number(ts), m = Math.floor(d / 60000);
+    if (m < 1) return 'ahora';
+    if (m < 60) return m + 'min';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + 'h';
+    return Math.floor(h / 24) + 'd';
+}
+
+async function confirmMatch(dealId, cp, role) {
+    await te("INSERT OR IGNORE INTO match_reconfirmaciones (deal_id, checkpoint, confirmado_por, confirmado_at) VALUES (" + dealId + ", '" + cp + "', '" + role + "', " + Date.now() + ")");
+    var cpObj = MATCH_CPS.find(function(x) { return x.id === cp; });
+    toast((role === 'seb' ? 'Seb' : 'Ignacio') + ' confirmo ' + (cpObj ? cpObj.icon + ' ' + cpObj.label : cp) + ' \u2713');
+    matchConfs = await tq("SELECT * FROM match_reconfirmaciones ORDER BY confirmado_at DESC");
+    renderMatch();
+}
+
+function renderMatch() {
+    var md = deals.filter(function(d) {
+        return d.estado && ['cita_agendada','dia_cita','en_camino','ya_en_cita'].indexOf(d.estado) >= 0;
+    });
+
+    if (!md.length) {
+        el('matchView').innerHTML = '';
+        el('emptyMatch').style.display = 'block';
+        el('bMatch').textContent = '0';
+        return;
+    }
+    el('emptyMatch').style.display = 'none';
+
+    // Stats
+    var pending = 0, complete = 0, missed = 0;
+    md.forEach(function(d) {
+        var acp = matchActiveCP(d.cita_fecha);
+        var hasMissed = false, allOk = true;
+        MATCH_CPS.forEach(function(cp) {
+            var s = matchCPStatus(d.id, cp.id, acp);
+            if (s === 'missed') hasMissed = true;
+            if (s === 'active' || s === 'partial') allOk = false;
+        });
+        if (hasMissed) missed++;
+        else if (allOk) complete++;
+        else pending++;
+    });
+    el('bMatch').textContent = (pending + missed) || md.length;
+
+    md.sort(function(a, b) {
+        var da = a.cita_fecha ? new Date(a.cita_fecha).getTime() : Infinity;
+        var db = b.cita_fecha ? new Date(b.cita_fecha).getTime() : Infinity;
+        return da - db;
+    });
+
+    var h = '<div class="match-header"><h2>\u{1F91D} Sistema de <em>Reconfirmacion</em></h2>' +
+        '<span style="font-size:11px;color:var(--t3)">Seb \u2192 Comprador &bull; Ignacio \u2192 Vendedor</span></div>' +
+        '<div class="match-summary">' +
+            '<div class="match-stat"><div class="match-stat-num" style="color:var(--blue)">' + md.length + '</div><div class="match-stat-label">Citas</div></div>' +
+            '<div class="match-stat"><div class="match-stat-num" style="color:var(--green)">' + complete + '</div><div class="match-stat-label">Match OK</div></div>' +
+            '<div class="match-stat"><div class="match-stat-num" style="color:var(--orange)">' + pending + '</div><div class="match-stat-label">Pendientes</div></div>' +
+            (missed ? '<div class="match-stat"><div class="match-stat-num" style="color:var(--red)">' + missed + '</div><div class="match-stat-label">Con fallas</div></div>' : '') +
+        '</div>';
+
+    h += md.map(renderMatchCard).join('');
+    el('matchView').innerHTML = h;
+}
+
+function renderMatchCard(d) {
+    var nombre = d.nombre || 'Sin nombre';
+    var firstName = nombre.split(' ')[0];
+    var acp = matchActiveCP(d.cita_fecha);
+    var cd = countdown(d.cita_fecha);
+    var urgent = matchCPStatus(d.id, acp, acp) !== 'done';
+
+    var fechaStr = '';
+    if (d.cita_fecha) {
+        try {
+            var fd = new Date(d.cita_fecha);
+            fechaStr = fd.toLocaleDateString('es-MX', { weekday:'short', day:'numeric', month:'short' }) + ' ' +
+                       fd.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+        } catch(e) { fechaStr = d.cita_fecha; }
+    }
+
+    var cdCol = cd.cls === 'soon' ? 'var(--orange)' : cd.cls === 'now' ? 'var(--green)' : cd.cls === 'past' ? 'var(--red)' : 'var(--t3)';
+    var cdBg  = cd.cls === 'soon' ? 'var(--orange-bg)' : cd.cls === 'now' ? 'var(--green-bg)' : cd.cls === 'past' ? 'var(--red-bg)' : 'var(--s3)';
+
+    // Timeline
+    var tl = '<div class="match-timeline"><div class="match-timeline-line"></div>';
+    MATCH_CPS.forEach(function(cp) {
+        var st = matchCPStatus(d.id, cp.id, acp);
+        tl += '<div class="match-cp ' + st + '"><div class="match-cp-dot">' + cp.icon + '</div><div class="match-cp-label">' + cp.label + '</div></div>';
+    });
+    tl += '</div>';
+
+    // Active checkpoint confirm section
+    var acpObj = MATCH_CPS.find(function(x) { return x.id === acp; });
+    var confs = matchConfs.filter(function(x) { return String(x.deal_id) === String(d.id) && x.checkpoint === acp; });
+    var sebConf = confs.find(function(x) { return x.confirmado_por === 'seb'; });
+    var ignConf = confs.find(function(x) { return x.confirmado_por === 'ignacio'; });
+
+    var activeH = '<div class="match-active-section">' +
+        '<div class="match-active-title"><span class="icon">' + (acpObj ? acpObj.icon : '') + '</span> Checkpoint activo: <strong>' + (acpObj ? acpObj.label : '') + '</strong>' +
+        (acpObj ? ' <span style="font-weight:400;color:var(--t3);font-size:10px">\u2014 ' + acpObj.desc + '</span>' : '') + '</div>' +
+        '<div class="match-confirm-row">' +
+            '<div class="match-confirm-item">' +
+                '<div class="match-confirm-info"><span class="match-confirm-role" style="color:var(--blue)">SEB</span><span class="match-confirm-target">\u2192 ' + firstName + ' (comprador)</span></div>' +
+                (sebConf ?
+                    '<span class="match-cbtn match-cbtn-done">\u2713 hace ' + tAgo(sebConf.confirmado_at) + '</span>' :
+                    '<button class="match-cbtn match-cbtn-pending" onclick="confirmMatch(' + d.id + ',\'' + acp + '\',\'seb\')">Confirmar \u25B6</button>') +
+            '</div>' +
+            '<div class="match-confirm-item">' +
+                '<div class="match-confirm-info"><span class="match-confirm-role" style="color:var(--purple)">IGNACIO</span><span class="match-confirm-target">\u2192 Vendedor</span></div>' +
+                (ignConf ?
+                    '<span class="match-cbtn match-cbtn-done">\u2713 hace ' + tAgo(ignConf.confirmado_at) + '</span>' :
+                    '<button class="match-cbtn match-cbtn-pending" onclick="confirmMatch(' + d.id + ',\'' + acp + '\',\'ignacio\')">Confirmar \u25B6</button>') +
+            '</div>' +
+        '</div>';
+
+    // Missed checkpoints recovery
+    var missedHTML = '';
+    MATCH_CPS.forEach(function(cp) {
+        if (matchCPStatus(d.id, cp.id, acp) === 'missed') {
+            var mc = matchConfs.filter(function(x) { return String(x.deal_id) === String(d.id) && x.checkpoint === cp.id; });
+            var ms = !mc.some(function(x) { return x.confirmado_por === 'seb'; });
+            var mi = !mc.some(function(x) { return x.confirmado_por === 'ignacio'; });
+            var who = [];
+            if (ms) who.push('Seb');
+            if (mi) who.push('Ignacio');
+            missedHTML += '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--red-bg);border-radius:4px;margin-top:4px;font-size:10px;color:var(--red)">' +
+                '<span>' + cp.icon + ' ' + cp.label + ' \u2014 falto: ' + who.join(', ') + '</span>' +
+                '<span style="display:flex;gap:3px">' +
+                    (ms ? '<button class="match-cbtn match-cbtn-missed" style="font-size:9px;padding:2px 6px" onclick="confirmMatch(' + d.id + ',\'' + cp.id + '\',\'seb\')">Seb \u2713</button>' : '') +
+                    (mi ? '<button class="match-cbtn match-cbtn-missed" style="font-size:9px;padding:2px 6px" onclick="confirmMatch(' + d.id + ',\'' + cp.id + '\',\'ignacio\')">Ignacio \u2713</button>' : '') +
+                '</span></div>';
+        }
+    });
+    if (missedHTML) {
+        activeH += '<div style="margin-top:8px"><div style="font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:2px">\u26A0\uFE0F Checkpoints sin confirmar</div>' + missedHTML + '</div>';
+    }
+
+    // History pills
+    var allConfs = matchConfs.filter(function(x) { return String(x.deal_id) === String(d.id); });
+    if (allConfs.length) {
+        activeH += '<div class="match-history">' + allConfs.map(function(c) {
+            var cpO = MATCH_CPS.find(function(x) { return x.id === c.checkpoint; });
+            return '<span class="match-hist-pill done">' + (cpO ? cpO.icon : '') + ' ' + c.confirmado_por + ' \u2713 ' + tAgo(c.confirmado_at) + '</span>';
+        }).join('') + '</div>';
+    }
+
+    activeH += '</div>';
+
+    return '<div class="match-card' + (urgent ? ' urgent' : '') + '">' +
+        '<div class="match-card-head">' +
+            '<div class="match-card-info"><span class="match-card-name">' + nombre + '</span><span class="match-card-auto">' + truncate(d.interes || '', 40) + '</span></div>' +
+            '<span class="match-card-countdown" style="color:' + cdCol + ';background:' + cdBg + '">' + cd.txt + '</span>' +
+        '</div>' +
+        '<div class="match-card-body">' +
+            '<div class="match-parties">' +
+                '<div class="match-party"><div class="match-party-label" style="color:var(--blue)">\u{1F9D1} Comprador</div><div class="match-party-name">' + nombre + '</div><div class="match-party-tel">' + (d.telefono || '') + '</div><div class="match-party-agent">Confirma: <strong style="color:var(--blue)">Seb</strong></div></div>' +
+                '<div class="match-party"><div class="match-party-label" style="color:var(--purple)">\u{1F3EA} Vendedor</div><div class="match-party-name">' + truncate(d.cita_lugar || 'Vendedor', 30) + '</div><div class="match-party-tel">' + (d.vendedor_telefono || '') + '</div><div class="match-party-agent">Confirma: <strong style="color:var(--purple)">Ignacio</strong></div></div>' +
+            '</div>' +
+            (fechaStr ? '<div style="text-align:center;font-size:11px;color:var(--t2);margin-bottom:12px">\u{1F4C5} ' + fechaStr + (d.cita_lugar ? ' \u2022 \u{1F4CD} ' + truncate(d.cita_lugar, 40) : '') + '</div>' : '') +
+            tl + activeH +
+        '</div>' +
+    '</div>';
+}
+
 // ===== LOAD =====
 async function load() {
     // Status
@@ -393,6 +774,10 @@ async function load() {
     } else {
         el('instrList').innerHTML = '<em>Ninguna instruccion activa</em>';
     }
+
+    // Match Reconfirmaciones
+    matchConfs = await tq("SELECT * FROM match_reconfirmaciones ORDER BY confirmado_at DESC");
+    renderMatch();
 }
 
 // ===== PIPELINE =====
@@ -891,6 +1276,278 @@ function countdown(f) {
 }
 function toast(msg) { var t = el('toast'); t.textContent = msg; t.classList.add('on'); setTimeout(function() { t.classList.remove('on'); }, 2500); }
 
+// ===== PLAYGROUND =====
+var pgActive = false;
+var pgBuyerMsgs = [];
+var pgSellerMsgs = [];
+var pgActions = [];
+var pgContext = {};
+
+function pgStart() {
+    pgActive = true;
+    pgBuyerMsgs = [];
+    pgSellerMsgs = [];
+    pgActions = [];
+    pgContext = {
+        auto: el('pgAuto').value.trim() || 'Auto de prueba',
+        precio: el('pgPrecio').value.trim() || '300000',
+        vendedor: el('pgVendedor').value.trim() || 'Vendedor',
+        vendedorTel: el('pgVendedorTel').value.trim() || '',
+        ubicacion: el('pgUbicacion').value.trim() || 'Plaza Tribecca'
+    };
+
+    el('pgInputBuyer').disabled = false;
+    el('pgInputSeller').disabled = false;
+
+    pgAddAction('system', 'Sesion playground iniciada');
+    pgAddAction('pipeline', 'Auto: ' + pgContext.auto + ' | $' + parseInt(pgContext.precio).toLocaleString());
+    pgAddAction('system', 'Ubicacion: ' + pgContext.ubicacion + ' | Vendedor: ' + pgContext.vendedor);
+
+    pgBuyerMsgs.push({ role: 'system', content: 'Sesion iniciada — Escribe como comprador' });
+    pgSellerMsgs.push({ role: 'system', content: 'Sesion iniciada — Escribe como vendedor' });
+
+    renderPgBuyer();
+    renderPgSeller();
+    renderPgCenter();
+    toast('Playground activo');
+    el('pgInputBuyer').focus();
+}
+
+function pgReset() {
+    pgActive = false;
+    pgBuyerMsgs = [];
+    pgSellerMsgs = [];
+    pgActions = [];
+    el('pgInputBuyer').disabled = true;
+    el('pgInputSeller').disabled = true;
+    el('pgChatBuyer').innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:12px">Configura y haz click en Iniciar</div>';
+    el('pgChatSeller').innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:12px">Esperando inicio...</div>';
+    el('pgCenter').innerHTML = '<div style="text-align:center;padding:40px;color:var(--t3);font-size:11px">Esperando inicio...</div>';
+    toast('Playground reseteado');
+}
+
+function pgDetectTriggers(msg) {
+    var lower = msg.toLowerCase();
+    var triggers = [];
+    if (lower.match(/cotiz|precio|cuanto|enganche|mensual|credito|financ|plazo/)) triggers.push('COTIZACION');
+    if (lower.match(/donde|ubicaci|direcci|llegar|punto|mapa|lugar/)) triggers.push('UBICACION');
+    if (lower.match(/cita|mañana|pasado|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|hora|verlo|ir a ver|quiero ver|cuando puedo|agendar|agenda/)) triggers.push('CITA');
+    if (lower.match(/informaci|detalles|especificaciones|modelo|año|motor|kilometr|fotos|caracterist/)) triggers.push('INFO');
+    if (lower.match(/me interesa|me gusta|disponible|lo quiero|me encanta|perfecto/)) triggers.push('INTERES ALTO');
+    if (lower.match(/luego|despues|pensarlo|ahorita no|lo pienso|ya te aviso|no gracias/)) triggers.push('POSIBLE ABANDONO');
+    return triggers;
+}
+
+function pgAddAction(type, text) {
+    var now = new Date();
+    var timeStr = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    pgActions.push({ type: type, text: text, time: timeStr });
+}
+
+function renderPgBuyer() {
+    var chat = el('pgChatBuyer');
+    chat.innerHTML = pgBuyerMsgs.map(function(m) {
+        if (m.role === 'system') return '<div class="pg-msg system">' + m.content + '</div>';
+        if (m.role === 'user') return '<div class="pg-msg user">' + m.content + '</div>';
+        return '<div class="pg-msg bot"><span style="font-size:9px;font-weight:700;color:var(--green);display:block;margin-bottom:2px">SEB</span>' + m.content + '</div>';
+    }).join('');
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function renderPgSeller() {
+    var chat = el('pgChatSeller');
+    chat.innerHTML = pgSellerMsgs.map(function(m) {
+        if (m.role === 'system') return '<div class="pg-msg system">' + m.content + '</div>';
+        if (m.role === 'user') return '<div class="pg-msg user">' + m.content + '</div>';
+        return '<div class="pg-msg bot"><span style="font-size:9px;font-weight:700;color:var(--purple);display:block;margin-bottom:2px">IGNACIO</span>' + m.content + '</div>';
+    }).join('');
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function renderPgCenter() {
+    var center = el('pgCenter');
+    center.innerHTML = pgActions.map(function(a) {
+        return '<div class="pg-action ' + a.type + '"><span style="color:var(--t3);margin-right:4px;font-size:9px">' + a.time + '</span> ' + a.text + '</div>';
+    }).join('');
+    center.scrollTop = center.scrollHeight;
+}
+
+async function pgSendBuyer() {
+    if (!pgActive) return toast('Inicia una sesion primero');
+    var input = el('pgInputBuyer');
+    var msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    pgBuyerMsgs.push({ role: 'user', content: msg });
+    renderPgBuyer();
+
+    pgAddAction('msg-in', 'Comprador: "' + truncate(msg, 60) + '"');
+
+    var triggers = pgDetectTriggers(msg);
+    triggers.forEach(function(t) { pgAddAction('trigger', 'Trigger: ' + t); });
+    renderPgCenter();
+
+    // Typing indicator
+    var typingEl = document.createElement('div');
+    typingEl.className = 'pg-typing';
+    typingEl.textContent = 'Seb escribiendo...';
+    el('pgChatBuyer').appendChild(typingEl);
+    el('pgChatBuyer').scrollTop = el('pgChatBuyer').scrollHeight;
+
+    try {
+        var history = pgBuyerMsgs.filter(function(m) { return m.role !== 'system'; });
+        var res = await fetch('/api/playground', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
+            body: JSON.stringify({
+                role: 'comprador',
+                message: msg,
+                history: history,
+                context: pgContext,
+                triggers: triggers
+            })
+        });
+        var data = await res.json();
+
+        if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+
+        if (data.ok && data.response) {
+            pgBuyerMsgs.push({ role: 'assistant', content: data.response });
+            pgAddAction('msg-out', 'Seb: "' + truncate(data.response, 80) + '"');
+
+            if (data.actions) {
+                data.actions.forEach(function(a) { pgAddAction(a.type || 'system', a.text); });
+            }
+
+            if (data.cita_detected) {
+                pgAutoIgnacio(data.cita_detected);
+            }
+
+            if (data.fase_detected) {
+                pgAddAction('pipeline', 'Pipeline: nuevo -> ' + data.fase_detected);
+            }
+        } else {
+            pgBuyerMsgs.push({ role: 'system', content: 'Error: ' + (data.error || 'sin respuesta') });
+            pgAddAction('error', 'Error Seb: ' + (data.error || 'sin respuesta'));
+        }
+    } catch(e) {
+        if (typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+        pgBuyerMsgs.push({ role: 'system', content: 'Error de conexion: ' + e.message });
+        pgAddAction('error', e.message);
+    }
+
+    renderPgBuyer();
+    renderPgCenter();
+    el('pgInputBuyer').focus();
+}
+
+async function pgSendSeller() {
+    if (!pgActive) return toast('Inicia una sesion primero');
+    var input = el('pgInputSeller');
+    var msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    pgSellerMsgs.push({ role: 'user', content: msg });
+    renderPgSeller();
+
+    pgAddAction('msg-in', 'Vendedor: "' + truncate(msg, 60) + '"');
+
+    var response = pgIgnacioRespond(msg);
+    setTimeout(function() {
+        pgSellerMsgs.push({ role: 'assistant', content: response });
+        pgAddAction('msg-out', 'Ignacio: "' + truncate(response, 80) + '"');
+        renderPgSeller();
+        renderPgCenter();
+    }, 300);
+}
+
+function pgAutoIgnacio(citaData) {
+    var notifMsg = 'Hola ' + pgContext.vendedor + '! Se ha agendado una cita para ver tu ' + pgContext.auto + '.';
+    if (citaData.fecha) notifMsg += ' Fecha: ' + citaData.fecha + '.';
+    if (citaData.hora) notifMsg += ' Hora: ' + citaData.hora + '.';
+    notifMsg += '\nEl comprador llegara a ' + pgContext.ubicacion + '. Te mantenemos informado.';
+
+    pgSellerMsgs.push({ role: 'assistant', content: notifMsg });
+    pgAddAction('notification', 'Ignacio -> Vendedor: Notificacion de cita');
+    pgAddAction('notification', 'FyraTrack: Link generado para comprador y vendedor');
+    pgAddAction('pipeline', 'Deal: cita_agendada');
+
+    // Simulate instant FyraTrack + follow-ups (no time mode)
+    setTimeout(function() {
+        pgAddAction('notification', 'Ignacio -> Vendedor: "Tu comprador esta en camino"');
+        pgSellerMsgs.push({ role: 'assistant', content: pgContext.vendedor + ', tu comprador ya esta en camino! Abre el link de FyraTrack para verlo en tiempo real.' });
+        pgAddAction('pipeline', 'Deal: cita_agendada -> en_camino');
+        renderPgSeller();
+        renderPgCenter();
+
+        setTimeout(function() {
+            pgAddAction('notification', 'FyraTrack: Comprador a 2km, ETA 5 min');
+            pgAddAction('notification', 'Ignacio -> Vendedor: "El comprador esta a 5 minutos"');
+            pgSellerMsgs.push({ role: 'assistant', content: 'El comprador esta a solo 5 minutos! Preparate.' });
+            renderPgSeller();
+            renderPgCenter();
+
+            setTimeout(function() {
+                pgAddAction('notification', 'FyraTrack: Comprador llego al punto!');
+                pgAddAction('pipeline', 'Deal: en_camino -> ya_en_cita');
+                pgSellerMsgs.push({ role: 'assistant', content: 'El comprador ya llego a ' + pgContext.ubicacion + '! Encuentrense.' });
+                renderPgSeller();
+                renderPgCenter();
+            }, 800);
+        }, 600);
+    }, 400);
+}
+
+function pgIgnacioRespond(msg) {
+    var lower = msg.toLowerCase();
+    if (lower.match(/hola|buenas|buenos|hey/)) {
+        return 'Hola ' + pgContext.vendedor + '! Soy Ignacio, tu asistente de FyraDrive. Estoy coordinando las visitas de compradores interesados en tu ' + pgContext.auto + '. Todo bien?';
+    }
+    if (lower.match(/cita|cuando|horario|hora|fecha/)) {
+        return 'La proxima cita para tu ' + pgContext.auto + ' sera confirmada pronto. Te notifico en cuanto tengamos fecha y hora exacta del comprador.';
+    }
+    if (lower.match(/comprador|quien|interesado|alguien/)) {
+        return 'Tenemos un comprador interesado en tu ' + pgContext.auto + '. Seb esta en contacto con el para coordinar la visita. Te aviso cuando se confirme.';
+    }
+    if (lower.match(/precio|oferta|negoci|cuanto/)) {
+        return 'El precio publicado es $' + parseInt(pgContext.precio).toLocaleString() + '. Si el comprador tiene una contraoferta, te la hago llegar para que decidas.';
+    }
+    if (lower.match(/ubicaci|donde|lugar|punto/)) {
+        return 'La cita esta programada en ' + pgContext.ubicacion + '. Si necesitas cambiar el punto de encuentro, avisame.';
+    }
+    if (lower.match(/confirma|listo|ok|si|dale|va/)) {
+        pgAddAction('notification', 'Ignacio: Vendedor confirmo disponibilidad');
+        return 'Perfecto! Queda confirmado. El comprador sera notificado. Te aviso cuando este en camino.';
+    }
+    if (lower.match(/cancel|no puedo|cambiar|reagend/)) {
+        pgAddAction('notification', 'Ignacio: Vendedor solicita reagendar');
+        return 'Entendido. Procedo a reagendar. Que dia y hora te funciona mejor?';
+    }
+    return 'Entendido ' + pgContext.vendedor + '. Estoy coordinando con el comprador. Cualquier novedad te aviso.';
+}
+
+async function pgTrain() {
+    var input = el('pgTrainInput');
+    var msg = input.value.trim();
+    if (!msg) return;
+    var target = el('pgTrainTarget').value;
+
+    var cur = await tq("SELECT value FROM claw_config WHERE key = 'boss_instructions'");
+    var existing = (cur.length && cur[0].value) ? cur[0].value : '';
+    var ts = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    var updated = existing + '\n[' + ts + ' TRAIN:' + target.toUpperCase() + '] ' + msg;
+    await te("INSERT OR REPLACE INTO claw_config (key, value, updated_at) VALUES ('boss_instructions', '" + updated.replace(/'/g, "''") + "', unixepoch())");
+
+    input.value = '';
+    el('pgTrainStatus').textContent = 'Instruccion guardada para ' + target.toUpperCase() + ' — Aplicada en tiempo real';
+    pgAddAction('trigger', 'Training [' + target.toUpperCase() + ']: ' + truncate(msg, 60));
+    renderPgCenter();
+    toast('Entrenamiento aplicado');
+    setTimeout(function() { el('pgTrainStatus').textContent = ''; }, 3000);
+}
+
 // ===== NAV =====
 document.querySelectorAll('.nav-item').forEach(function(n) {
     n.addEventListener('click', function() {
@@ -902,9 +1559,10 @@ document.querySelectorAll('.nav-item').forEach(function(n) {
 });
 
 // ===== INIT =====
-load();
+initMatchTable().then(function() { load(); });
 setInterval(load, 12000);
 setInterval(renderCitaSegura, 60000);
+setInterval(renderMatch, 60000);
 </script>
 </body>
 </html>
