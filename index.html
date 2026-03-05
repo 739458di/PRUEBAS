@@ -270,6 +270,38 @@
         .pg-train-input:focus{outline:none;border-color:var(--orange)}
         .pg-typing{font-size:10px;color:var(--t3);padding:4px 10px;animation:blink 1s infinite}
         @media(max-width:768px){.pg-layout{flex-direction:column;height:auto}.pg-col{min-height:300px}}
+        /* ===== SELLER PULSE ===== */
+        .pulse-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;padding:0 12px}
+        .pulse-header h2{font-size:16px;font-weight:900;letter-spacing:-.3px}
+        .pulse-header h2 em{font-style:normal;color:var(--orange)}
+        .pulse-summary{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;padding:0 12px}
+        .pulse-stat{padding:10px 14px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;flex:1;min-width:80px;text-align:center}
+        .pulse-stat-num{font-size:22px;font-weight:800}
+        .pulse-stat-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-top:2px}
+        .pulse-cards{padding:0 12px}
+        .pulse-card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;margin-bottom:12px;overflow:hidden}
+        .pulse-card.needs-human{border-color:var(--orange)}
+        .pulse-card.sent{opacity:.75}
+        .pulse-card-head{padding:12px 14px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+        .pulse-card-auto{font-size:14px;font-weight:800}
+        .pulse-card-vendor{font-size:11px;color:var(--t2)}
+        .pulse-card-body{padding:14px}
+        .pulse-metrics{display:flex;gap:10px;margin-bottom:12px}
+        .pulse-metric{flex:1;padding:8px;background:var(--s2);border-radius:6px;text-align:center;border:1px solid var(--b1)}
+        .pulse-metric-num{font-size:18px;font-weight:800}
+        .pulse-metric-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:600}
+        .pulse-metric input{width:60px;text-align:center;padding:4px;background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:var(--t1);font-family:inherit;font-size:14px;font-weight:800}
+        .pulse-metric input:focus{outline:none;border-color:var(--orange)}
+        .pulse-suggestion{padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;display:flex;align-items:center;gap:8px;background:rgba(255,165,0,.1);color:var(--orange)}
+        .pulse-suggestion.ok{background:rgba(0,200,100,.1);color:var(--green)}
+        .pulse-draft-ta{width:100%;padding:8px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--t1);font-family:inherit;font-size:11px;resize:vertical;min-height:60px;box-sizing:border-box}
+        .pulse-draft-ta:focus{outline:none;border-color:var(--orange)}
+        .pulse-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+        .pulse-status{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;display:inline-block}
+        .pulse-status-draft{background:var(--s3);color:var(--t3)}
+        .pulse-status-sent{background:rgba(0,200,100,.1);color:var(--green)}
+        .pulse-status-human{background:rgba(255,165,0,.1);color:var(--orange)}
+        .pulse-ref{font-size:10px;color:var(--t3);margin-top:6px}
     </style>
 </head>
 <body>
@@ -295,6 +327,7 @@
     <div class="nav-item" data-p="boss">Boss Mode</div>
     <div class="nav-item" data-p="log">Actividad</div>
     <div class="nav-item" data-p="playground">Playground</div>
+    <div class="nav-item" data-p="sellerpulse">Seller Pulse<span class="badge" id="bPulse">0</span></div>
 </div>
 
 <!-- ===== PIPELINE ===== -->
@@ -421,6 +454,23 @@
             <button class="btn btn-o" onclick="pgTrain()">Entrenar</button>
         </div>
         <div id="pgTrainStatus" style="font-size:10px;color:var(--t3);margin-top:4px"></div>
+    </div>
+</div>
+
+<!-- ===== SELLER PULSE ===== -->
+<div class="page" id="p-sellerpulse">
+    <div class="pulse-header">
+        <h2>Seller <em>Pulse</em> Semanal</h2>
+        <div style="display:flex;gap:6px">
+            <button class="btn btn-o" onclick="pulseGenerate()">Generar Feedback</button>
+            <button class="btn btn-g" onclick="pulseSendAll()">Enviar feedback semanal</button>
+        </div>
+    </div>
+    <div class="pulse-summary" id="pulseSummary"></div>
+    <div class="pulse-cards" id="pulseView"></div>
+    <div class="empty" id="emptyPulse" style="display:none">
+        <div class="empty-i">&#128202;</div>
+        <div class="empty-t">Haz click en "Generar Feedback" para calcular metricas de la semana</div>
     </div>
 </div>
 
@@ -779,6 +829,9 @@ async function load() {
     // Match Reconfirmaciones
     matchConfs = await tq("SELECT * FROM match_reconfirmaciones ORDER BY confirmado_at DESC");
     renderMatch();
+
+    // Seller Pulse
+    loadPulse();
 }
 
 // ===== PIPELINE =====
@@ -1559,8 +1612,177 @@ document.querySelectorAll('.nav-item').forEach(function(n) {
     });
 });
 
+// ===== SELLER PULSE =====
+var pulseDrafts = [];
+
+async function initPulseTable() {
+    try {
+        await te("CREATE TABLE IF NOT EXISTS seller_pulse_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, auto_id INTEGER NOT NULL, auto_nombre TEXT NOT NULL, vendedor_telefono TEXT NOT NULL, vendedor_nombre TEXT DEFAULT '', precio_actual REAL NOT NULL, week_start TEXT NOT NULL, weekly_messages_count INTEGER DEFAULT 0, weekly_appointments_count INTEGER DEFAULT 0, messages_override INTEGER DEFAULT NULL, appointments_override INTEGER DEFAULT NULL, suggested_adjustment REAL DEFAULT 0, suggested_reason TEXT DEFAULT '', mensaje_draft TEXT DEFAULT '', estado TEXT DEFAULT 'draft', admin_edited INTEGER DEFAULT 0, needs_human INTEGER DEFAULT 0, price_accepted INTEGER DEFAULT 0, new_price REAL DEFAULT NULL, created_at INTEGER NOT NULL, sent_at INTEGER DEFAULT NULL, updated_at INTEGER NOT NULL)");
+    } catch(e) {}
+    try { await te("CREATE UNIQUE INDEX IF NOT EXISTS idx_spd_auto_week ON seller_pulse_drafts(auto_id, week_start)"); } catch(e) {}
+}
+
+async function pulseGenerate() {
+    toast('Generando metricas...');
+    try {
+        var r = await fetch(CLAW + '/api/pulse/generate');
+        var d = await r.json();
+        if (d.ok) {
+            toast('Generados ' + d.generated + ' reportes (' + d.week + ')');
+            loadPulse();
+        } else {
+            toast('Error: ' + (d.error || 'desconocido'));
+        }
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function loadPulse() {
+    try {
+        var r = await fetch(CLAW + '/api/pulse/drafts');
+        var d = await r.json();
+        if (d.ok) { pulseDrafts = d.drafts || []; }
+        else { pulseDrafts = []; }
+    } catch(e) { pulseDrafts = []; }
+    el('bPulse').textContent = pulseDrafts.filter(function(d) { return d.estado === 'draft'; }).length || '';
+    renderPulse();
+}
+
+function renderPulse() {
+    if (!pulseDrafts.length) {
+        el('pulseView').innerHTML = '';
+        el('pulseSummary').innerHTML = '';
+        el('emptyPulse').style.display = 'block';
+        return;
+    }
+    el('emptyPulse').style.display = 'none';
+    var drafts = pulseDrafts.filter(function(d) { return d.estado === 'draft'; });
+    var sent = pulseDrafts.filter(function(d) { return d.estado === 'sent'; });
+    var human = pulseDrafts.filter(function(d) { return Number(d.needs_human) === 1; });
+    var accepted = pulseDrafts.filter(function(d) { return Number(d.price_accepted) === 1; });
+    el('pulseSummary').innerHTML =
+        '<div class="pulse-stat"><div class="pulse-stat-num">' + pulseDrafts.length + '</div><div class="pulse-stat-label">Total</div></div>' +
+        '<div class="pulse-stat"><div class="pulse-stat-num" style="color:var(--orange)">' + drafts.length + '</div><div class="pulse-stat-label">Pendientes</div></div>' +
+        '<div class="pulse-stat"><div class="pulse-stat-num" style="color:var(--green)">' + sent.length + '</div><div class="pulse-stat-label">Enviados</div></div>' +
+        (human.length ? '<div class="pulse-stat"><div class="pulse-stat-num" style="color:red">' + human.length + '</div><div class="pulse-stat-label">Humano</div></div>' : '') +
+        (accepted.length ? '<div class="pulse-stat"><div class="pulse-stat-num" style="color:var(--green)">' + accepted.length + '</div><div class="pulse-stat-label">Precio OK</div></div>' : '');
+    el('pulseView').innerHTML = pulseDrafts.map(renderPulseCard).join('');
+}
+
+function renderPulseCard(d) {
+    var estado = d.estado || 'draft';
+    var statusClass = estado === 'sent' ? 'pulse-status-sent' : 'pulse-status-draft';
+    var statusLabel = estado === 'sent' ? 'ENVIADO' : 'BORRADOR';
+    if (Number(d.needs_human) === 1) { statusClass = 'pulse-status-human'; statusLabel = 'REQUIERE HUMANO'; }
+    var cardClass = 'pulse-card';
+    if (Number(d.needs_human) === 1) cardClass += ' needs-human';
+    if (estado === 'sent') cardClass += ' sent';
+    var msgs = d.messages_override !== null && d.messages_override !== undefined ? Number(d.messages_override) : Number(d.weekly_messages_count || 0);
+    var citas = d.appointments_override !== null && d.appointments_override !== undefined ? Number(d.appointments_override) : Number(d.weekly_appointments_count || 0);
+    var adj = Number(d.suggested_adjustment || 0);
+    var precio = Number(d.precio_actual || 0);
+    var suggClass = adj === 0 ? 'pulse-suggestion ok' : 'pulse-suggestion';
+    var suggIcon = adj === 0 ? '&#10004;' : '&#128161;';
+    var suggText = adj === 0 ? (d.suggested_reason || 'Sin ajuste') : 'Sugerencia: -$' + parseInt(adj).toLocaleString() + ' (' + (d.suggested_reason || '') + ')';
+    if (Number(d.price_accepted) === 1 && d.new_price) {
+        suggClass = 'pulse-suggestion ok';
+        suggIcon = '&#10004;';
+        suggText = 'Precio actualizado a $' + parseInt(d.new_price).toLocaleString();
+    }
+    var editable = estado === 'draft';
+    return '<div class="' + cardClass + '">' +
+        '<div class="pulse-card-head">' +
+            '<div><span class="pulse-card-auto">' + (d.auto_nombre || 'Auto #' + d.auto_id) + '</span>' +
+            '<span style="margin-left:8px;font-size:11px;color:var(--t3)">$' + parseInt(precio).toLocaleString() + '</span></div>' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span class="pulse-card-vendor">' + (d.vendedor_nombre || '') + '</span>' +
+            '<span class="pulse-status ' + statusClass + '">' + statusLabel + '</span></div>' +
+        '</div>' +
+        '<div class="pulse-card-body">' +
+            '<div class="pulse-metrics">' +
+                '<div class="pulse-metric">' +
+                    (editable ? '<input value="' + msgs + '" onchange="pulseEditMetric(' + d.id + ',\'messages_override\',this.value)" style="color:#4a9eff">' :
+                    '<div class="pulse-metric-num" style="color:#4a9eff">' + msgs + '</div>') +
+                    '<div class="pulse-metric-label">Mensajes</div></div>' +
+                '<div class="pulse-metric">' +
+                    (editable ? '<input value="' + citas + '" onchange="pulseEditMetric(' + d.id + ',\'appointments_override\',this.value)" style="color:var(--green)">' :
+                    '<div class="pulse-metric-num" style="color:var(--green)">' + citas + '</div>') +
+                    '<div class="pulse-metric-label">Citas</div></div>' +
+                '<div class="pulse-metric">' +
+                    '<div class="pulse-metric-num" style="color:var(--orange)">-$' + parseInt(adj).toLocaleString() + '</div>' +
+                    '<div class="pulse-metric-label">Ajuste</div></div>' +
+            '</div>' +
+            '<div class="' + suggClass + '">' + suggIcon + ' ' + suggText + '</div>' +
+            (editable ? '<textarea class="pulse-draft-ta" id="pd_' + d.id + '" onchange="pulseEditDraft(' + d.id + ')">' + (d.mensaje_draft || '').replace(/</g,'&lt;') + '</textarea>' :
+            '<div style="font-size:11px;color:var(--t2);padding:8px;background:var(--s2);border-radius:6px;white-space:pre-wrap">' + (d.mensaje_draft || '').replace(/</g,'&lt;') + '</div>') +
+            '<div class="pulse-ref">Ref: P-' + d.id + '</div>' +
+            '<div class="pulse-actions">' +
+                (editable ? '<button class="btn btn-g" onclick="pulseSendOne(' + d.id + ')">Enviar</button>' : '') +
+                (Number(d.needs_human) === 1 ? '<button class="btn btn-o" onclick="pulseMarkHandled(' + d.id + ')">Atendido</button>' : '') +
+            '</div>' +
+        '</div></div>';
+}
+
+async function pulseEditMetric(pulseId, field, value) {
+    try {
+        await fetch(CLAW + '/api/pulse/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pulse_id: pulseId, field: field, value: Number(value) })
+        });
+        toast('Metrica actualizada');
+        loadPulse();
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function pulseEditDraft(pulseId) {
+    var ta = el('pd_' + pulseId);
+    if (!ta) return;
+    try {
+        await fetch(CLAW + '/api/pulse/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pulse_id: pulseId, field: 'mensaje_draft', value: ta.value })
+        });
+    } catch(e) {}
+}
+
+async function pulseSendOne(pulseId) {
+    if (!confirm('Enviar este feedback al vendedor?')) return;
+    try {
+        var r = await fetch(CLAW + '/api/pulse/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pulse_id: pulseId })
+        });
+        var d = await r.json();
+        if (d.ok) { toast('Feedback enviado'); loadPulse(); }
+        else toast('Error: ' + (d.error || 'desconocido'));
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function pulseSendAll() {
+    var pending = pulseDrafts.filter(function(d) { return d.estado === 'draft'; });
+    if (!pending.length) return toast('No hay borradores pendientes');
+    if (!confirm('Enviar ' + pending.length + ' feedbacks a vendedores?')) return;
+    try {
+        var r = await fetch(CLAW + '/api/pulse/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        var d = await r.json();
+        if (d.ok) { toast('Enviados ' + d.sent + ' feedbacks'); loadPulse(); }
+        else toast('Error: ' + (d.error || 'desconocido'));
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function pulseMarkHandled(pulseId) {
+    await fetch(CLAW + '/api/pulse/update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pulse_id: pulseId, field: 'needs_human', value: 0 })
+    });
+    toast('Marcado como atendido');
+    loadPulse();
+}
+
 // ===== INIT =====
-initMatchTable().then(function() { load(); });
+initMatchTable().then(function() { return initPulseTable(); }).then(function() { load(); });
 setInterval(load, 12000);
 setInterval(renderCitaSegura, 60000);
 setInterval(renderMatch, 60000);
