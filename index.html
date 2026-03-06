@@ -563,18 +563,18 @@ function ensureMapbox() {
     return _mapboxReady;
 }
 
-var _dailyReady = null;
-function ensureDaily() {
-    if (_dailyReady) return _dailyReady;
-    _dailyReady = new Promise(function(resolve, reject) {
-        if (window.DailyIframe) { resolve(); return; }
+var _jitsiReady = null;
+function ensureJitsi() {
+    if (_jitsiReady) return _jitsiReady;
+    _jitsiReady = new Promise(function(resolve, reject) {
+        if (window.JitsiMeetExternalAPI) { resolve(); return; }
         var s = document.createElement('script');
-        s.src = 'https://unpkg.com/@daily-co/daily-js';
+        s.src = 'https://meet.jit.si/external_api.js';
         s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
     });
-    return _dailyReady;
+    return _jitsiReady;
 }
 
 // ===== TURSO =====
@@ -1421,7 +1421,7 @@ function destroyFTWidget(id) {
 
     // Leave audio
     if (w.dailyCall) {
-        try { w.dailyCall.leave(); w.dailyCall.destroy(); } catch(e) {}
+        try { w.dailyCall.dispose(); } catch(e) {}
     }
 
     delete _ftWidgets[id];
@@ -1430,7 +1430,6 @@ function destroyFTWidget(id) {
 function toggleFTAudio(id, token) {
     var w = _ftWidgets[id];
     if (!w) {
-        // Widget may not exist yet, create minimal entry
         w = { token: token, sse: null, map: null, buyerMarker: null, destMarker: null, dailyCall: null, lastLat: null, lastLng: null };
         _ftWidgets[id] = w;
     }
@@ -1440,18 +1439,16 @@ function toggleFTAudio(id, token) {
 
     if (w.dailyCall) {
         // Already listening — disconnect
-        try { w.dailyCall.leave(); w.dailyCall.destroy(); } catch(e) {}
+        try { w.dailyCall.dispose(); } catch(e) {}
         w.dailyCall = null;
         if (btn) { btn.textContent = '🎧 Escuchar'; btn.classList.remove('active'); }
         if (status) status.textContent = '';
         return;
     }
 
-    // Start listening
     if (btn) btn.textContent = '⏳ Conectando...';
     if (status) status.textContent = 'Creando sala...';
 
-    // First, ensure/create audio room
     fetch(FYRADRIVE_BASE + '/api/fyratrack/track/' + token + '/audio-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -1463,42 +1460,58 @@ function toggleFTAudio(id, token) {
             if (status) status.textContent = 'Error: ' + (data.error || 'no room');
             return;
         }
+        if (status) status.textContent = 'Conectando audio...';
+        var roomName = data.room_url.replace('https://meet.jit.si/', '');
 
-        if (status) status.textContent = 'Cargando audio...';
-
-        // Load Daily.co and join as listener
-        ensureDaily().then(function() {
-            var call = DailyIframe.createCallObject({
-                audioSource: false,
-                videoSource: false,
+        // Load Jitsi External API
+        ensureJitsi().then(function() {
+            // Hidden container for Jitsi
+            var container = document.getElementById('ft-jitsi-' + id);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'ft-jitsi-' + id;
+                container.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
+                document.body.appendChild(container);
+            }
+            var api = new JitsiMeetExternalAPI('meet.jit.si', {
+                roomName: roomName,
+                parentNode: container,
+                width: 1,
+                height: 1,
+                userInfo: { displayName: 'CRM-Listener' },
+                configOverwrite: {
+                    startWithAudioMuted: true,
+                    startWithVideoMuted: true,
+                    prejoinPageEnabled: false,
+                    disableDeepLinking: true,
+                    startAudioOnly: true,
+                    disableVideo: true
+                },
+                interfaceConfigOverwrite: {
+                    SHOW_JITSI_WATERMARK: false,
+                    TOOLBAR_BUTTONS: [],
+                    DISABLE_JOIN_LEAVE_NOTIFICATIONS: true
+                }
             });
-            w.dailyCall = call;
-
-            call.join({ url: data.room_url, userName: 'CRM-Listener' })
-                .then(function() {
-                    if (btn) { btn.textContent = '🔊 Escuchando'; btn.classList.add('active'); }
-                    if (status) status.textContent = 'Conectado';
-                })
-                .catch(function(err) {
-                    console.error('[FT-Audio] Join error:', err);
-                    if (btn) btn.textContent = '🎧 Escuchar';
-                    if (status) status.textContent = 'Error al conectar';
-                    w.dailyCall = null;
-                });
-
-            call.on('left-meeting', function() {
+            w.dailyCall = api;
+            api.addEventListener('videoConferenceJoined', function() {
+                if (btn) { btn.textContent = '🔊 Escuchando'; btn.classList.add('active'); }
+                if (status) status.textContent = 'Conectado';
+                api.executeCommand('toggleAudio');
+            });
+            api.addEventListener('videoConferenceLeft', function() {
+                w.dailyCall = null;
                 if (btn) { btn.textContent = '🎧 Escuchar'; btn.classList.remove('active'); }
                 if (status) status.textContent = '';
-                w.dailyCall = null;
             });
         }).catch(function(err) {
-            console.error('[FT-Audio] Daily load error:', err);
+            console.error('[FT-Audio] Jitsi load error:', err);
             if (btn) btn.textContent = '🎧 Escuchar';
             if (status) status.textContent = 'Error cargando audio';
         });
     })
     .catch(function(err) {
-        console.error('[FT-Audio] Room create error:', err);
+        console.error('[FT-Audio] Room error:', err);
         if (btn) btn.textContent = '🎧 Escuchar';
         if (status) status.textContent = 'Error de conexion';
     });
