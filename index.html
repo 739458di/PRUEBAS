@@ -302,6 +302,15 @@
         .pulse-status-sent{background:rgba(0,200,100,.1);color:var(--green)}
         .pulse-status-human{background:rgba(255,165,0,.1);color:var(--orange)}
         .pulse-ref{font-size:10px;color:var(--t3);margin-top:6px}
+
+        /* ===== FYRATRACK LIVE WIDGET (in deal cards) ===== */
+        .ft-live-stats{display:flex;border-top:1px solid var(--b1);background:var(--s1)}
+        .ft-live-stat{flex:1;padding:6px 8px;text-align:center;border-right:1px solid var(--b1);display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700}
+        .ft-live-stat:last-child{border-right:none}
+        .ft-audio-bar{display:flex;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid var(--b1);background:var(--s1)}
+        .ft-audio-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:1px solid var(--b1);background:var(--s2);color:var(--t2);cursor:pointer;transition:.15s}
+        .ft-audio-btn:hover{border-color:var(--green);color:var(--t1)}
+        .ft-audio-btn.active{border-color:var(--green);background:var(--green-bg);color:var(--green)}
     </style>
 </head>
 <body>
@@ -531,6 +540,42 @@ const CS_FASES = [
 var contactos = [];
 var deals = [];
 var mensajes = [];
+
+// ===== FYRATRACK LIVE WIDGET — CDN Lazy Loaders =====
+var MAPBOX_TOKEN = ['pk.eyJ1Ijoic2ViYXN0aWFucm9tZXJvc2x6Iiwi', 'YSI6ImNtbTI5OXVrbTA0YjQycXBxNms5dnc5emIifQ.sE1ED6ymDwn7U7XPQDrz5Q'].join('');
+var FYRADRIVE_BASE = 'https://fyradrive-three.vercel.app';
+
+var _mapboxReady = null;
+function ensureMapbox() {
+    if (_mapboxReady) return _mapboxReady;
+    _mapboxReady = new Promise(function(resolve, reject) {
+        if (window.mapboxgl) { mapboxgl.accessToken = MAPBOX_TOKEN; resolve(); return; }
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css';
+        document.head.appendChild(link);
+        var s = document.createElement('script');
+        s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js';
+        s.onload = function() { mapboxgl.accessToken = MAPBOX_TOKEN; resolve(); };
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+    return _mapboxReady;
+}
+
+var _dailyReady = null;
+function ensureDaily() {
+    if (_dailyReady) return _dailyReady;
+    _dailyReady = new Promise(function(resolve, reject) {
+        if (window.DailyIframe) { resolve(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://unpkg.com/@daily-co/daily-js';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+    return _dailyReady;
+}
 
 // ===== TURSO =====
 async function tq(sql) {
@@ -788,7 +833,7 @@ async function load() {
     renderPipeline();
 
     // Deals (Cita Segura pipeline)
-    deals = await tq("SELECT d.*, ct.fecha as ct_fecha, ct.hora as ct_hora, ct.punto_nombre as ct_lugar, ct.auto_nombre as ct_auto, ct.token as ct_token, ct.vendedor_telefono as ct_vendedor_tel FROM claw_deals d LEFT JOIN citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
+    deals = await tq("SELECT d.*, ct.fecha as ct_fecha, ct.hora as ct_hora, ct.punto_nombre as ct_lugar, ct.auto_nombre as ct_auto, ct.token as ct_token, ct.vendedor_telefono as ct_vendedor_tel, ct.punto_lat as ct_punto_lat, ct.punto_lng as ct_punto_lng, ct.buyer_lat as ct_buyer_lat, ct.buyer_lng as ct_buyer_lng, ct.audio_room_url as ct_audio_url, ct.audio_active as ct_audio_active FROM claw_deals d LEFT JOIN citas ct ON d.cita_id = ct.id WHERE d.estado IN ('cita_agendada','dia_cita','en_camino','ya_en_cita','momento_cita') ORDER BY d.updated_at DESC LIMIT 50");
     // Normalize: merge cita data, fix field names
     deals = deals.map(function(d) {
         if (d.estado === 'momento_cita') d.estado = 'en_camino';
@@ -804,6 +849,12 @@ async function load() {
         d.nombre = d.comprador_nombre || 'Sin nombre';
         d.telefono = d.comprador_telefono || '';
         d.interes = d.auto_nombre || d.ct_auto || '';
+        d.punto_lat = d.ct_punto_lat || null;
+        d.punto_lng = d.ct_punto_lng || null;
+        d.buyer_lat = d.ct_buyer_lat || null;
+        d.buyer_lng = d.ct_buyer_lng || null;
+        d.audio_url = d.ct_audio_url || null;
+        d.audio_active = d.ct_audio_active || 0;
         return d;
     });
     el('bCitaSeg').textContent = deals.length;
@@ -912,6 +963,8 @@ function renderCitaSegura() {
         '</div>';
     }).join('');
     el('citaSeguraView').innerHTML = html;
+    // Reconcile live tracking widgets after DOM update
+    setTimeout(reconcileFTWidgets, 50);
 }
 
 // ===== FYRATRACK PANEL =====
@@ -1074,6 +1127,19 @@ function renderDealCard(d, fase) {
             '<div style="font-size:11px;color:var(--green);padding:4px 0">Tracking en vivo — comprador en camino</div>' +
             (d.cita_token ? '<button class="btn btn-x" style="font-size:10px;width:100%;margin-top:4px;border-color:var(--green);color:var(--green)" onclick="goToFyraTrack()">📡 Ver en FyraTrack</button>' : '') +
         '</div>';
+    } else if (d.estado === 'ya_en_cita' && d.cita_token) {
+        draftHtml = '<div class="deal-draft" style="padding:0;overflow:hidden">' +
+            '<div id="ft-map-' + d.id + '" style="width:100%;height:180px;background:#1a1a2e"></div>' +
+            '<div class="ft-live-stats">' +
+                '<div class="ft-live-stat"><span>📏</span><span id="ft-dist-' + d.id + '">--</span></div>' +
+                '<div class="ft-live-stat"><span>⏱</span><span id="ft-eta-' + d.id + '">--</span></div>' +
+                '<div class="ft-live-stat"><span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;display:inline-block"></span><span style="color:var(--green)">EN VIVO</span></div>' +
+            '</div>' +
+            '<div class="ft-audio-bar">' +
+                '<button class="ft-audio-btn" id="ft-audio-btn-' + d.id + '" onclick="toggleFTAudio(\'' + d.id + '\',\'' + d.cita_token + '\')">🎧 Escuchar</button>' +
+                '<span style="font-size:10px;color:var(--t3)" id="ft-audio-status-' + d.id + '"></span>' +
+            '</div>' +
+        '</div>';
     }
 
     // Force state buttons
@@ -1101,6 +1167,341 @@ function renderDealCard(d, fase) {
         '<div style="display:flex;gap:4px;margin-top:6px;justify-content:center">' + stateButtons + '</div>' +
         (d.notas ? '<div class="deal-notas">' + truncate(d.notas, 80) + '</div>' : '') +
     '</div>';
+}
+
+// ===== FYRATRACK LIVE WIDGET MANAGER =====
+var _ftWidgets = {}; // { dealId: { token, sse, map, buyerMarker, destMarker, dailyCall, lastLat, lastLng, lastHeading, destLat, destLng } }
+
+function reconcileFTWidgets() {
+    // Find all ya_en_cita deals with cita_token
+    var activeIds = {};
+    deals.forEach(function(d) {
+        if (d.estado === 'ya_en_cita' && d.cita_token) {
+            activeIds[d.id] = d;
+        }
+    });
+
+    // Destroy widgets for deals no longer in ya_en_cita
+    Object.keys(_ftWidgets).forEach(function(id) {
+        if (!activeIds[id]) {
+            destroyFTWidget(id);
+        }
+    });
+
+    // Init or reattach widgets
+    Object.keys(activeIds).forEach(function(id) {
+        var d = activeIds[id];
+        var container = document.getElementById('ft-map-' + id);
+        if (!container) return;
+
+        if (!_ftWidgets[id]) {
+            // New widget
+            initFTWidget(id, d);
+        } else {
+            // Reattach — map was destroyed by innerHTML, SSE/audio still running
+            reattachFTWidget(id, d);
+        }
+    });
+}
+
+function initFTWidget(id, deal) {
+    var w = {
+        token: deal.cita_token,
+        sse: null,
+        map: null,
+        buyerMarker: null,
+        destMarker: null,
+        dailyCall: null,
+        lastLat: Number(deal.buyer_lat) || null,
+        lastLng: Number(deal.buyer_lng) || null,
+        lastHeading: null,
+        destLat: Number(deal.punto_lat) || null,
+        destLng: Number(deal.punto_lng) || null,
+    };
+    _ftWidgets[id] = w;
+
+    // Start SSE
+    startFTSSE(id, deal.cita_token);
+
+    // Load Mapbox and create map
+    ensureMapbox().then(function() {
+        createFTMap(id);
+    }).catch(function(err) {
+        console.error('[FT-Widget] Mapbox load error:', err);
+    });
+}
+
+function createFTMap(id) {
+    var w = _ftWidgets[id];
+    if (!w) return;
+    var container = document.getElementById('ft-map-' + id);
+    if (!container) return;
+
+    // Center: use buyer position if available, else destination, else Monterrey
+    var centerLat = w.lastLat || w.destLat || 25.6866;
+    var centerLng = w.lastLng || w.destLng || -100.3161;
+
+    try {
+        var map = new mapboxgl.Map({
+            container: container,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [centerLng, centerLat],
+            zoom: 14,
+            interactive: true,
+            attributionControl: false,
+        });
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+        w.map = map;
+
+        map.on('load', function() {
+            // Destination marker (red pin)
+            if (w.destLat && w.destLng) {
+                var destEl = document.createElement('div');
+                destEl.innerHTML = '📍';
+                destEl.style.fontSize = '24px';
+                destEl.style.cursor = 'default';
+                w.destMarker = new mapboxgl.Marker({ element: destEl })
+                    .setLngLat([w.destLng, w.destLat])
+                    .addTo(map);
+            }
+
+            // Buyer marker (blue arrow)
+            if (w.lastLat && w.lastLng) {
+                var buyerEl = document.createElement('div');
+                buyerEl.style.width = '20px';
+                buyerEl.style.height = '20px';
+                buyerEl.style.borderRadius = '50%';
+                buyerEl.style.background = '#3b82f6';
+                buyerEl.style.border = '3px solid #fff';
+                buyerEl.style.boxShadow = '0 0 8px rgba(59,130,246,.5)';
+                w.buyerMarker = new mapboxgl.Marker({ element: buyerEl })
+                    .setLngLat([w.lastLng, w.lastLat])
+                    .addTo(map);
+            }
+
+            // Fit bounds if both points exist
+            if (w.destLat && w.destLng && w.lastLat && w.lastLng) {
+                var bounds = new mapboxgl.LngLatBounds();
+                bounds.extend([w.destLng, w.destLat]);
+                bounds.extend([w.lastLng, w.lastLat]);
+                map.fitBounds(bounds, { padding: 40, maxZoom: 16 });
+            }
+        });
+    } catch(err) {
+        console.error('[FT-Widget] Map create error:', err);
+    }
+}
+
+function startFTSSE(id, token) {
+    var w = _ftWidgets[id];
+    if (!w) return;
+    if (w.sse) { try { w.sse.close(); } catch(e) {} }
+
+    try {
+        var es = new EventSource(FYRADRIVE_BASE + '/api/fyratrack/track/' + token + '/sse');
+        w.sse = es;
+
+        es.addEventListener('init', function(e) {
+            try {
+                var data = JSON.parse(e.data);
+                updateFTWidget(id, data);
+            } catch(err) {}
+        });
+
+        es.addEventListener('position', function(e) {
+            try {
+                var data = JSON.parse(e.data);
+                updateFTWidget(id, data);
+            } catch(err) {}
+        });
+
+        es.addEventListener('status', function(e) {
+            try {
+                var data = JSON.parse(e.data);
+                console.log('[FT-Widget] Status change:', id, data.estado);
+            } catch(err) {}
+        });
+
+        es.addEventListener('reconnect', function() {
+            es.close();
+            setTimeout(function() { startFTSSE(id, token); }, 200);
+        });
+
+        es.addEventListener('error', function() {
+            es.close();
+            w.sse = null;
+            setTimeout(function() {
+                if (_ftWidgets[id]) startFTSSE(id, token);
+            }, 3000);
+        });
+    } catch(err) {
+        console.error('[FT-Widget] SSE error:', err);
+    }
+}
+
+function updateFTWidget(id, data) {
+    var w = _ftWidgets[id];
+    if (!w) return;
+
+    var lat = Number(data.lat);
+    var lng = Number(data.lng);
+    if (!lat || !lng) return;
+
+    w.lastLat = lat;
+    w.lastLng = lng;
+    if (data.heading != null) w.lastHeading = Number(data.heading);
+
+    // Update buyer marker position
+    if (w.buyerMarker) {
+        w.buyerMarker.setLngLat([lng, lat]);
+    } else if (w.map) {
+        var buyerEl = document.createElement('div');
+        buyerEl.style.width = '20px';
+        buyerEl.style.height = '20px';
+        buyerEl.style.borderRadius = '50%';
+        buyerEl.style.background = '#3b82f6';
+        buyerEl.style.border = '3px solid #fff';
+        buyerEl.style.boxShadow = '0 0 8px rgba(59,130,246,.5)';
+        w.buyerMarker = new mapboxgl.Marker({ element: buyerEl })
+            .setLngLat([lng, lat])
+            .addTo(w.map);
+    }
+
+    // Update distance text
+    var distEl = document.getElementById('ft-dist-' + id);
+    if (distEl && data.distancia_metros != null) {
+        var dm = Number(data.distancia_metros);
+        distEl.textContent = dm < 1000 ? Math.round(dm) + ' m' : (dm / 1000).toFixed(1) + ' km';
+    }
+
+    // Update ETA text
+    var etaEl = document.getElementById('ft-eta-' + id);
+    if (etaEl && data.eta_minutos != null) {
+        var em = Number(data.eta_minutos);
+        etaEl.textContent = em < 60 ? em + ' min' : Math.floor(em / 60) + 'h ' + (em % 60) + 'm';
+    }
+}
+
+function reattachFTWidget(id, deal) {
+    var w = _ftWidgets[id];
+    if (!w) return;
+
+    // Destroy old map (container was destroyed by innerHTML)
+    if (w.map) {
+        try { w.map.remove(); } catch(e) {}
+        w.map = null;
+        w.buyerMarker = null;
+        w.destMarker = null;
+    }
+
+    // Update coords from fresh deal data
+    w.destLat = Number(deal.punto_lat) || w.destLat;
+    w.destLng = Number(deal.punto_lng) || w.destLng;
+
+    // Recreate map
+    ensureMapbox().then(function() {
+        createFTMap(id);
+    }).catch(function(err) {
+        console.error('[FT-Widget] Reattach map error:', err);
+    });
+
+    // SSE is still running (JavaScript, not DOM-bound)
+    // Audio is still running (JavaScript, not DOM-bound)
+}
+
+function destroyFTWidget(id) {
+    var w = _ftWidgets[id];
+    if (!w) return;
+
+    // Close SSE
+    if (w.sse) { try { w.sse.close(); } catch(e) {} }
+
+    // Destroy map
+    if (w.map) { try { w.map.remove(); } catch(e) {} }
+
+    // Leave audio
+    if (w.dailyCall) {
+        try { w.dailyCall.leave(); w.dailyCall.destroy(); } catch(e) {}
+    }
+
+    delete _ftWidgets[id];
+}
+
+function toggleFTAudio(id, token) {
+    var w = _ftWidgets[id];
+    if (!w) {
+        // Widget may not exist yet, create minimal entry
+        w = { token: token, sse: null, map: null, buyerMarker: null, destMarker: null, dailyCall: null, lastLat: null, lastLng: null };
+        _ftWidgets[id] = w;
+    }
+
+    var btn = document.getElementById('ft-audio-btn-' + id);
+    var status = document.getElementById('ft-audio-status-' + id);
+
+    if (w.dailyCall) {
+        // Already listening — disconnect
+        try { w.dailyCall.leave(); w.dailyCall.destroy(); } catch(e) {}
+        w.dailyCall = null;
+        if (btn) { btn.textContent = '🎧 Escuchar'; btn.classList.remove('active'); }
+        if (status) status.textContent = '';
+        return;
+    }
+
+    // Start listening
+    if (btn) btn.textContent = '⏳ Conectando...';
+    if (status) status.textContent = 'Creando sala...';
+
+    // First, ensure/create audio room
+    fetch(FYRADRIVE_BASE + '/api/fyratrack/track/' + token + '/audio-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.success || !data.room_url) {
+            if (btn) btn.textContent = '🎧 Escuchar';
+            if (status) status.textContent = 'Error: ' + (data.error || 'no room');
+            return;
+        }
+
+        if (status) status.textContent = 'Cargando audio...';
+
+        // Load Daily.co and join as listener
+        ensureDaily().then(function() {
+            var call = DailyIframe.createCallObject({
+                audioSource: false,
+                videoSource: false,
+            });
+            w.dailyCall = call;
+
+            call.join({ url: data.room_url, userName: 'CRM-Listener' })
+                .then(function() {
+                    if (btn) { btn.textContent = '🔊 Escuchando'; btn.classList.add('active'); }
+                    if (status) status.textContent = 'Conectado';
+                })
+                .catch(function(err) {
+                    console.error('[FT-Audio] Join error:', err);
+                    if (btn) btn.textContent = '🎧 Escuchar';
+                    if (status) status.textContent = 'Error al conectar';
+                    w.dailyCall = null;
+                });
+
+            call.on('left-meeting', function() {
+                if (btn) { btn.textContent = '🎧 Escuchar'; btn.classList.remove('active'); }
+                if (status) status.textContent = '';
+                w.dailyCall = null;
+            });
+        }).catch(function(err) {
+            console.error('[FT-Audio] Daily load error:', err);
+            if (btn) btn.textContent = '🎧 Escuchar';
+            if (status) status.textContent = 'Error cargando audio';
+        });
+    })
+    .catch(function(err) {
+        console.error('[FT-Audio] Room create error:', err);
+        if (btn) btn.textContent = '🎧 Escuchar';
+        if (status) status.textContent = 'Error de conexion';
+    });
 }
 
 // ===== LOG =====
