@@ -1096,6 +1096,7 @@ function renderDealCard(d, fase) {
         '<div class="deal-btns">' +
             (nextState ? '<button class="btn btn-g" onclick="moveDealState(\'' + d.id + '\',\'' + nextState + '\')">' + nextLabel + '</button>' : '') +
             '<button class="btn btn-r" onclick="cancelDeal(\'' + d.id + '\')">Cancelar</button>' +
+            (d.cita_id ? '<button class="btn btn-x" onclick="reagendarDeal(\'' + d.cita_id + '\',\'' + nombre.replace(/'/g, '') + '\')">📅 Reagendar</button>' : '') +
         '</div>' +
         '<div style="display:flex;gap:4px;margin-top:6px;justify-content:center">' + stateButtons + '</div>' +
         (d.notas ? '<div class="deal-notas">' + truncate(d.notas, 80) + '</div>' : '') +
@@ -1178,6 +1179,49 @@ async function cancelDeal(id) {
     await te("UPDATE claw_deals SET estado = 'perdido', updated_at = " + Date.now() + " WHERE id = " + id);
     toast('Deal cancelado');
     load();
+}
+
+async function reagendarDeal(citaId, nombre) {
+    // Modal simple para reagendar cita
+    var modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999';
+    var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    var defDate = tomorrow.toISOString().split('T')[0];
+    modal.innerHTML = '<div style="background:var(--bg2,#1a1a2e);padding:24px;border-radius:12px;width:320px;max-width:90vw">' +
+        '<h3 style="margin:0 0 16px;color:var(--fg,#fff)">📅 Reagendar Cita</h3>' +
+        '<p style="font-size:12px;color:var(--fg2,#aaa);margin:0 0 12px">' + nombre + '</p>' +
+        '<label style="font-size:12px;color:var(--fg2,#aaa)">Nueva fecha</label>' +
+        '<input type="date" id="reagenda_fecha" value="' + defDate + '" style="width:100%;padding:8px;margin:4px 0 12px;background:var(--bg3,#16213e);color:var(--fg,#fff);border:1px solid var(--border,#333);border-radius:6px">' +
+        '<label style="font-size:12px;color:var(--fg2,#aaa)">Nueva hora</label>' +
+        '<input type="time" id="reagenda_hora" value="12:00" style="width:100%;padding:8px;margin:4px 0 16px;background:var(--bg3,#16213e);color:var(--fg,#fff);border:1px solid var(--border,#333);border-radius:6px">' +
+        '<div style="display:flex;gap:8px">' +
+            '<button onclick="doReagendar(' + citaId + ')" class="btn btn-g" style="flex:1">Confirmar</button>' +
+            '<button onclick="this.closest(\'div[style*=fixed]\').remove()" class="btn btn-r" style="flex:1">Cancelar</button>' +
+        '</div>' +
+    '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+async function doReagendar(citaId) {
+    var fecha = el('reagenda_fecha').value;
+    var hora = el('reagenda_hora').value;
+    if (!fecha || !hora) return toast('Ingresa fecha y hora');
+    try {
+        var r = await fetch('https://fyradrive-three.vercel.app/api/fyratrack/citas/' + citaId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': 'fyradrive2026' },
+            body: JSON.stringify({ reschedule: true, nueva_fecha: fecha, nueva_hora: hora, propuesto_por: 'admin' })
+        });
+        var data = await r.json();
+        if (data.success) {
+            toast('Cita reagendada a ' + fecha + ' ' + hora);
+            document.querySelector('div[style*="fixed"]').remove();
+            load();
+        } else {
+            toast('Error: ' + (data.error || 'desconocido'));
+        }
+    } catch(e) { toast('Error de red: ' + e.message); }
 }
 
 async function sendDealDraft(id, tel) {
