@@ -2169,6 +2169,13 @@ function renderPulseCard(d) {
                     '<div class="pulse-metric-num" style="color:var(--orange)">-$' + parseInt(adj).toLocaleString() + '</div>' +
                     '<div class="pulse-metric-label">Ajuste</div></div>' +
             '</div>' +
+            // === PRICING MARGIN SECTION ===
+            (d.seller_base_price ? '<div class="pulse-metrics" style="margin-top:6px;border-top:1px solid var(--s2);padding-top:6px">' +
+                '<div class="pulse-metric"><div class="pulse-metric-num" style="font-size:13px">$' + parseInt(d.seller_base_price).toLocaleString() + '</div><div class="pulse-metric-label">Vendedor pide</div></div>' +
+                '<div class="pulse-metric"><div class="pulse-metric-num" style="font-size:13px;color:var(--green)">$' + parseInt(d.minimum_commission || 0).toLocaleString() + '</div><div class="pulse-metric-label">Comision min</div></div>' +
+                '<div class="pulse-metric"><input value="' + parseInt(d.extra_margin || 0) + '" onchange="pulseEditMargin(' + d.auto_id + ',this.value,' + d.id + ')" style="color:var(--orange);width:60px;text-align:center;font-size:13px" type="number" min="0" step="1000"><div class="pulse-metric-label">Margen extra</div></div>' +
+                '<div class="pulse-metric"><div class="pulse-metric-num" style="font-size:13px;color:var(--orange);font-weight:600">$' + parseInt(Number(d.seller_base_price) + Number(d.minimum_commission || 0) + Number(d.extra_margin || 0)).toLocaleString() + '</div><div class="pulse-metric-label">Precio final</div></div>' +
+            '</div>' : '') +
             '<div class="' + suggClass + '">' + suggIcon + ' ' + suggText + '</div>' +
             (editable ? '<textarea class="pulse-draft-ta" id="pd_' + d.id + '" onchange="pulseEditDraft(' + d.id + ')">' + (d.mensaje_draft || '').replace(/</g,'&lt;') + '</textarea>' :
             '<div style="font-size:11px;color:var(--t2);padding:8px;background:var(--s2);border-radius:6px;white-space:pre-wrap">' + (d.mensaje_draft || '').replace(/</g,'&lt;') + '</div>') +
@@ -2188,6 +2195,21 @@ async function pulseEditMetric(pulseId, field, value) {
         });
         toast('Metrica actualizada');
         loadPulse();
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function pulseEditMargin(autoId, newMargin, pulseId) {
+    var margin = Math.max(0, parseInt(newMargin) || 0);
+    try {
+        var r = await fetch(CLAW + '/api/pulse/update-margin', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ auto_id: autoId, extra_margin: margin })
+        });
+        var d = await r.json();
+        if (d.ok) {
+            toast('Margen actualizado: $' + margin.toLocaleString() + ' → Precio final: $' + d.listing_price.toLocaleString());
+            loadPulse();
+        } else { toast('Error: ' + (d.error || 'desconocido')); }
     } catch(e) { toast('Error: ' + e.message); }
 }
 
