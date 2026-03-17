@@ -494,6 +494,12 @@
 <script>
 // ===== CONFIG =====
 const CLAW = 'http://134.209.51.172:3000';
+const CLAW_KEY = 'fyradrive2026';
+function clawFetch(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({ 'x-api-key': CLAW_KEY }, opts.headers || {});
+    return fetch(CLAW + path, opts);
+}
 const TURSO = 'https://crm-fyradrive-739458di.aws-us-west-2.turso.io';
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'https://pruebas-ruby.vercel.app' : '';
 const TURSO_T = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzA4MjUwMDYsImlkIjoiYTczOTliMjctYWFlNi00YjhmLWJmYjktODQ2M2JmMWU1MzljIiwicmlkIjoiNWVhMDBiM2QtNzNiNS00Njg3LWFjN2YtMTNhMGQzZmJlZmM1In0.ZVnn2UF2WdEw_yvQYGGB9Eyvbh_JRniPhkByn6Vxiavki0FkHVM8Xb0cwu1Ijrhti_j3iiOxS5jtt2IwCRWvDA';
@@ -819,7 +825,7 @@ function renderMatchCard(d) {
 async function load() {
     // Status
     try {
-        var sr = await fetch(CLAW + '/status');
+        var sr = await clawFetch('/status');
         var s = await sr.json();
         el('dot').className = 'dot' + (s.status === 'connected' ? '' : ' off');
         el('pVer').textContent = s.version || 'v9';
@@ -1647,16 +1653,16 @@ async function sendDealDraft(id, tel) {
     try {
         var isFb = tel.startsWith('fb_');
         if (isFb) {
-            await fetch(CLAW + '/api/messenger-send', {
+            await clawFetch('/api/messenger-send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ psid: tel.replace('fb_',''), mensaje: msg })
             });
         } else {
-            await fetch(CLAW + '/api/send', {
+            await clawFetch('/api/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telefono: tel, mensaje: msg, api_key: 'fyradrive2026' })
+                body: JSON.stringify({ telefono: tel, mensaje: msg })
             });
         }
         // Save draft as sent
@@ -1708,10 +1714,10 @@ async function sendFyraTrackLink(dealId, telefono, tipo, token, nombre, auto, lu
     }
 
     try {
-        await fetch(CLAW + '/api/send', {
+        await clawFetch('/api/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telefono: telefono, mensaje: msg, api_key: 'fyradrive2026' })
+            body: JSON.stringify({ telefono: telefono, mensaje: msg })
         });
         toast((tipo === 'buyer' ? '📲 Link comprador' : '🏪 Link vendedor') + ' enviado ✓');
     } catch(e) {
@@ -2084,7 +2090,7 @@ async function initPulseTable() {
 async function pulseGenerate() {
     toast('Generando metricas de la semana...');
     try {
-        var r = await fetch(CLAW + '/api/pulse/generate');
+        var r = await clawFetch('/api/pulse/generate');
         var d = await r.json();
         if (d.ok) {
             toast('Generados ' + d.generated + ' reportes (' + d.week + ')');
@@ -2100,9 +2106,9 @@ var pulseAvailableWeeks = [];
 
 async function loadPulse(week) {
     try {
-        var url = CLAW + '/api/pulse/drafts';
-        if (week) url += '?week=' + encodeURIComponent(week);
-        var r = await fetch(url);
+        var path = '/api/pulse/drafts';
+        if (week) path += '?week=' + encodeURIComponent(week);
+        var r = await clawFetch(path);
         var d = await r.json();
         if (d.ok) {
             pulseDrafts = d.drafts || [];
@@ -2211,7 +2217,7 @@ function renderPulseCard(d) {
 
 async function pulseEditMetric(pulseId, field, value) {
     try {
-        await fetch(CLAW + '/api/pulse/update', {
+        await clawFetch('/api/pulse/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pulse_id: pulseId, field: field, value: Number(value) })
         });
@@ -2223,7 +2229,7 @@ async function pulseEditMetric(pulseId, field, value) {
 async function pulseEditMargin(autoId, newMargin, pulseId) {
     var margin = Math.max(0, parseInt(newMargin) || 0);
     try {
-        var r = await fetch(CLAW + '/api/pulse/update-margin', {
+        var r = await clawFetch('/api/pulse/update-margin', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ auto_id: autoId, extra_margin: margin })
         });
@@ -2239,7 +2245,7 @@ async function pulseEditDraft(pulseId) {
     var ta = el('pd_' + pulseId);
     if (!ta) return;
     try {
-        await fetch(CLAW + '/api/pulse/update', {
+        await clawFetch('/api/pulse/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pulse_id: pulseId, field: 'mensaje_draft', value: ta.value })
         });
@@ -2249,7 +2255,7 @@ async function pulseEditDraft(pulseId) {
 async function pulseSendOne(pulseId) {
     if (!confirm('Enviar este feedback al vendedor?')) return;
     try {
-        var r = await fetch(CLAW + '/api/pulse/send', {
+        var r = await clawFetch('/api/pulse/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pulse_id: pulseId })
         });
@@ -2264,7 +2270,7 @@ async function pulseSendAll() {
     if (!pending.length) return toast('No hay borradores pendientes');
     if (!confirm('Enviar ' + pending.length + ' feedbacks a vendedores?')) return;
     try {
-        var r = await fetch(CLAW + '/api/pulse/send', {
+        var r = await clawFetch('/api/pulse/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({})
         });
@@ -2275,7 +2281,7 @@ async function pulseSendAll() {
 }
 
 async function pulseMarkHandled(pulseId) {
-    await fetch(CLAW + '/api/pulse/update', {
+    await clawFetch('/api/pulse/update', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pulse_id: pulseId, field: 'needs_human', value: 0 })
     });
