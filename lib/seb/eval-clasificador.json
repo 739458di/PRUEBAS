@@ -1,0 +1,33 @@
+{
+  "_doc": "Eval set FIJO del clasificador de Seb. Cada caso: mensaje real o patrón real de las 5,204 convs. 'esperado' = intenciones principales aceptables. 'auto' = id esperado | null (debe ser null) | 'any'. 'escalar' = true|false|'any'. 'datos' = claves que deben venir con valor. REGLA: antes de tocar el prompt del clasificador, correr esto completo — solo se acepta el cambio si la accuracy no baja.",
+  "casos": [
+    { "id": 1, "mensaje": "¡Hola! Quiero más información [ANUNCIO: Fyradrive] [DESC: fyradrive 🚘 MAZDA 3 I SPORT 2021\n💵 $289,900 MXN", "esperado": ["info_inicial"], "auto": 236, "escalar": false },
+    { "id": 2, "mensaje": "¡Hola! Quiero más información [DESC: 🚘 Chrysler Pacifica Unlimited 2019 💵 $310,000", "esperado": ["info_inicial"], "auto": null, "escalar": false },
+    { "id": 3, "mensaje": "Hola me interesa la Odyssey [ANUNCIO: Fyradrive] [DESC: 🏴HONDA ODYSSEY EXL 2014 🔵 Motor", "esperado": ["info_inicial"], "auto": null, "escalar": false },
+    { "id": 4, "mensaje": "Hola", "esperado": ["info_inicial", "otro"], "escalar": false },
+    { "id": 5, "mensaje": "el jimny sigue disponible?", "esperado": ["disponibilidad"], "auto": 245, "escalar": false },
+    { "id": 6, "mensaje": "Sabes que motor tiene?", "esperado": ["estado_auto"], "escalar": false },
+    { "id": 7, "mensaje": "es de un solo dueño? tiene factura original?", "esperado": ["estado_auto"], "escalar": false },
+    { "id": 8, "mensaje": "cuanto seria de enganche y la mensualidad?", "esperado": ["cotizar_credito"], "escalar": false },
+    { "id": 9, "mensaje": "manejan financiamiento bancario?", "esperado": ["cotizar_credito"], "escalar": false },
+    { "id": 10, "mensaje": "Cuál es la dirección por favor", "esperado": ["cita_ubicacion"], "escalar": false },
+    { "id": 11, "mensaje": "puedo ir a verlo mañana?", "esperado": ["cita_ubicacion"], "escalar": false, "datos": ["fecha"] },
+    { "id": 12, "mensaje": "es lo menos? le bajas 20?", "esperado": ["precio_negociacion"], "escalar": false },
+    { "id": 13, "mensaje": "mándame más fotos porfa, del interior", "esperado": ["fotos_videos"], "escalar": false },
+    { "id": 14, "mensaje": "60", "historial": [ { "direccion": "out", "mensaje": "Va! Para cotizarte: ¿cuánto traes de enganche?" } ], "esperado": ["continuacion"], "escalar": false, "datos": ["enganche"] },
+    { "id": 15, "mensaje": "si va, ahí nos vemos", "historial": [ { "direccion": "out", "mensaje": "¿Te queda bien mañana a las 5 en Plaza Lúa?" } ], "esperado": ["continuacion"], "escalar": false, "datos": ["confirmacion"] },
+    { "id": 16, "mensaje": "si a mi nombre, 0 adeudo unico dueno factura de agencia", "historial": [ { "direccion": "out", "mensaje": "¿La factura está a tu nombre y sin adeudos?" } ], "esperado": ["continuacion"], "escalar": false },
+    { "id": 17, "mensaje": "el sábado mejor", "historial": [ { "direccion": "out", "mensaje": "¿Qué día te queda bien para verlo?" } ], "esperado": ["continuacion"], "escalar": false, "datos": ["fecha"] },
+    { "id": 18, "mensaje": "Ok Fin de semana Ok Fin de semana", "historial": [ { "direccion": "out", "mensaje": "Claro Roberto! ¿Cuándo te gustaría venir a verlo?" } ], "esperado": ["continuacion"], "escalar": false },
+    { "id": 19, "mensaje": "aceptan criptomonedas?", "esperado": ["fuera_alcance"], "escalar": true },
+    { "id": 20, "mensaje": "hacen envíos a Guatemala?", "esperado": ["fuera_alcance"], "escalar": true },
+    { "id": 21, "mensaje": "Hola quiero vender mi camioneta, como le hago?", "esperado": ["fuera_alcance"], "escalar": true },
+    { "id": 22, "mensaje": "Cuánto cobran de comisión?", "historial": [ { "direccion": "out", "mensaje": "Ah perfecto Manuel! Entiendo, tú quieres VENDER tu Tiggo 2 Pro Luxury" } ], "esperado": ["fuera_alcance"], "escalar": true },
+    { "id": 23, "mensaje": "Que un agente me atienda", "esperado": ["otro", "fuera_alcance"], "escalar": true },
+    { "id": 24, "mensaje": "aver la OModa", "historial": [ { "direccion": "out", "mensaje": "El más exclusivo que tengo ahorita es un Mercedes G-Wagon G63 AMG 2024" } ], "esperado": ["info_inicial", "disponibilidad", "continuacion"], "auto": null, "escalar": false },
+    { "id": 25, "mensaje": "Mercedes 2018", "historial": [ { "direccion": "out", "mensaje": "Que tal! Soy Seb de FyraDrive. ¿En que auto estas interesado?" } ], "esperado": ["continuacion", "info_inicial"], "escalar": false },
+    { "id": 26, "mensaje": "lo que pasa es que estoy en otro estado, soy de Saltillo", "esperado": ["continuacion", "otro", "cita_ubicacion", "info_inicial"], "escalar": "any", "noEsperado": ["estado_auto"] },
+    { "id": 27, "mensaje": "puedo ir hoy a las 6?", "esperado": ["cita_ubicacion"], "escalar": false, "datos": ["hora"] },
+    { "id": 28, "mensaje": "Tomas a cuenta mi versa 2018?", "esperado": ["precio_negociacion", "cotizar_credito"], "escalar": false }
+  ]
+}
