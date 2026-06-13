@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "crm",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "3456"],
+      "port": 3456
+    },
+    {
+      "name": "fyrachat-copiloto",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["lib/seb/_dev-server.js", "3210"],
+      "port": 3210
+    }
+  ]
+}

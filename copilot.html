@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FyraChat · Copiloto</title>
+<style>
+  :root{ --bg:#000; --chatbg:#0b141a; --panel:#1c1c1e; --row:#0e0e10; --line:#26262a;
+         --text:#e9edef; --dim:#8696a0; --green:#25d366; --outbub:#005c4b; --inbub:#202c33;
+         --ia:#6d5df6; --iabg:#17152b; }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro',Segoe UI,Roboto,sans-serif;height:100dvh;overflow:hidden}
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;transition:transform .22s ease}
+  #scr-chat{transform:translateX(100%);background:var(--chatbg)}
+  #scr-chat.open{transform:translateX(0)}
+
+  /* ===== LISTA ===== */
+  .top{padding:14px 16px 6px;display:flex;justify-content:space-between;align-items:center}
+  .top h1{font-size:30px;font-weight:800;letter-spacing:.2px}
+  .top .dot{width:34px;height:34px;border-radius:50%;background:var(--ia);display:flex;align-items:center;justify-content:center;font-size:17px}
+  .pills{display:flex;gap:8px;padding:8px 16px 10px;overflow-x:auto}
+  .pill{padding:7px 14px;border-radius:18px;background:#1f1f22;color:var(--dim);font-size:14px;font-weight:600;white-space:nowrap}
+  .pill.on{background:#103529;color:var(--green)}
+  #lista{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .chatrow{display:flex;gap:12px;padding:10px 16px;align-items:center;border-bottom:.5px solid var(--line);cursor:pointer}
+  .chatrow:active{background:#111}
+  .ava{width:52px;height:52px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;color:#fff}
+  .meta{flex:1;min-width:0}
+  .meta .n{font-size:16.5px;font-weight:600;display:flex;justify-content:space-between}
+  .meta .n time{font-size:13px;color:var(--dim);font-weight:400}
+  .meta .n time.hot{color:var(--green)}
+  .meta .p{font-size:14.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;display:flex;gap:6px;align-items:center}
+  .badge-ia{flex:none;background:var(--ia);color:#fff;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:10px}
+  .badge-n{flex:none;background:var(--green);color:#000;font-size:12px;font-weight:800;min-width:21px;height:21px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+
+  /* ===== CHAT ===== */
+  .chead{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:.5px solid var(--line)}
+  .back{color:#3478f6;font-size:26px;padding:0 4px;cursor:pointer}
+  .chead .ava{width:38px;height:38px;font-size:15px}
+  .chead .who{flex:1;min-width:0}
+  .chead .who b{font-size:16px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chead .who span{font-size:12px;color:var(--dim)}
+  #msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:3px;
+        background:var(--chatbg) url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='30' cy='30' r='1' fill='%23182229'/%3E%3C/svg%3E")}
+  .bub{max-width:78%;padding:7px 10px 5px;border-radius:9px;font-size:14.8px;line-height:1.35;white-space:pre-wrap;word-break:break-word;position:relative}
+  .in{background:var(--inbub);align-self:flex-start;border-top-left-radius:2px}
+  .out{background:var(--outbub);align-self:flex-end;border-top-right-radius:2px}
+  .bub .t{display:block;font-size:10.5px;color:rgba(233,237,239,.55);text-align:right;margin-top:2px}
+  .bub .src{font-size:9.5px;color:rgba(233,237,239,.45);margin-right:6px}
+
+  /* ===== BARRA DE COPILOTO ===== */
+  #copilot{background:var(--iabg);border-top:2px solid var(--ia);padding:10px 12px;display:none}
+  #copilot.show{display:block}
+  #copilot .tag{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#b9b3ff;font-weight:700;letter-spacing:.4px;margin-bottom:6px}
+  #copilot .tag .int{background:#2a2750;padding:1px 8px;border-radius:9px;font-weight:600}
+  #draft{width:100%;background:#100e22;border:1px solid #322e5e;color:var(--text);border-radius:10px;padding:9px 11px;font-size:14.5px;line-height:1.35;font-family:inherit;resize:none;min-height:58px}
+  #draft[readonly]{border-color:transparent;background:#13112a}
+  .cbtns{display:flex;gap:8px;margin-top:8px}
+  .cb{flex:1;padding:10px 0;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer}
+  .cb.send{background:var(--green);color:#04240f}
+  .cb.edit{background:#27314d;color:#9db7ff}
+  .cb.no{background:#2a2a2e;color:var(--dim)}
+  #gen{margin:8px 12px;display:none}
+  #gen.show{display:block}
+  #gen button{width:100%;padding:11px;border:1px dashed var(--ia);background:transparent;color:#b9b3ff;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer}
+
+  /* ===== INPUT MANUAL ===== */
+  .inputbar{display:flex;gap:8px;align-items:flex-end;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--panel)}
+  #manual{flex:1;background:#2a2a2e;border:none;color:var(--text);border-radius:18px;padding:9px 14px;font-size:15px;font-family:inherit;resize:none;max-height:90px}
+  #sendman{width:38px;height:38px;border-radius:50%;border:none;background:var(--green);color:#04240f;font-size:17px;font-weight:800;cursor:pointer;flex:none}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;background:#222;color:#fff;padding:10px 18px;border-radius:20px;font-size:13.5px;z-index:99;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #b9b3ff;border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- PANTALLA 1: LISTA -->
+<div class="screen" id="scr-lista">
+  <div class="top"><h1>Chats</h1><div class="dot">🤖</div></div>
+  <div class="pills"><div class="pill on">Todos</div><div class="pill" id="pill-pend">Con sugerencia</div><div class="pill">Compradores</div></div>
+  <div id="lista"></div>
+</div>
+
+<!-- PANTALLA 2: CHAT -->
+<div class="screen" id="scr-chat">
+  <div class="chead">
+    <div class="back" onclick="cerrarChat()">‹</div>
+    <div class="ava" id="c-ava">?</div>
+    <div class="who"><b id="c-nombre">—</b><span id="c-tel"></span></div>
+  </div>
+  <div id="msgs"></div>
+  <div id="gen"><button onclick="sugerir()">🤖 Generar sugerencia de Seb</button></div>
+  <div id="copilot">
+    <div class="tag">🤖 SUGERENCIA DE SEB <span class="int" id="c-int"></span></div>
+    <textarea id="draft" readonly></textarea>
+    <div class="cbtns">
+      <button class="cb send" onclick="resolver('aprobado')">✓ Enviar</button>
+      <button class="cb edit" id="btn-edit" onclick="toggleEdit()">✏️ Editar</button>
+      <button class="cb no" onclick="yoContesto()">✕ Yo contesto</button>
+    </div>
+  </div>
+  <div class="inputbar">
+    <textarea id="manual" rows="1" placeholder="Escribe un mensaje…"></textarea>
+    <button id="sendman" onclick="enviarManual()">➤</button>
+  </div>
+</div>
+
+<script>
+const API = '/api/seb-panel';
+let TEL = null, QID = null, EDITANDO = false, SOLO_PEND = false, CHATS = [];
+
+const colores = ['#6d5df6','#0a84ff','#30d158','#ff9f0a','#ff375f','#64d2ff','#bf5af2'];
+const colorDe = t => colores[String(t).split('').reduce((a,c)=>a+c.charCodeAt(0),0) % colores.length];
+const hora = ts => { const d = new Date(ts < 1e12 ? ts*1000 : ts); const hoy = new Date().toDateString()===d.toDateString();
+  return hoy ? d.toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'}) : d.toLocaleDateString('es-MX',{day:'numeric',month:'short'}); };
+const toast = m => { const t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); };
+
+async function cargarLista(){
+  const r = await fetch(API+'?action=chats').then(x=>x.json());
+  CHATS = r.chats || [];
+  pintarLista();
+}
+function pintarLista(){
+  const el = document.getElementById('lista');
+  const rows = SOLO_PEND ? CHATS.filter(c=>c.pendientes>0) : CHATS;
+  el.innerHTML = rows.map(c => `
+    <div class="chatrow" onclick="abrirChat('${c.telefono}','${(c.nombre||'').replace(/'/g,'')}')">
+      <div class="ava" style="background:${colorDe(c.telefono)}">${(c.nombre||'?')[0].toUpperCase()}</div>
+      <div class="meta">
+        <div class="n"><span>${c.nombre}</span><time class="${c.pendientes?'hot':''}">${hora(c.ult_ts)}</time></div>
+        <div class="p">${c.pendientes ? '<span class="badge-ia">🤖 SUGERENCIA</span>' : ''}<span>${c.ult_dir==='out'?'✓ ':''}${c.ult_msg}</span></div>
+      </div>
+      ${c.pendientes ? '<div class="badge-n">'+c.pendientes+'</div>' : ''}
+    </div>`).join('') || '<div style="padding:40px;text-align:center;color:var(--dim)">Sin chats</div>';
+}
+document.getElementById('pill-pend').onclick = function(){ SOLO_PEND=!SOLO_PEND; this.classList.toggle('on',SOLO_PEND); pintarLista(); };
+
+async function abrirChat(tel, nombre){
+  TEL = tel; QID = null; EDITANDO = false;
+  document.getElementById('c-nombre').textContent = nombre || tel;
+  document.getElementById('c-tel').textContent = '+'+tel;
+  document.getElementById('c-ava').textContent = (nombre||'?')[0].toUpperCase();
+  document.getElementById('c-ava').style.background = colorDe(tel);
+  document.getElementById('scr-chat').classList.add('open');
+  const r = await fetch(API+'?action=chat&telefono='+encodeURIComponent(tel)).then(x=>x.json());
+  const ms = document.getElementById('msgs');
+  ms.innerHTML = (r.mensajes||[]).map(m => `
+    <div class="bub ${m.direccion==='in'?'in':'out'}">${esc(m.mensaje)}
+      <span class="t">${m.origen_envio?'<span class="src">'+m.origen_envio+'</span>':''}${hora(m.timestamp)}${m.direccion==='out'?' ✓✓':''}</span>
+    </div>`).join('');
+  ms.scrollTop = ms.scrollHeight;
+  mostrarBorrador(r.borrador);
+}
+function esc(s){ return String(s||'').replace(/</g,'&lt;'); }
+function cerrarChat(){ document.getElementById('scr-chat').classList.remove('open'); cargarLista(); }
+
+function mostrarBorrador(b){
+  const cop = document.getElementById('copilot'), gen = document.getElementById('gen');
+  if (b && b.borrador){
+    QID = b.id;
+    document.getElementById('draft').value = b.borrador;
+    document.getElementById('draft').setAttribute('readonly','');
+    document.getElementById('c-int').textContent = b.intencion || '';
+    cop.classList.add('show'); gen.classList.remove('show');
+  } else { cop.classList.remove('show'); gen.classList.add('show'); }
+}
+
+async function sugerir(){
+  const btn = document.querySelector('#gen button');
+  btn.innerHTML = '<span class="spin"></span> Seb está pensando…'; btn.disabled = true;
+  try {
+    const r = await fetch(API, {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'sugerir', telefono: TEL})}).then(x=>x.json());
+    if (r.ok){ mostrarBorrador({id:r.queue_id, borrador:r.borrador, intencion:r.intencion}); }
+    else if (r.escalar){ toast('⚠️ Seb escala: '+(r.motivo||'requiere humano')); }
+    else toast('Error: '+(r.error||'?'));
+  } catch(e){ toast('Error de red'); }
+  btn.innerHTML = '🤖 Generar sugerencia de Seb'; btn.disabled = false;
+}
+
+function toggleEdit(){
+  const d = document.getElementById('draft');
+  if (!EDITANDO){ d.removeAttribute('readonly'); d.focus(); EDITANDO = true;
+    document.getElementById('btn-edit').textContent = '✓ Enviar editado';
+  } else { resolver('editado'); }
+}
+function yoContesto(){
+  document.getElementById('copilot').classList.remove('show');
+  document.getElementById('manual').focus();
+  toast('Escribe tu respuesta abajo — quedará registrada como manual');
+}
+
+async function resolver(tipo){
+  const texto = document.getElementById('draft').value;
+  const r = await fetch(API, {method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action:'resolver', queue_id: QID, resolucion: tipo, texto_final: texto})}).then(x=>x.json());
+  if (r.ok){
+    toast(r.enviado ? '✅ Enviado' : '⚠️ Guardado — no enviado: '+(r.error_envio||''));
+    abrirChat(TEL, document.getElementById('c-nombre').textContent);
+  } else toast('Error: '+(r.error||'?'));
+}
+
+async function enviarManual(){
+  const inp = document.getElementById('manual');
+  const texto = inp.value.trim(); if (!texto) return;
+  let r;
+  if (QID && document.getElementById('copilot').classList.contains('show')===false){
+    r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'resolver', queue_id: QID, resolucion:'manual', texto_final: texto})}).then(x=>x.json());
+  } else {
+    r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'manual_directo', telefono: TEL, texto})}).then(x=>x.json());
+  }
+  if (r.ok){ inp.value=''; toast(r.enviado?'✅ Enviado':'⚠️ No enviado: '+(r.error_envio||'')); abrirChat(TEL, document.getElementById('c-nombre').textContent); }
+  else toast('Error: '+(r.error||'?'));
+}
+
+cargarLista();
+setInterval(()=>{ if(!document.getElementById('scr-chat').classList.contains('open')) cargarLista(); }, 15000);
+</script>
+</body>
+</html>
