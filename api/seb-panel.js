@@ -276,7 +276,11 @@ module.exports = async function handler(req, res) {
             if (!q.length) return res.status(404).json({ error: 'no existe' });
             const item = q[0];
             const meta = JSON.parse(item.tools_usadas || '{}');
-            const final = resolucion === 'aprobado' ? item.borrador : String(texto_final || '');
+            // SE ENVÍA SIEMPRE lo que está en el textarea (texto_final) — sea editado o no.
+            // Antes 'aprobado' mandaba item.borrador (el BASE) e ignoraba tu edición →
+            // salía el base y la burbuja optimista mostraba el editado (doble + equivocado).
+            // El tipo (aprobado/editado) es solo etiqueta de entrenamiento, NO decide el texto.
+            const final = String((texto_final != null && String(texto_final).trim()) ? texto_final : item.borrador || '');
             if (!final.trim()) return res.status(400).json({ error: 'texto_final vacío' });
 
             // 0) CANDADO ATÓMICO anti doble-envío: solo UNA llamada gana el derecho
@@ -291,7 +295,7 @@ module.exports = async function handler(req, res) {
             }
 
             // 1) ENTRENAMIENTO: registrar la decisión humana (la materia prima del lote)
-            const sim = resolucion === 'aprobado' ? 1 : similitud(item.borrador, final);
+            const sim = similitud(item.borrador, final); // exacta: 1 si no se editó, <1 si sí
             await run(
                 `INSERT INTO seb_entrenamiento (queue_id, telefono, intencion, auto_id, borrador, texto_final, accion, similitud, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
