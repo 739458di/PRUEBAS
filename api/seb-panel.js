@@ -147,11 +147,21 @@ module.exports = async function handler(req, res) {
             const draft = await query(
                 "SELECT id, borrador, intencion, creado_en FROM seb_queue WHERE telefono=? AND estado='pendiente' ORDER BY id DESC LIMIT 1",
                 [tel]);
+            let borrador = draft[0] || null;
+            // Una sugerencia es VÁLIDA solo si responde al último mensaje. Si llegó un
+            // mensaje ENTRANTE DESPUÉS de crearla, ya está vieja (la conversación avanzó)
+            // → no la muestres (evita que sugerencias viejas atoradas reaparezcan).
+            if (borrador && conv.length) {
+                const nuevos = await query(
+                    "SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='in' AND ts > ?",
+                    [conv[0].id, Number(borrador.creado_en)]);
+                if (nuevos[0] && nuevos[0].n > 0) borrador = null;
+            }
             const est = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
             return res.status(200).json({
                 ok: true,
                 mensajes,
-                borrador: draft[0] || null,
+                borrador,
                 estado: est[0] ? { ...JSON.parse(est[0].estado_json || '{}'), auto_id_activo: est[0].auto_id_activo } : {}
             });
         }
@@ -249,6 +259,9 @@ module.exports = async function handler(req, res) {
                 [tel, r.borrador, clasif.intencion_principal,
                  JSON.stringify({ tools: r.tools_usadas.map(t => t.tool), estado_nuevo: r.estado_nuevo, auto_id: clasif.auto_id }),
                  dedupe, Date.now()]);
+            // Limpieza: descarta cualquier OTRA sugerencia pendiente vieja de este chat
+            // (acumuladas con dedupe_keys distintos) — solo vive la recién creada.
+            await run("UPDATE seb_queue SET estado='descartado' WHERE telefono=? AND estado='pendiente' AND dedupe_key<>?", [tel, dedupe]);
             const qrow = await query("SELECT id FROM seb_queue WHERE dedupe_key=?", [dedupe]);
             return res.status(200).json({ ok: true, queue_id: qrow[0] ? qrow[0].id : null, borrador: r.borrador, intencion: clasif.intencion_principal });
         }
