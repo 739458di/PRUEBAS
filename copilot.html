@@ -514,18 +514,22 @@ async function enviarManual(){
   inp.value=''; inp.style.height='auto';
   const optId = pintarOptimista(texto);                // aparece YA
   const usarQueue = QID && document.getElementById('copilot').classList.contains('show')===false;
+  const mandarDirecto = () => fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action:'manual_directo', telefono: TEL, texto})}).then(x=>x.json());
   try {
     let r;
     if (usarQueue){
       r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
         body: JSON.stringify({action:'resolver', queue_id: QID, resolucion:'manual', texto_final: texto})}).then(x=>x.json());
+      // Si esa sugerencia YA estaba enviada (QID viejo) → manda el mensaje DIRECTO.
+      // Nunca error, nunca pérdida: el manual siempre sale.
+      if (r && r.ya_enviado){ QID = null; r = await mandarDirecto(); }
+      else if (r && r.enviado){ QID = null; }   // resolvió la sugerencia → consúmela
     } else {
-      r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({action:'manual_directo', telefono: TEL, texto})}).then(x=>x.json());
+      r = await mandarDirecto();
     }
     if (!r.ok){ quitarOptimista(optId, texto); toast('⚠️ No se envió: '+(r.error||'?')); }
     else if (!r.enviado){ quitarOptimista(optId, texto); toast('⚠️ No se envió: '+(r.error_envio||'WhatsApp no conectado')); }
-    else if (usarQueue){ QID = null; }   // si el manual resolvió la sugerencia, consúmela (evita reusar el QID)
   } catch(e){ quitarOptimista(optId, texto); toast('⚠️ No se envió (red)'); }
   if(sb){ sb.disabled=false; sb.style.opacity=1; }
   ENVIANDO = false;
