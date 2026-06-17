@@ -132,6 +132,8 @@ module.exports = async function handler(req, res) {
         // HORA REAL (ts). Cada uno trae su FOLIO (msg_id) para que el front deduplique bien.
         if (action === 'chat') {
             const tel = String(req.query.telefono || '');
+            const resets = await cargarResets();
+            const resetTs = Number(resets[tel] || 0);   // MODO PRUEBA: todo lo ANTERIOR a esto se ignora (lead nuevo)
             const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
             let mensajes = [];
             if (conv.length) {
@@ -140,29 +142,30 @@ module.exports = async function handler(req, res) {
                     [conv[0].id]);
                 mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id }));
                 // MODO PRUEBA: solo mensajes posteriores al reinicio
-                const resets = await cargarResets();
-                const ms = resets[tel];
-                if (ms) mensajes = mensajes.filter(m => (m.timestamp * 1000) >= ms);
+                if (resetTs) mensajes = mensajes.filter(m => (m.timestamp * 1000) >= resetTs);
             }
             const draft = await query(
                 "SELECT id, borrador, intencion, creado_en FROM seb_queue WHERE telefono=? AND estado='pendiente' ORDER BY id DESC LIMIT 1",
                 [tel]);
             let borrador = draft[0] || null;
-            // Una sugerencia es VÁLIDA solo si responde al último mensaje. Si llegó un
-            // mensaje ENTRANTE DESPUÉS de crearla, ya está vieja (la conversación avanzó)
-            // → no la muestres (evita que sugerencias viejas atoradas reaparezcan).
+            // La sugerencia se descarta si: (a) es anterior al reinicio de prueba, o
+            // (b) llegó un mensaje ENTRANTE después de crearla (la conversación avanzó).
+            if (borrador && resetTs && Number(borrador.creado_en) < resetTs) borrador = null;
             if (borrador && conv.length) {
                 const nuevos = await query(
                     "SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='in' AND ts > ?",
                     [conv[0].id, Number(borrador.creado_en)]);
                 if (nuevos[0] && nuevos[0].n > 0) borrador = null;
             }
-            const est = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
+            // ESTADO: si es ANTERIOR al reinicio de prueba, se ignora → arranca de 0
+            // (sin enganche/plazo/auto_id/pregunta_pendiente arrastrados).
+            const est = await query("SELECT estado_json, auto_id_activo, updated_at FROM wa_conversations WHERE telefono=?", [tel]);
+            const estadoFresco = est[0] && Number(est[0].updated_at || 0) >= resetTs;
             return res.status(200).json({
                 ok: true,
                 mensajes,
                 borrador,
-                estado: est[0] ? { ...JSON.parse(est[0].estado_json || '{}'), auto_id_activo: est[0].auto_id_activo } : {}
+                estado: estadoFresco ? { ...JSON.parse(est[0].estado_json || '{}'), auto_id_activo: est[0].auto_id_activo } : {}
             });
         }
 
@@ -233,8 +236,13 @@ module.exports = async function handler(req, res) {
             const dedupe = tel + ':' + (convId || 'x');
 
             const historial = conv.mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
-            const convEstado = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
-            const estado = convEstado[0] ? { ...JSON.parse(convEstado[0].estado_json || '{}'), auto_id_activo: convEstado[0].auto_id_activo } : {};
+            const resetTs = Number(resets[tel] || 0);
+            const convEstado = await query("SELECT estado_json, auto_id_activo, updated_at FROM wa_conversations WHERE telefono=?", [tel]);
+            // MODO PRUEBA: si el estado es ANTERIOR al reinicio (contestaste un anuncio nuevo),
+            // se IGNORA → lead nuevo de 0 (sin enganche/plazo/auto_id/pregunta arrastrados).
+            const estado = (convEstado[0] && Number(convEstado[0].updated_at || 0) >= resetTs)
+                ? { ...JSON.parse(convEstado[0].estado_json || '{}'), auto_id_activo: convEstado[0].auto_id_activo }
+                : {};
 
             // Meter el AUTO DEL ANUNCIO a la mochila: si el comprador vino de un anuncio,
             // se lo pasamos al cerebro como bloque [DESC:] para que resuelva el auto correcto.
