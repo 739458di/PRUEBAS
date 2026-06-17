@@ -26,6 +26,66 @@ async function telefonosDueno() {
     return new Set(rows.map(r => String(r.t).replace(/\D/g, '').slice(-10)).filter(x => x.length === 10));
 }
 
+// Convierte el "yyyy" string time de cleaned_text ("15/6/2026, 14:22:57") a epoch segundos.
+function timeAEpoch(s, fallback) {
+    if (!s) return fallback || 0;
+    const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (!m) return fallback || 0;
+    // El string "time" viene en hora de MONTERREY (UTC-6). Lo parseamos como tal —
+    // no como hora del servidor (UTC) — para no correrlo 6 horas (bug del 3:55 a.m.).
+    const iso = `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}T${String(m[4]).padStart(2, '0')}:${m[5]}:${String(m[6] || '0').padStart(2, '0')}-06:00`;
+    const t = Math.floor(new Date(iso).getTime() / 1000);
+    return isFinite(t) && t > 0 ? t : (fallback || 0);
+}
+
+// FUENTE ÚNICA: arma una conversación desde raw_conversations.cleaned_text.
+// Devuelve { telefono, nombre, mensajes:[{mensaje,direccion,timestamp}] }.
+// direccion: 'out' si el emisor es el vendedor (nosotros), 'in' si es el comprador.
+// Maneja DOS formatos de cleaned_text:
+//   nuevo: { messages:[{em,ds,t,time}], actores:[{nombre,lado,...}] }
+//   viejo: [ {em,ds,t,time,_timestamp}, ... ]  (array directo, sin actores)
+const VENDEDOR_COD = 'SRS010904';   // código fijo del vendedor (Sebastián)
+function parseConversacion(row) {
+    let data;
+    try { data = JSON.parse(row.cleaned_text || '{}'); } catch (e) { data = {}; }
+    const msgsRaw = Array.isArray(data) ? data : (Array.isArray(data.messages) ? data.messages : []);
+    const actores = (!Array.isArray(data) && Array.isArray(data.actores)) ? data.actores : [];
+    // lado del emisor: por actores, o por heurística (el vendedor es SRS010904)
+    const ladoDe = (nombre) => {
+        const a = actores.find(x => x.nombre === nombre);
+        if (a) return a.lado;
+        return nombre === VENDEDOR_COD ? 'vendedor' : 'comprador';
+    };
+    const comprador = actores.find(x => x.lado === 'comprador' && x.es_principal) || actores.find(x => x.lado === 'comprador');
+    // nombre del comprador: de actores, o del primer emisor que no sea el vendedor
+    let nombreComp = comprador ? comprador.nombre : null;
+    if (!nombreComp) { const m = msgsRaw.find(x => x.em && x.em !== VENDEDOR_COD); nombreComp = m ? m.em : null; }
+    if (nombreComp === '.' || nombreComp === VENDEDOR_COD) nombreComp = null;
+    const fallbackTs = row.last_ingested_at ? Math.floor(Number(row.last_ingested_at) / 1000) : 0;
+    const mensajes = msgsRaw.map(m => ({
+        mensaje: m.t || '',
+        direccion: (ladoDe(m.em) === 'vendedor') ? 'out' : 'in',
+        timestamp: m._timestamp ? Math.floor(Number(m._timestamp) / 1000) : timeAEpoch(m.time, fallbackTs)
+    }));
+    const externalId = (row.channel_thread_id || '').split(':')[1]
+        || (comprador && comprador.telefono) || '';
+    return { telefono: externalId, nombre: nombreComp, mensajes };
+}
+
+// MODO PRUEBA: mapa telefono → reset_ts (ms). Solo se ven mensajes posteriores al reinicio.
+async function cargarResets() {
+    try {
+        const r = await query("SELECT telefono, reset_ts FROM prueba_reset");
+        const m = {}; r.forEach(x => { m[String(x.telefono)] = Number(x.reset_ts); }); return m;
+    } catch (e) { return {}; }
+}
+// Filtra los mensajes de una conversación para mostrar solo los posteriores al reinicio.
+function aplicarReset(c, resets) {
+    const ms = resets[c.telefono];
+    if (ms) c.mensajes = c.mensajes.filter(m => (m.timestamp * 1000) >= ms);
+    return c;
+}
+
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -36,85 +96,161 @@ module.exports = async function handler(req, res) {
         const action = (req.query && req.query.action) || (req.body && req.body.action) || '';
 
         // ============ LISTA DE CHATS (solo compradores) ============
+        // FASE 3 — lee de la LIBRETA NUEVA (conversaciones), ordenada por la HORA REAL
+        // del último mensaje (ult_msg_ts). Orden correcto y sin duplicados.
         if (action === 'chats') {
             const duenos = await telefonosDueno();
-            // UNA query plana y agregación en JS (las subqueries correlacionadas
-            // sobre Turso remoto tardaban demasiado)
-            // substr: hay mensajes gigantes (imágenes base64) que revientan el
-            // sort de SQLite (SQLITE_NOMEM) si se arrastran completos
-            const ult = await query(
-                "SELECT telefono, nombre, substr(mensaje,1,120) mensaje, direccion, timestamp FROM wa_messages WHERE platform='whatsapp' AND mensaje IS NOT NULL ORDER BY timestamp DESC LIMIT 800");
-            const porTel = new Map();
-            for (const m of ult) {
-                if (!porTel.has(m.telefono)) {
-                    porTel.set(m.telefono, { telefono: m.telefono, nombre: m.nombre, ult_msg: m.mensaje, ult_dir: m.direccion, ult_ts: m.timestamp });
-                } else if (!porTel.get(m.telefono).nombre && m.nombre) {
-                    porTel.get(m.telefono).nombre = m.nombre;
-                }
-                if (porTel.size >= 60) { /* sigue para rellenar nombres */ }
-            }
-            const rows = [...porTel.values()].slice(0, 60);
+            const rows = await query(
+                "SELECT channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, is_dueno_chat " +
+                "FROM conversaciones WHERE source='whatsapp' AND ult_msg_ts IS NOT NULL " +
+                "ORDER BY ult_msg_ts DESC LIMIT 120");
             const pend = await query("SELECT telefono, COUNT(*) n FROM seb_queue WHERE estado='pendiente' GROUP BY telefono");
             const pendMap = {}; pend.forEach(p => pendMap[p.telefono] = p.n);
-            const chats = rows
-                .filter(r => !duenos.has(String(r.telefono).replace(/\D/g, '').slice(-10)))
-                .map(r => ({
-                    telefono: r.telefono,
-                    nombre: r.nombre || ('+' + String(r.telefono).slice(0, 3) + ' ' + String(r.telefono).slice(-10)),
-                    ult_msg: String(r.ult_msg || '').slice(0, 90),
-                    ult_dir: r.ult_dir,
-                    ult_ts: Number(r.ult_ts),
-                    pendientes: pendMap[r.telefono] || 0
-                }));
-            return res.status(200).json({ ok: true, chats });
+            const porTel = new Map();
+            for (const row of rows) {
+                if (row.is_dueno_chat === 1) continue;                 // chat de dueño → ocultar
+                const tel = row.telefono || (row.channel_thread_id || '').split(':')[1] || '';
+                if (!tel) continue;
+                const tel10 = String(tel).replace(/\D/g, '').slice(-10);
+                if (duenos.has(tel10)) continue;                       // dueño por teléfono → ocultar
+                if (porTel.has(tel)) continue;
+                porTel.set(tel, {
+                    telefono: tel,
+                    nombre: (row.nombre && row.nombre !== '.') ? row.nombre : ('+' + String(tel).slice(0, 3) + ' ' + String(tel).slice(-10)),
+                    ult_msg: String(row.ult_texto || '').slice(0, 90),
+                    ult_dir: row.ult_dir || 'in',
+                    ult_ts: Math.floor(Number(row.ult_msg_ts || 0) / 1000),   // HORA REAL del último mensaje
+                    pendientes: pendMap[tel] || 0
+                });
+                if (porTel.size >= 60) break;
+            }
+            return res.status(200).json({ ok: true, chats: [...porTel.values()] });
         }
 
         // ============ UN CHAT COMPLETO ============
+        // FASE 3 — arma los mensajes desde la LIBRETA NUEVA (mensajes), ordenados por
+        // HORA REAL (ts). Cada uno trae su FOLIO (msg_id) para que el front deduplique bien.
         if (action === 'chat') {
             const tel = String(req.query.telefono || '');
-            const msgs = await query(
-                "SELECT id, substr(mensaje,1,1500) mensaje, direccion, timestamp, origen_envio FROM wa_messages WHERE telefono=? AND mensaje IS NOT NULL ORDER BY timestamp DESC LIMIT 50",
-                [tel]);
+            const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+            let mensajes = [];
+            if (conv.length) {
+                const rows = await query(
+                    "SELECT direccion, texto, ts, msg_id FROM mensajes WHERE conversacion_id = ? ORDER BY ts ASC, id ASC",
+                    [conv[0].id]);
+                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id }));
+                // MODO PRUEBA: solo mensajes posteriores al reinicio
+                const resets = await cargarResets();
+                const ms = resets[tel];
+                if (ms) mensajes = mensajes.filter(m => (m.timestamp * 1000) >= ms);
+            }
             const draft = await query(
                 "SELECT id, borrador, intencion, creado_en FROM seb_queue WHERE telefono=? AND estado='pendiente' ORDER BY id DESC LIMIT 1",
                 [tel]);
-            const conv = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
+            const est = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
             return res.status(200).json({
                 ok: true,
-                mensajes: msgs.reverse(),
+                mensajes,
                 borrador: draft[0] || null,
-                estado: conv[0] ? { ...JSON.parse(conv[0].estado_json || '{}'), auto_id_activo: conv[0].auto_id_activo } : {}
+                estado: est[0] ? { ...JSON.parse(est[0].estado_json || '{}'), auto_id_activo: est[0].auto_id_activo } : {}
             });
         }
 
+        // ============ AGREGAR MENSAJE PERDIDO (manual) ============
+        // Rescata a mano un mensaje que no llegó (p.ej. Bad MAC): lo inserta en la
+        // conversación EN ORDEN por hora → se renderiza y Seb recupera el contexto.
+        if (action === 'agregar_mensaje' && req.method === 'POST') {
+            const tel = String(req.body.telefono || '').replace(/\D/g, '');
+            const texto = String(req.body.texto || '').trim();
+            const dir = req.body.direccion === 'out' ? 'out' : 'in';     // in = él te escribió, out = tú le escribiste
+            const fecha = String(req.body.fecha || '').trim();           // YYYY-MM-DD (opcional → hoy)
+            const hora = String(req.body.hora || '').trim();             // HH:MM (24h)
+            if (!tel || !texto) return res.status(400).json({ ok: false, error: 'telefono y texto requeridos' });
+
+            // epoch ms del mensaje (la hora se interpreta como Monterrey, UTC-6)
+            let when = Date.now();
+            if (/^\d{1,2}:\d{2}$/.test(hora)) {
+                let y, mo, d;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) { [y, mo, d] = fecha.split('-').map(Number); }
+                else { const n = new Date(Date.now() - 6 * 3600000); y = n.getUTCFullYear(); mo = n.getUTCMonth() + 1; d = n.getUTCDate(); }
+                const [hh, mm] = hora.split(':').map(Number);
+                const iso = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00-06:00`;
+                const t = new Date(iso).getTime();
+                if (isFinite(t) && t > 0) when = t;
+            }
+            // FASE 3 — escribe el rescate como RENGLÓN en la libreta nueva (orden automático por hora).
+            const thread = 'whatsapp:' + tel;
+            const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", [thread]);
+            if (!conv.length) return res.status(404).json({ ok: false, error: 'sin_chat', motivo: 'Primero mándale un mensaje al comprador para crear el chat, luego agrega el perdido.' });
+            const convId = conv[0].id;
+            const folio = 'manual:' + tel + ':' + when;                   // folio sintético estable (dedup si lo agregas 2 veces)
+            await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?, 'text', 0, ?)",
+                [convId, folio, when, dir, dir === 'out' ? VENDEDOR_COD : null, texto, Date.now()]);
+            // si es el más NUEVO del chat, actualizar la portada (para la lista)
+            await run(`UPDATE conversaciones SET
+                  ult_texto = CASE WHEN ? >= ult_msg_ts THEN ? ELSE ult_texto END,
+                  ult_dir   = CASE WHEN ? >= ult_msg_ts THEN ? ELSE ult_dir END,
+                  ult_msg_ts = MAX(?, ult_msg_ts)
+                WHERE id=?`, [when, texto.slice(0, 120), when, dir, when, convId]);
+            return res.status(200).json({ ok: true, timestamp: Math.floor(when / 1000), direccion: dir });
+        }
+
         // ============ SUGERIR (corre el cerebro on-demand) ============
+        // FUENTE ÚNICA: el cerebro también lee de raw_conversations.
         if (action === 'sugerir' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
-            const last = await query(
-                "SELECT id, substr(mensaje,1,1000) mensaje FROM wa_messages WHERE telefono=? AND direccion='in' AND mensaje IS NOT NULL ORDER BY timestamp DESC LIMIT 1", [tel]);
-            if (last.length === 0) return res.status(400).json({ error: 'sin mensajes entrantes' });
-            const dedupe = tel + ':' + last[0].id;
-            const ya = await query("SELECT id, borrador FROM seb_queue WHERE dedupe_key=? AND estado='pendiente'", [dedupe]);
-            if (ya.length) return res.status(200).json({ ok: true, queue_id: ya[0].id, borrador: ya[0].borrador, cached: true });
+            // FASE 3 — el cerebro también lee de la LIBRETA NUEVA (mensajes), limpio y ordenado.
+            const convRow = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+            const convId = convRow.length ? convRow[0].id : null;
+            const resets = await cargarResets();
+            let conv = { mensajes: [] };
+            if (convId) {
+                const mr = await query("SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                let msgs = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000) }));
+                const ms = resets[tel];
+                if (ms) msgs = msgs.filter(m => (m.timestamp * 1000) >= ms);
+                conv = { mensajes: msgs };
+            }
+            const entrantes = conv.mensajes.filter(m => m.direccion === 'in');
+            // BUG 9: usar el texto EXACTO que el front ya tiene en pantalla (evita el lag de ingesta);
+            // si no viene, caer al último entrante de la base.
+            const ultimoInBody = String((req.body && req.body.ultimo_in) || '').trim();
+            if (entrantes.length === 0 && !ultimoInBody) return res.status(400).json({ error: 'sin mensajes entrantes' });
+            const lastMsg = ultimoInBody || entrantes[entrantes.length - 1].mensaje;
+            // El botón SIEMPRE regenera con el ÚLTIMO mensaje (no se queda pegado).
+            // dedupe_key estable por conversación → el UPSERT reemplaza la sugerencia
+            // pendiente anterior (una sola sugerencia "viva" por chat, siempre fresca).
+            const dedupe = tel + ':' + (convId || 'x');
 
-            const hist = await query(
-                "SELECT substr(mensaje,1,300) mensaje, direccion FROM wa_messages WHERE telefono=? AND mensaje IS NOT NULL ORDER BY timestamp DESC LIMIT 8", [tel]);
-            const historial = hist.reverse().map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
-            const convRow = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
-            const estado = convRow[0] ? { ...JSON.parse(convRow[0].estado_json || '{}'), auto_id_activo: convRow[0].auto_id_activo } : {};
+            const historial = conv.mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            const convEstado = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
+            const estado = convEstado[0] ? { ...JSON.parse(convEstado[0].estado_json || '{}'), auto_id_activo: convEstado[0].auto_id_activo } : {};
 
-            const clasif = await entender({ mensaje: last[0].mensaje, historial, estado });
-            const r = await pensar({ telefono: tel, mensaje: last[0].mensaje, clasificacion: clasif, estado });
+            // Meter el AUTO DEL ANUNCIO a la mochila: si el comprador vino de un anuncio,
+            // se lo pasamos al cerebro como bloque [DESC:] para que resuelva el auto correcto.
+            let mensajeCerebro = lastMsg;
+            try {
+                const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]);
+                if (adRow[0] && adRow[0].ad_context) mensajeCerebro = '[DESC: ' + adRow[0].ad_context + ']\n' + lastMsg;
+            } catch (e) { /* tabla aún no existe → sin anuncio */ }
+
+            const clasif = await entender({ mensaje: mensajeCerebro, historial, estado });
+            const r = await pensar({ telefono: tel, mensaje: lastMsg, clasificacion: clasif, estado });
             if (!r.ok) {
                 return res.status(200).json({ ok: false, escalar: true, motivo: r.motivo, intencion: clasif.intencion_principal });
             }
-            const ins = await run(
+            // UPSERT: si ya existe esa dedupe_key (de un intento previo resuelto), la
+            // REGENERA en vez de tronar con UNIQUE constraint.
+            await run(
                 `INSERT INTO seb_queue (telefono, borrador, estado, intencion, tools_usadas, dedupe_key, creado_en)
-                 VALUES (?, ?, 'pendiente', ?, ?, ?, ?)`,
+                 VALUES (?, ?, 'pendiente', ?, ?, ?, ?)
+                 ON CONFLICT(dedupe_key) DO UPDATE SET borrador=excluded.borrador, estado='pendiente',
+                   intencion=excluded.intencion, tools_usadas=excluded.tools_usadas, creado_en=excluded.creado_en`,
                 [tel, r.borrador, clasif.intencion_principal,
                  JSON.stringify({ tools: r.tools_usadas.map(t => t.tool), estado_nuevo: r.estado_nuevo, auto_id: clasif.auto_id }),
                  dedupe, Date.now()]);
-            return res.status(200).json({ ok: true, queue_id: Number(ins.lastInsertRowid), borrador: r.borrador, intencion: clasif.intencion_principal });
+            const qrow = await query("SELECT id FROM seb_queue WHERE dedupe_key=?", [dedupe]);
+            return res.status(200).json({ ok: true, queue_id: qrow[0] ? qrow[0].id : null, borrador: r.borrador, intencion: clasif.intencion_principal });
         }
 
         // ============ RESOLVER (aprobar / editar / manual) + ENTRENAMIENTO ============
@@ -129,6 +265,17 @@ module.exports = async function handler(req, res) {
             const meta = JSON.parse(item.tools_usadas || '{}');
             const final = resolucion === 'aprobado' ? item.borrador : String(texto_final || '');
             if (!final.trim()) return res.status(400).json({ error: 'texto_final vacío' });
+
+            // 0) CANDADO ATÓMICO anti doble-envío: solo UNA llamada gana el derecho
+            //    a enviar este queue_id. Permite reintentar un envío FALLIDO
+            //    ('aprobado_sin_enviar'), pero NUNCA re-enviar uno ya 'enviado'.
+            //    (Sin esto, "Enviar"+"Enviar editado" o un reintento de red mandaban doble.)
+            const claim = await run(
+                "UPDATE seb_queue SET estado='enviando' WHERE id=? AND estado IN ('pendiente','aprobado_sin_enviar')",
+                [Number(queue_id)]);
+            if (!claim.rowsAffected) {
+                return res.status(200).json({ ok: true, enviado: true, ya_enviado: true, nota: 'esta sugerencia ya se había enviado' });
+            }
 
             // 1) ENTRENAMIENTO: registrar la decisión humana (la materia prima del lote)
             const sim = resolucion === 'aprobado' ? 1 : similitud(item.borrador, final);
@@ -165,13 +312,8 @@ module.exports = async function handler(req, res) {
                 } catch (e) { error_envio = e.message; }
             } else { error_envio = 'bridge no configurado (BRIDGE_SEND_URL/BRIDGE_API_KEY)'; }
 
-            // 4) Solo si SE ENVIÓ se registra el mensaje saliente (lección: nunca guardar envíos fallidos)
-            if (enviado) {
-                await run(
-                    "INSERT INTO wa_messages (telefono, mensaje, tipo, direccion, timestamp, created_at, ai_generated, platform, origen_envio) VALUES (?, ?, 'text', 'out', ?, ?, ?, 'whatsapp', ?)",
-                    [item.telefono, final, Math.floor(Date.now() / 1000), Date.now(), resolucion !== 'manual' ? 1 : 0,
-                     resolucion === 'aprobado' ? 'borrador_aprobado' : (resolucion === 'editado' ? 'editado' : 'manual')]);
-            }
+            // 4) El saliente ya llega a raw_conversations vía el bridge (/api/send → SALES-BRAIN).
+            //    Fuente única: NO se escribe wa_messages aquí.
             await run("UPDATE seb_queue SET estado=?, texto_final=?, resuelto_en=? WHERE id=?",
                 [enviado ? 'enviado' : 'aprobado_sin_enviar', final, Date.now(), item.id]);
 
@@ -199,11 +341,7 @@ module.exports = async function handler(req, res) {
                     if (!enviado) error_envio = d.error || ('bridge ' + r.status);
                 } catch (e) { error_envio = e.message; }
             } else { error_envio = 'bridge no configurado'; }
-            if (enviado) {
-                await run(
-                    "INSERT INTO wa_messages (telefono, mensaje, tipo, direccion, timestamp, created_at, ai_generated, platform, origen_envio) VALUES (?, ?, 'text', 'out', ?, ?, 0, 'whatsapp', 'manual')",
-                    [tel, texto, Math.floor(Date.now() / 1000), Date.now()]);
-            }
+            // Fuente única: el saliente llega a raw_conversations vía el bridge, no se escribe wa_messages.
             return res.status(200).json({ ok: true, enviado, error_envio });
         }
 
