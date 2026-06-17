@@ -299,7 +299,10 @@ module.exports = async function handler(req, res) {
                 "UPDATE seb_queue SET estado='enviando' WHERE id=? AND estado IN ('pendiente','aprobado_sin_enviar')",
                 [Number(queue_id)]);
             if (!claim.rowsAffected) {
-                return res.status(200).json({ ok: true, enviado: true, ya_enviado: true, nota: 'esta sugerencia ya se había enviado' });
+                // Ya se resolvió/envió antes. NO reportar enviado:true (causaba PÉRDIDA
+                // SILENCIOSA si el front reusaba un QID viejo: la burbuja quedaba con ✓✓
+                // pero nada se mandaba). enviado:false → el front quita la burbuja y avisa.
+                return res.status(200).json({ ok: true, enviado: false, ya_enviado: true, error_envio: 'esa sugerencia ya se había enviado (escríbelo de nuevo y se manda directo)' });
             }
 
             // 1) ENTRENAMIENTO: registrar la decisión humana (la materia prima del lote)

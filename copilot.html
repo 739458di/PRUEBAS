@@ -4,82 +4,147 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>FyraChat · Copiloto</title>
 <style>
-  :root{ --bg:#000; --chatbg:#0b141a; --panel:#1c1c1e; --row:#0e0e10; --line:#26262a;
-         --text:#e9edef; --dim:#8696a0; --green:#25d366; --outbub:#005c4b; --inbub:#202c33;
-         --ia:#6d5df6; --iabg:#17152b; }
+  :root{ --bg:#ffffff; --chatbg:#f7f9fc; --panel:#ffffff; --line:#eceff4;
+         --text:#1a2438; --dim:#9aa3b5; --green:#22c55e; --inbub:#ffffff;
+         --out:#e9f1fd; --ia:#2f6df0; --acc:#2f6df0; }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro',Segoe UI,Roboto,sans-serif;height:100dvh;overflow:hidden}
-  .screen{position:absolute;inset:0;display:flex;flex-direction:column;transition:transform .22s ease}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',Segoe UI,Roboto,sans-serif;height:100dvh;overflow:hidden;-webkit-font-smoothing:antialiased}
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;transition:transform .24s cubic-bezier(.32,.72,0,1);background:var(--bg)}
   #scr-chat{transform:translateX(100%);background:var(--chatbg)}
   #scr-chat.open{transform:translateX(0)}
 
   /* ===== LISTA ===== */
-  .top{padding:14px 16px 6px;display:flex;justify-content:space-between;align-items:center}
-  .top h1{font-size:30px;font-weight:800;letter-spacing:.2px}
-  .top .dot{width:34px;height:34px;border-radius:50%;background:var(--ia);display:flex;align-items:center;justify-content:center;font-size:17px}
-  .pills{display:flex;gap:8px;padding:8px 16px 10px;overflow-x:auto}
-  .pill{padding:7px 14px;border-radius:18px;background:#1f1f22;color:var(--dim);font-size:14px;font-weight:600;white-space:nowrap}
-  .pill.on{background:#103529;color:var(--green)}
-  #lista{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .chatrow{display:flex;gap:12px;padding:10px 16px;align-items:center;border-bottom:.5px solid var(--line);cursor:pointer}
-  .chatrow:active{background:#111}
-  .ava{width:52px;height:52px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;color:#fff}
+  .top{padding:calc(16px + env(safe-area-inset-top)) 20px 4px;display:flex;justify-content:space-between;align-items:center}
+  .top h1{font-size:30px;font-weight:800;letter-spacing:-.5px;color:#141d30}
+  .top .dot{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#5b9ef0,#2f6df0);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(47,109,240,.32)}
+  .search{margin:14px 20px 4px;display:flex;align-items:center;gap:9px;background:#f1f4f9;border-radius:13px;padding:11px 14px}
+  .search svg{width:17px;height:17px;color:#9aa3b5;flex:none}
+  .search input{flex:1;border:none;background:none;outline:none;font-size:15.5px;font-family:inherit;color:var(--text)}
+  .search input::placeholder{color:#aab2c2}
+  .pills{display:flex;gap:8px;padding:8px 20px;overflow-x:auto}
+  .pill{padding:6px 14px;border-radius:16px;background:#f1f4f9;color:var(--dim);font-size:13.5px;font-weight:600;white-space:nowrap;transition:transform .1s}
+  .pill:active{transform:scale(.95)}
+  .pill.on{background:#e7f0ff;color:var(--acc)}
+  #lista{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:2px}
+  .chatrow{display:flex;gap:14px;padding:11px 12px;align-items:center;cursor:pointer;position:relative;transition:background .12s;border-radius:16px;margin:1px 8px}
+  .chatrow:active{background:#f3f6fb}
+  .ava{width:56px;height:56px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;color:#fff;box-shadow:0 4px 12px rgba(70,100,160,.20);position:relative}
+  .ava .on{position:absolute;right:1px;bottom:1px;width:14px;height:14px;border-radius:50%;background:var(--green);border:2.5px solid #fff}
   .meta{flex:1;min-width:0}
-  .meta .n{font-size:16.5px;font-weight:600;display:flex;justify-content:space-between}
-  .meta .n time{font-size:13px;color:var(--dim);font-weight:400}
-  .meta .n time.hot{color:var(--green)}
-  .meta .p{font-size:14.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;display:flex;gap:6px;align-items:center}
-  .badge-ia{flex:none;background:var(--ia);color:#fff;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:10px}
-  .badge-n{flex:none;background:var(--green);color:#000;font-size:12px;font-weight:800;min-width:21px;height:21px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+  .meta .n{font-size:17px;font-weight:700;display:flex;justify-content:space-between;align-items:baseline;color:#1a2438;letter-spacing:-.2px}
+  .meta .n time{font-size:13px;color:var(--dim);font-weight:500;flex:none;margin-left:8px}
+  .meta .n time.hot{color:var(--acc)}
+  .meta .p{font-size:14.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;display:flex;gap:7px;align-items:center}
+  .badge-ia{flex:none;background:#e7f0ff;color:var(--acc);font-size:11px;font-weight:700;padding:2px 9px;border-radius:9px}
+  .badge-n{flex:none;background:var(--acc);color:#fff;font-size:12px;font-weight:800;min-width:21px;height:21px;padding:0 6px;border-radius:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(47,109,240,.3)}
+  .chatrow.unread .meta .n span{font-weight:800;color:#0e1626}
+  .chatrow.unread .meta .p span{color:#46506a;font-weight:500}
 
   /* ===== CHAT ===== */
-  .chead{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:.5px solid var(--line)}
-  .back{color:#3478f6;font-size:26px;padding:0 4px;cursor:pointer}
-  .chead .ava{width:38px;height:38px;font-size:15px}
+  .chead{display:flex;align-items:center;gap:11px;padding:calc(9px + env(safe-area-inset-top)) 14px 9px;background:rgba(255,255,255,.82);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid #eef1f6;position:relative;z-index:3}
+  .back{color:var(--acc);display:flex;align-items:center;padding:8px 6px;margin:-4px;cursor:pointer}
+  .back svg{width:12px;height:21px}
+  .chead .ava{width:40px;height:40px;font-size:16px}
   .chead .who{flex:1;min-width:0}
-  .chead .who b{font-size:16px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .chead .who span{font-size:12px;color:var(--dim)}
-  #msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:3px;
-        background:var(--chatbg) url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='30' cy='30' r='1' fill='%23182229'/%3E%3C/svg%3E")}
-  .bub{max-width:78%;padding:7px 10px 5px;border-radius:9px;font-size:14.8px;line-height:1.35;white-space:pre-wrap;word-break:break-word;position:relative}
-  .in{background:var(--inbub);align-self:flex-start;border-top-left-radius:2px}
-  .out{background:var(--outbub);align-self:flex-end;border-top-right-radius:2px}
-  .bub .t{display:block;font-size:10.5px;color:rgba(233,237,239,.55);text-align:right;margin-top:2px}
-  .bub .src{font-size:9.5px;color:rgba(233,237,239,.45);margin-right:6px}
+  .chead .who b{font-size:16.5px;font-weight:700;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1a2438;letter-spacing:-.2px}
+  .chead .who span{font-size:12.5px;color:var(--acc);font-weight:500}
+  #msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 6px;display:flex;flex-direction:column;gap:2px;background:var(--chatbg)}
+  .bub{max-width:78%;padding:9px 13px 7px;border-radius:19px;font-size:15.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word;position:relative}
+  .in{background:var(--inbub);align-self:flex-start;border-top-left-radius:6px;color:#222e44;box-shadow:0 1px 3px rgba(80,110,170,.10)}
+  .out{background:var(--out);align-self:flex-end;border-top-right-radius:6px;color:#13325a}
+  .bub.grouped{margin-top:2px}
+  .in.grouped{border-top-left-radius:19px}
+  .out.grouped{border-top-right-radius:19px}
+  .bub.first-of-group{margin-top:10px}
+  .bub.anim{animation:bubIn .18s ease-out}
+  @keyframes bubIn{from{opacity:0;transform:translateY(7px) scale(.98)}to{opacity:1;transform:none}}
+  .bub .t{float:right;font-size:10.5px;color:rgba(40,60,95,.42);margin:7px -3px -1px 9px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bub .src{font-size:9.5px;color:rgba(40,60,95,.4);margin-right:6px}
+  .daysep{align-self:center;background:rgba(255,255,255,.9);color:#9aa3b5;font-size:11.5px;font-weight:600;padding:4px 13px;border-radius:10px;margin:14px 0 6px;letter-spacing:.4px;box-shadow:0 1px 3px rgba(120,150,200,.12)}
+  .tick{display:inline-block;vertical-align:-1px}
+  .tick svg{width:16px;height:11px}
+  .tick.read svg path{stroke:var(--acc)}
 
   /* ===== BARRA DE COPILOTO ===== */
-  #copilot{background:var(--iabg);border-top:2px solid var(--ia);padding:10px 12px;display:none}
+  #copilot{background:#fff;border-top:1px solid #eef1f6;padding:13px 16px 11px;display:none;position:relative;z-index:3;box-shadow:0 -6px 20px rgba(90,120,180,.06)}
   #copilot.show{display:block}
-  #copilot .tag{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#b9b3ff;font-weight:700;letter-spacing:.4px;margin-bottom:6px}
-  #copilot .tag .int{background:#2a2750;padding:1px 8px;border-radius:9px;font-weight:600}
-  #draft{width:100%;background:#100e22;border:1px solid #322e5e;color:var(--text);border-radius:10px;padding:9px 11px;font-size:14.5px;line-height:1.35;font-family:inherit;resize:none;min-height:58px}
-  #draft[readonly]{border-color:transparent;background:#13112a}
-  .cbtns{display:flex;gap:8px;margin-top:8px}
-  .cb{flex:1;padding:10px 0;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer}
-  .cb.send{background:var(--green);color:#04240f}
-  .cb.edit{background:#27314d;color:#9db7ff}
-  .cb.no{background:#2a2a2e;color:var(--dim)}
-  #gen{margin:8px 12px;display:none}
+  #copilot .tag{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--acc);font-weight:700;letter-spacing:.2px;margin-bottom:8px}
+  #copilot .tag .int{background:#e7f0ff;color:#2257c4;padding:1px 9px;border-radius:9px;font-weight:600;font-size:11px}
+  #draft{width:100%;background:#f6f8fc;border:1px solid #e6ebf3;color:var(--text);border-radius:15px;padding:12px 14px;font-size:15px;line-height:1.4;font-family:inherit;resize:none;min-height:62px}
+  #draft[readonly]{border-color:#eef2f8;background:#f6f8fc}
+  .cbtns{margin-top:10px}
+  .cb{border:none;cursor:pointer;font-family:inherit;transition:transform .08s ease,opacity .15s}
+  .cb:active{transform:scale(.97)}
+  /* Acción PRIMARIA: Enviar — grande, full width */
+  .cb.send{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:15px;font-size:15.5px;font-weight:700;background:linear-gradient(135deg,#3f86f5,#2f6df0);color:#fff;box-shadow:0 6px 16px rgba(47,109,240,.32)}
+  .cb.send svg{width:17px;height:17px}
+  /* Acciones SECUNDARIAS: fila discreta */
+  .cb-sec{display:flex;gap:8px;margin-top:9px}
+  .cb.s{flex:1;padding:10px 0;border-radius:12px;font-size:13.5px;font-weight:600;background:#f1f4f9;color:#6b7589}
+  .cb.s.edit{color:var(--acc)}
+  .cb.s.no{color:#8a93a6}
+  #gen{margin:10px 16px;display:none}
   #gen.show{display:block}
-  #gen button{width:100%;padding:11px;border:1px dashed var(--ia);background:transparent;color:#b9b3ff;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer}
+  #gen button{width:100%;padding:13px;border:1px dashed #b9cdf5;background:rgba(47,109,240,.05);color:var(--acc);border-radius:14px;font-size:14.5px;font-weight:700;cursor:pointer}
 
   /* ===== INPUT MANUAL ===== */
-  .inputbar{display:flex;gap:8px;align-items:flex-end;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--panel)}
-  #manual{flex:1;background:#2a2a2e;border:none;color:var(--text);border-radius:18px;padding:9px 14px;font-size:15px;font-family:inherit;resize:none;max-height:90px}
-  #sendman{width:38px;height:38px;border-radius:50%;border:none;background:var(--green);color:#04240f;font-size:17px;font-weight:800;cursor:pointer;flex:none}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;background:#222;color:#fff;padding:10px 18px;border-radius:20px;font-size:13.5px;z-index:99;box-shadow:0 4px 18px rgba(0,0,0,.5)}
-  .spin{display:inline-block;width:14px;height:14px;border:2px solid #b9b3ff;border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px}
+  .inputbar{display:flex;gap:9px;align-items:flex-end;padding:9px 12px calc(9px + env(safe-area-inset-bottom));background:rgba(255,255,255,.86);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid #eef1f6}
+  #manual{flex:1;background:#f1f4f9;border:1px solid #e8edf4;color:var(--text);border-radius:21px;padding:11px 16px;font-size:15.5px;font-family:inherit;resize:none;max-height:90px}
+  #manual::placeholder{color:#aab2c2}
+  #sendman{width:42px;height:42px;border-radius:50%;border:none;background:linear-gradient(135deg,#3f86f5,#2f6df0);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;box-shadow:0 5px 14px rgba(47,109,240,.4)}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;background:rgba(28,38,58,.95);backdrop-filter:blur(10px);color:#fff;padding:11px 18px;border-radius:14px;font-size:13.5px;z-index:99;box-shadow:0 10px 30px rgba(40,60,100,.35);border-left:3px solid #5b80c0;animation:toastIn .2s ease}
+  .toast.err{border-left-color:#ff453a}
+  .toast.ok{border-left-color:var(--green)}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+  /* skeleton de carga */
+  .sk{background:linear-gradient(90deg,#eef1f6 25%,#f6f8fb 50%,#eef1f6 75%);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:15px}
+  @keyframes shimmer{to{background-position:-200% 0}}
+  .empty{margin:auto;text-align:center;color:var(--dim);padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .empty svg{width:46px;height:46px;opacity:.35}
+  /* FAB scroll-to-bottom */
+  #fab{position:absolute;right:16px;bottom:84px;width:42px;height:42px;border-radius:50%;background:#fff;border:1px solid #e8edf4;display:none;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 5px 16px rgba(90,120,180,.22);z-index:5}
+  #fab.show{display:flex}
+  #fab svg{width:20px;height:20px;color:var(--acc)}
+  /* estado de conexión del timbre */
+  .conncta{color:#e0922a!important}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--acc);border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px}
   @keyframes sp{to{transform:rotate(360deg)}}
+  /* ===== MODAL DE CONTACTO (agregar mensaje perdido) ===== */
+  .chead .who{cursor:pointer}
+  .cmodal{position:fixed;inset:0;background:rgba(20,29,48,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:none;align-items:flex-end;justify-content:center;z-index:200}
+  .cmodal.show{display:flex;animation:fadein .15s ease}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+  .cmcard{background:#fff;width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:6px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -12px 44px rgba(40,60,100,.28);animation:slideup .24s cubic-bezier(.32,.72,0,1)}
+  @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .cmgrab{width:38px;height:4px;border-radius:3px;background:#d7deea;margin:8px auto 4px}
+  .cmhead{display:flex;align-items:center;gap:12px;padding:10px 2px 13px;border-bottom:1px solid #eef1f6}
+  .cmava{width:46px;height:46px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;box-shadow:0 3px 10px rgba(70,100,160,.2)}
+  .cmhead b{font-size:17px;color:#1a2438;display:block;letter-spacing:-.2px}
+  .cm-sub{font-size:12.5px;color:var(--acc);font-weight:500}
+  .cmx{margin-left:auto;width:32px;height:32px;border-radius:50%;background:#f1f4f9;display:flex;align-items:center;justify-content:center;color:#7d8aa3;cursor:pointer;font-size:14px;flex:none}
+  .cmbody{padding-top:16px}
+  .cmtitle{font-size:16px;font-weight:700;color:#1a2438}
+  .cmhint{font-size:12.5px;color:var(--dim);margin:4px 0 13px;line-height:1.4}
+  .cmrow{display:flex;gap:9px;margin-bottom:11px}
+  .cmtog{flex:1;padding:11px;border:1px solid #e3e9f4;border-radius:13px;background:#f6f8fc;color:#6b7589;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:transform .08s}
+  .cmtog:active{transform:scale(.97)}
+  .cmtog.on{background:#e7f0ff;border-color:var(--acc);color:var(--acc)}
+  #cm-texto{width:100%;min-height:72px;background:#f6f8fc;border:1px solid #e6ebf3;border-radius:15px;padding:12px 14px;font-size:15px;line-height:1.4;font-family:inherit;resize:none;color:var(--text);margin-bottom:11px}
+  .cmf{flex:1;display:flex;flex-direction:column;font-size:11.5px;color:var(--dim);font-weight:700;gap:5px;text-transform:uppercase;letter-spacing:.3px}
+  .cmf input{background:#f6f8fc;border:1px solid #e6ebf3;border-radius:12px;padding:10px 12px;font-size:14.5px;font-family:inherit;color:var(--text);text-transform:none}
+  .cm-add{width:100%;margin-top:7px;padding:14px;border:none;border-radius:15px;background:linear-gradient(135deg,#3f86f5,#2f6df0);color:#fff;font-size:15.5px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 6px 16px rgba(47,109,240,.32);transition:transform .08s}
+  .cm-add:active{transform:scale(.98)}
 </style>
 </head>
 <body>
 
 <!-- PANTALLA 1: LISTA -->
 <div class="screen" id="scr-lista">
-  <div class="top"><h1>Chats</h1><div class="dot">🤖</div></div>
+  <div class="top"><h1>FyraChat</h1><div class="dot"><svg viewBox="0 0 24 24" width="18" height="18" fill="#fff"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2zm6 9l.9 2.6 2.6.9-2.6.9L18 18l-.9-2.6-2.6-.9 2.6-.9.9-2.6z"/></svg></div></div>
+  <div class="search"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><input id="buscar" placeholder="Buscar conversaciones" oninput="pintarLista()" autocomplete="off"></div>
   <div class="pills"><div class="pill on">Todos</div><div class="pill" id="pill-pend">Con sugerencia</div><div class="pill">Compradores</div></div>
   <div id="lista"></div>
 </div>
@@ -87,75 +152,299 @@
 <!-- PANTALLA 2: CHAT -->
 <div class="screen" id="scr-chat">
   <div class="chead">
-    <div class="back" onclick="cerrarChat()">‹</div>
+    <div class="back" onclick="cerrarChat()"><svg viewBox="0 0 13 22" fill="none"><path d="M11 1L2 11l9 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ava" id="c-ava">?</div>
-    <div class="who"><b id="c-nombre">—</b><span id="c-tel"></span></div>
+    <div class="who" onclick="abrirContacto()"><b id="c-nombre">—</b><span id="c-tel"></span></div>
   </div>
   <div id="msgs"></div>
-  <div id="gen"><button onclick="sugerir()">🤖 Generar sugerencia de Seb</button></div>
+  <div id="fab" onclick="document.getElementById('msgs').scrollTo({top:9e9,behavior:'smooth'})"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div id="gen"><button onclick="sugerir()"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Generar sugerencia de Seb</button></div>
   <div id="copilot">
-    <div class="tag">🤖 SUGERENCIA DE SEB <span class="int" id="c-int"></span></div>
+    <div class="tag"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Respuesta sugerida <span class="int" id="c-int"></span></div>
     <textarea id="draft" readonly></textarea>
     <div class="cbtns">
-      <button class="cb send" onclick="resolver('aprobado')">✓ Enviar</button>
-      <button class="cb edit" id="btn-edit" onclick="toggleEdit()">✏️ Editar</button>
-      <button class="cb no" onclick="yoContesto()">✕ Yo contesto</button>
+      <button class="cb send" onclick="resolver('aprobado')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg> Enviar</button>
+      <div class="cb-sec">
+        <button class="cb s edit" id="btn-edit" onclick="toggleEdit()">Editar</button>
+        <button class="cb s" onclick="sugerir()">Actualizar</button>
+        <button class="cb s no" onclick="yoContesto()">Yo contesto</button>
+      </div>
     </div>
   </div>
   <div class="inputbar">
     <textarea id="manual" rows="1" placeholder="Escribe un mensaje…"></textarea>
-    <button id="sendman" onclick="enviarManual()">➤</button>
+    <button id="sendman" onclick="enviarManual()"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
+  </div>
+</div>
+
+<!-- MODAL DE CONTACTO: agregar mensaje perdido -->
+<div class="cmodal" id="cmodal" onclick="if(event.target===this)cerrarContacto()">
+  <div class="cmcard">
+    <div class="cmgrab"></div>
+    <div class="cmhead">
+      <div class="cmava" id="cm-ava">?</div>
+      <div style="min-width:0"><b id="cm-nombre">—</b><div class="cm-sub" id="cm-tel"></div></div>
+      <div class="cmx" onclick="cerrarContacto()">✕</div>
+    </div>
+    <div class="cmbody">
+      <div class="cmtitle">➕ Agregar mensaje perdido</div>
+      <div class="cmhint">Rescata un mensaje que no llegó (se perdió en el cifrado). Cópialo tal cual de tu WhatsApp y ponle su hora — se acomoda solo en el chat.</div>
+      <div class="cmrow">
+        <button class="cmtog on" id="tog-in" onclick="setDir('in')">Él me escribió</button>
+        <button class="cmtog" id="tog-out" onclick="setDir('out')">Yo le escribí</button>
+      </div>
+      <textarea id="cm-texto" placeholder="Pega aquí el mensaje…"></textarea>
+      <div class="cmrow">
+        <label class="cmf">Hora<input type="time" id="cm-hora"></label>
+        <label class="cmf">Fecha<input type="date" id="cm-fecha"></label>
+      </div>
+      <button class="cm-add" id="cm-add" onclick="agregarMensaje()">Agregar al chat</button>
+    </div>
   </div>
 </div>
 
 <script>
 const API = '/api/seb-panel';
 let TEL = null, QID = null, EDITANDO = false, SOLO_PEND = false, CHATS = [];
+let ULTIMA_IN_SUGERIDA = 0, POLL = null, RENDERED_COUNT = -1;
+// EL TIMBRE: WebSocket al bridge (estilo WhatsApp). Recibe mensajes nuevos SIN preguntarle a Turso.
+const TIMBRE = 'wss://fat-simplified-sat-window.trycloudflare.com';
+let WS = null;
+let ENVIANDO = false;                          // anti doble-envío (BUG 4)
+let CARGA_FRESCA = false;                       // primera carga de un chat → render limpio (BUG 1)
+const recienEnviado = new Map();               // texto saliente → ts, para deduplicar el eco del timbre (BUG 7)
+const normTs = t => { t = Number(t) || 0; return t > 1e12 ? Math.floor(t / 1000) : t; };  // todo a segundos
+const hashT = s => { let h = 0; s = String(s || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+// clave única de burbuja: por FOLIO (estable) si viene; si no, cae a contenido+hora.
+const claveMsg = m => m.msg_id ? ('f:' + m.msg_id) : (m.direccion + '|' + normTs(m.timestamp) + '|' + hashT(m.mensaje));
+const CHECK = '<span class="tick read"><svg viewBox="0 0 18 12"><path d="M1 6.2l3 3.1L8.6 3" fill="none" stroke="#2f6df0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.3L12.6 3" fill="none" stroke="#2f6df0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+function burbujaHTML(m, prevDir){
+  const lado = m.direccion==='in'?'in':'out';
+  const cls = 'bub '+lado+(prevDir===m.direccion ? ' grouped' : ' first-of-group');
+  const src = m.origen_envio ? '<span class="src">'+m.origen_envio+'</span>' : '';
+  return '<div class="'+cls+'" data-k="'+claveMsg(m)+'" data-d="'+lado+'">'+esc(m.mensaje)+
+         '<span class="t">'+src+hora(m.timestamp)+(lado==='out'?' '+CHECK:'')+'</span></div>';
+}
+// Etiqueta de día para los separadores
+function diaLabel(ts){
+  const d = new Date(normTs(ts)*1000), hoy = new Date(), ayer = new Date(); ayer.setDate(hoy.getDate()-1);
+  if (d.toDateString()===hoy.toDateString()) return 'HOY';
+  if (d.toDateString()===ayer.toDateString()) return 'AYER';
+  return d.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+}
+// Render completo con separadores de fecha + agrupación
+function renderTodo(msgs){
+  let html='', prevDir=null, prevDay=null;
+  for (const m of msgs){
+    const day = new Date(normTs(m.timestamp)*1000).toDateString();
+    if (day!==prevDay){ html += '<div class="daysep">'+diaLabel(m.timestamp)+'</div>'; prevDir=null; }
+    html += burbujaHTML(m, prevDir);
+    prevDir = m.direccion; prevDay = day;
+  }
+  return html;
+}
+function ultimoLado(ms){ const b = ms.querySelector('.bub:last-of-type'); return b ? b.dataset.d : null; }
+// Inserta UNA burbuja en vivo (con dedup, agrupación, animación y auto-scroll inteligente)
+function insertarBurbuja(m){
+  const ms = document.getElementById('msgs');
+  if (ms.querySelector('[data-k="'+claveMsg(m)+'"]')) return false;     // ya está
+  const cerca = ms.scrollHeight - ms.scrollTop - ms.clientHeight < 90;
+  let h = burbujaHTML(m, ultimoLado(ms)).replace('class="bub','class="anim bub');
+  ms.insertAdjacentHTML('beforeend', h);
+  if (cerca || m.direccion==='out') ms.scrollTo({top:9e9, behavior:'smooth'});  // solo baja si ya estabas abajo
+  else document.getElementById('fab').classList.add('show');                     // si lees arriba, FAB
+  return true;
+}
+// Pinta una burbuja SALIENTE al instante (optimistic UI). Le pone un FOLIO temporal
+// para poder quitarla si el envío falla (y deduplica su eco por texto).
+function pintarOptimista(texto){
+  const tempId = 'opt:' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+  insertarBurbuja({ direccion:'out', mensaje:texto, timestamp:Date.now(), msg_id: tempId });
+  recienEnviado.set(texto, Date.now());
+  if (navigator.vibrate) { try { navigator.vibrate(20); } catch(e){} }   // sensación de "enviado"
+  return tempId;
+}
+// Si el envío NO se concretó, quita la burbuja fantasma (y libera el dedup del eco).
+function quitarOptimista(tempId, texto){
+  if (tempId){ const el = document.querySelector('#msgs [data-k="f:' + tempId + '"]'); if (el) el.remove(); }
+  if (texto) recienEnviado.delete(texto);
+}
+function estadoTimbre(ok){
+  const el = document.getElementById('c-tel'); if(!el) return;
+  if (ok){ el.textContent = TEL ? ('+'+TEL) : ''; el.classList.remove('conncta'); }
+  else { el.textContent = 'conectando…'; el.classList.add('conncta'); }
+}
 
-const colores = ['#6d5df6','#0a84ff','#30d158','#ff9f0a','#ff375f','#64d2ff','#bf5af2'];
-const colorDe = t => colores[String(t).split('').reduce((a,c)=>a+c.charCodeAt(0),0) % colores.length];
+// degradados azul / teal / verde / cielo (nada de morado) — avatar "real", no look de IA
+const grads = [['#5b9ef0','#2f6df0'],['#43c6c0','#2f97d0'],['#5fd6a0','#2fb886'],['#6db8f5','#3f8fe0'],['#7ad0c8','#46a6d8'],['#6a9bf0','#3f6fe0'],['#8fd4b0','#4fb890']];
+const colorDe = t => { const g = grads[String(t).split('').reduce((a,c)=>a+c.charCodeAt(0),0) % grads.length]; return 'linear-gradient(135deg,'+g[0]+','+g[1]+')'; };
 const hora = ts => { const d = new Date(ts < 1e12 ? ts*1000 : ts); const hoy = new Date().toDateString()===d.toDateString();
   return hoy ? d.toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'}) : d.toLocaleDateString('es-MX',{day:'numeric',month:'short'}); };
-const toast = m => { const t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); };
+const toast = (m,tipo) => { const t=document.createElement('div'); t.className='toast '+(tipo || (/error|no se|⚠|falló|red/i.test(m)?'err':/enviad|✅|listo/i.test(m)?'ok':'')); t.textContent=m; document.body.appendChild(t); setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .25s';setTimeout(()=>t.remove(),250);},2600); };
 
+// ===== NO LEÍDOS estilo WhatsApp: el número solo sale si hay mensajes nuevos que NO has abierto =====
+const LEIDO_KEY='fyrachat_leido', UNREAD_KEY='fyrachat_unread';
+let lastRead = {}, unread = {};
+try { lastRead = JSON.parse(localStorage.getItem(LEIDO_KEY)||'{}'); unread = JSON.parse(localStorage.getItem(UNREAD_KEY)||'{}'); } catch(e){}
+function persistUnread(){ try{ localStorage.setItem(LEIDO_KEY,JSON.stringify(lastRead)); localStorage.setItem(UNREAD_KEY,JSON.stringify(unread)); }catch(e){} }
+function marcarLeido(tel){ unread[tel]=0; lastRead[tel]=Math.floor(Date.now()/1000); persistUnread(); }   // abriste el chat → leído
+// reconcilia el contador con lo que devuelve el backend (p.ej. mensajes que llegaron con la app cerrada)
+function reconciliarNoLeidos(){
+  for (const c of CHATS){
+    const t = normTs(c.ult_ts);
+    if (c.ult_dir==='out') unread[c.telefono]=0;                                                 // tú contestaste → leído
+    else if (c.ult_dir==='in' && t > (lastRead[c.telefono]||0)){ if (!unread[c.telefono]) unread[c.telefono]=1; }
+    else unread[c.telefono]=0;
+  }
+  persistUnread();
+}
 async function cargarLista(){
   const r = await fetch(API+'?action=chats').then(x=>x.json());
   CHATS = r.chats || [];
+  reconciliarNoLeidos();
   pintarLista();
+}
+
+// Conecta el TIMBRE (WebSocket). Si se cae, reconecta solo. Al reconectar, re-sincroniza el chat abierto.
+function connectTimbre(){
+  try { WS = new WebSocket(TIMBRE); } catch(e){ return setTimeout(connectTimbre, 5000); }
+  WS.onopen = () => { estadoTimbre(true); if (TEL) cargarChat(); };   // al (re)conectar, ponerse al día
+  WS.onmessage = (ev) => { let d; try{ d=JSON.parse(ev.data); }catch(e){ return; } if (d.tipo==='mensaje') onTimbre(d); };
+  WS.onclose = () => { estadoTimbre(false); setTimeout(connectTimbre, 4000); };
+  WS.onerror = () => { try{ WS.close(); }catch(e){} };
+}
+// Cuando suena el timbre con un mensaje nuevo: actualiza la lista y, si es el chat abierto, lo pinta al instante.
+function onTimbre(d){
+  // 1) LISTA: actualizar preview y subir el chat arriba (sin leer Turso)
+  let ch = CHATS.find(c => c.telefono === d.telefono);
+  if (!ch){ ch = { telefono:d.telefono, nombre:d.nombre||('+'+String(d.telefono).slice(0,3)+' '+String(d.telefono).slice(-10)), pendientes:0 }; }
+  ch.ult_msg = String(d.mensaje||'').slice(0,90); ch.ult_dir = d.direccion; ch.ult_ts = d.timestamp;
+  CHATS = CHATS.filter(c => c.telefono !== d.telefono); CHATS.unshift(ch);
+  // contador de no leídos (estilo WhatsApp): sube solo si es entrante y NO tienes ese chat abierto
+  if (d.direccion==='in'){
+    if (TEL === d.telefono) marcarLeido(d.telefono);                       // lo estás viendo → leído
+    else { unread[d.telefono] = (unread[d.telefono]||0) + 1; persistUnread(); }
+  } else { unread[d.telefono]=0; persistUnread(); }                         // saliente → leído
+  if (!document.getElementById('scr-chat').classList.contains('open')) pintarLista();
+  // 2) CHAT ABIERTO: pintar la burbuja nueva al instante (con dedup)
+  if (TEL === d.telefono){
+    // si es el ECO de un mensaje que YO acabo de mandar (ya pintado optimista) → saltar
+    if (d.direccion==='out' && recienEnviado.has(d.mensaje) && (Date.now()-recienEnviado.get(d.mensaje) < 30000)){
+      recienEnviado.delete(d.mensaje); return;
+    }
+    insertarBurbuja(d);
+    // SOLO on-demand (ahorra tokens): YA NO se auto-sugiere. Si llega un mensaje del comprador,
+    // solo aparece el botón "Generar" — TÚ decides si Seb responde.
+    if (d.direccion==='in' && !EDITANDO){
+      document.getElementById('copilot').classList.remove('show');
+      document.getElementById('gen').classList.add('show');
+    }
+  }
 }
 function pintarLista(){
   const el = document.getElementById('lista');
-  const rows = SOLO_PEND ? CHATS.filter(c=>c.pendientes>0) : CHATS;
-  el.innerHTML = rows.map(c => `
-    <div class="chatrow" onclick="abrirChat('${c.telefono}','${(c.nombre||'').replace(/'/g,'')}')">
+  const q = (document.getElementById('buscar')?.value || '').trim().toLowerCase();
+  let rows = SOLO_PEND ? CHATS.filter(c=>c.pendientes>0) : CHATS;
+  if (q) rows = rows.filter(c => (c.nombre||'').toLowerCase().includes(q) || (c.ult_msg||'').toLowerCase().includes(q) || String(c.telefono||'').includes(q));
+  el.innerHTML = rows.map(c => { const n = unread[c.telefono]||0; return `
+    <div class="chatrow${n>0?' unread':''}" onclick="abrirChat('${c.telefono}','${(c.nombre||'').replace(/'/g,'')}')">
       <div class="ava" style="background:${colorDe(c.telefono)}">${(c.nombre||'?')[0].toUpperCase()}</div>
       <div class="meta">
-        <div class="n"><span>${c.nombre}</span><time class="${c.pendientes?'hot':''}">${hora(c.ult_ts)}</time></div>
-        <div class="p">${c.pendientes ? '<span class="badge-ia">🤖 SUGERENCIA</span>' : ''}<span>${c.ult_dir==='out'?'✓ ':''}${c.ult_msg}</span></div>
+        <div class="n"><span>${c.nombre}</span><time class="${n>0?'hot':''}">${hora(c.ult_ts)}</time></div>
+        <div class="p"><span style="overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1">${c.ult_dir==='out'?'✓ ':''}${c.ult_msg||''}</span></div>
       </div>
-      ${c.pendientes ? '<div class="badge-n">'+c.pendientes+'</div>' : ''}
-    </div>`).join('') || '<div style="padding:40px;text-align:center;color:var(--dim)">Sin chats</div>';
+      ${n>0 ? '<div class="badge-n">'+(n>99?'99+':n)+'</div>' : ''}
+    </div>`; }).join('') || `<div style="padding:50px;text-align:center;color:var(--dim)">${q?'Sin resultados':'Sin chats'}</div>`;
 }
 document.getElementById('pill-pend').onclick = function(){ SOLO_PEND=!SOLO_PEND; this.classList.toggle('on',SOLO_PEND); pintarLista(); };
 
 async function abrirChat(tel, nombre){
-  TEL = tel; QID = null; EDITANDO = false;
+  TEL = tel; QID = null; EDITANDO = false; ULTIMA_IN_SUGERIDA = 0; RENDERED_COUNT = -1;
+  marcarLeido(tel); pintarLista();                   // abriste el chat → borra el contador AL INSTANTE (la lista está detrás)
   document.getElementById('c-nombre').textContent = nombre || tel;
   document.getElementById('c-tel').textContent = '+'+tel;
   document.getElementById('c-ava').textContent = (nombre||'?')[0].toUpperCase();
   document.getElementById('c-ava').style.background = colorDe(tel);
+  // LIMPIAR AL INSTANTE: nunca se ve el chat anterior (BUG 1) + skeleton de carga + limpiar copiloto (BUG 8)
+  document.getElementById('msgs').innerHTML = '<div style="display:flex;flex-direction:column;gap:9px;padding:16px 0">'+
+    '<div class="sk" style="height:36px;width:58%;align-self:flex-start"></div>'+
+    '<div class="sk" style="height:34px;width:42%;align-self:flex-end"></div>'+
+    '<div class="sk" style="height:50px;width:66%;align-self:flex-start"></div>'+
+    '<div class="sk" style="height:34px;width:38%;align-self:flex-end"></div></div>';
+  document.getElementById('fab').classList.remove('show');
+  document.getElementById('copilot').classList.remove('show');
+  document.getElementById('gen').classList.remove('show');
+  document.getElementById('draft').value = '';
   document.getElementById('scr-chat').classList.add('open');
-  const r = await fetch(API+'?action=chat&telefono='+encodeURIComponent(tel)).then(x=>x.json());
-  const ms = document.getElementById('msgs');
-  ms.innerHTML = (r.mensajes||[]).map(m => `
-    <div class="bub ${m.direccion==='in'?'in':'out'}">${esc(m.mensaje)}
-      <span class="t">${m.origen_envio?'<span class="src">'+m.origen_envio+'</span>':''}${hora(m.timestamp)}${m.direccion==='out'?' ✓✓':''}</span>
-    </div>`).join('');
-  ms.scrollTop = ms.scrollHeight;
-  mostrarBorrador(r.borrador);
+  CARGA_FRESCA = true;
+  cargarChat();
 }
-function esc(s){ return String(s||'').replace(/</g,'&lt;'); }
-function cerrarChat(){ document.getElementById('scr-chat').classList.remove('open'); cargarLista(); }
+
+// Carga/refresca el chat. Token anti-stale (no pinta respuestas de un chat que ya cerraste).
+async function cargarChat(){
+  const mio = TEL; if (!mio) return;
+  let r;
+  try { r = await fetch(API+'?action=chat&telefono='+encodeURIComponent(mio)).then(x=>x.json()); }
+  catch(e){ return; }
+  if (TEL !== mio) return;                            // BUG 8: cambiaste de chat → descartar respuesta vieja
+  const msgs = r.mensajes || [];
+  const ms = document.getElementById('msgs');
+  if (CARGA_FRESCA){                                  // primera carga → render limpio (quita el "cargando…")
+    CARGA_FRESCA = false;
+    ms.innerHTML = msgs.length ? renderTodo(msgs)
+      : '<div class="empty"><svg viewBox="0 0 24 24" fill="none"><path d="M21 11.5a8.4 8.4 0 01-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1121 11.5z" stroke="currentColor" stroke-width="1.6"/></svg><div>Sin mensajes aún</div></div>';
+    ms.scrollTo({top:9e9});
+    document.getElementById('fab').classList.remove('show');
+  } else {                                            // MERGE: agrega solo las que falten, no borra las vivas (BUG 7)
+    for (const m of msgs){ insertarBurbuja(m); }
+  }
+  RENDERED_COUNT = msgs.length;
+  const ultimo = msgs[msgs.length-1];
+  const ultimoIn = [...msgs].reverse().find(m => m.direccion==='in');
+  // SOLO on-demand (ahorra tokens): NUNCA auto-sugerir. Muestra el borrador ya guardado
+  // (si existe) o el botón "Generar" para que TÚ lo dispares.
+  if (!EDITANDO) mostrarBorrador(r.borrador);
+}
+function esc(s){
+  let t = String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return t.replace(/(https?:\/\/[^\s]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:#53bdeb;text-decoration:underline">$1</a>');
+}
+function cerrarChat(){ if(POLL){clearInterval(POLL); POLL=null;} TEL=null; document.getElementById('scr-chat').classList.remove('open'); cargarLista(); }
+
+// ===== MODAL DE CONTACTO: agregar mensaje perdido =====
+let CM_DIR = 'in';
+function setDir(d){ CM_DIR=d; document.getElementById('tog-in').classList.toggle('on',d==='in'); document.getElementById('tog-out').classList.toggle('on',d==='out'); }
+function abrirContacto(){
+  if(!TEL) return;
+  document.getElementById('cm-nombre').textContent = document.getElementById('c-nombre').textContent;
+  document.getElementById('cm-tel').textContent = '+'+TEL;
+  const av = document.getElementById('cm-ava'); av.textContent = document.getElementById('c-ava').textContent; av.style.background = colorDe(TEL);
+  const now = new Date();
+  document.getElementById('cm-fecha').value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  document.getElementById('cm-hora').value = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('cm-texto').value = '';
+  setDir('in');
+  document.getElementById('cmodal').classList.add('show');
+}
+function cerrarContacto(){ document.getElementById('cmodal').classList.remove('show'); }
+async function agregarMensaje(){
+  const texto = document.getElementById('cm-texto').value.trim();
+  if(!texto){ toast('Escribe el mensaje primero'); return; }
+  const hora = document.getElementById('cm-hora').value;
+  const fecha = document.getElementById('cm-fecha').value;
+  const btn = document.getElementById('cm-add'); const mio = TEL;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Agregando…';
+  try {
+    const r = await fetch(API, {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'agregar_mensaje', telefono:mio, texto, hora, fecha, direccion:CM_DIR})}).then(x=>x.json());
+    if(r.ok){
+      cerrarContacto();
+      toast('✅ Mensaje rescatado','ok');
+      if(TEL===mio){ CARGA_FRESCA=true; cargarChat(); }            // re-render en orden
+    } else { toast('⚠️ '+(r.motivo||r.error||'no se pudo')); }
+  } catch(e){ toast('⚠️ Error de red'); }
+  btn.disabled = false; btn.textContent = 'Agregar al chat';
+}
 
 function mostrarBorrador(b){
   const cop = document.getElementById('copilot'), gen = document.getElementById('gen');
@@ -168,17 +457,20 @@ function mostrarBorrador(b){
   } else { cop.classList.remove('show'); gen.classList.add('show'); }
 }
 
-async function sugerir(){
+async function sugerir(ultimoIn){
+  const mio = TEL;
   const btn = document.querySelector('#gen button');
-  btn.innerHTML = '<span class="spin"></span> Seb está pensando…'; btn.disabled = true;
+  if (btn){ btn.innerHTML = '<span class="spin"></span> Seb está pensando…'; btn.disabled = true; }
   try {
     const r = await fetch(API, {method:'POST',headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'sugerir', telefono: TEL})}).then(x=>x.json());
-    if (r.ok){ mostrarBorrador({id:r.queue_id, borrador:r.borrador, intencion:r.intencion}); }
-    else if (r.escalar){ toast('⚠️ Seb escala: '+(r.motivo||'requiere humano')); }
-    else toast('Error: '+(r.error||'?'));
-  } catch(e){ toast('Error de red'); }
-  btn.innerHTML = '🤖 Generar sugerencia de Seb'; btn.disabled = false;
+      body: JSON.stringify({action:'sugerir', telefono: mio, ultimo_in: ultimoIn || null})}).then(x=>x.json());
+    if (TEL === mio){                                  // BUG 8: solo pinta si SIGUES en el mismo chat
+      if (r.ok){ mostrarBorrador({id:r.queue_id, borrador:r.borrador, intencion:r.intencion}); }
+      else if (r.escalar){ mostrarBorrador(null); toast('⚠️ Seb escala: '+(r.motivo||'requiere humano')); }
+      else toast('Error: '+(r.error||'?'));
+    }
+  } catch(e){ /* red puede fallar; el botón sigue disponible */ }
+  if (btn){ btn.innerHTML = '🤖 Generar sugerencia de Seb'; btn.disabled = false; }
 }
 
 function toggleEdit(){
@@ -194,32 +486,63 @@ function yoContesto(){
 }
 
 async function resolver(tipo){
+  if (ENVIANDO) return; ENVIANDO = true;               // BUG 4: anti doble-clic
   const texto = document.getElementById('draft').value;
-  const r = await fetch(API, {method:'POST',headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({action:'resolver', queue_id: QID, resolucion: tipo, texto_final: texto})}).then(x=>x.json());
-  if (r.ok){
-    toast(r.enviado ? '✅ Enviado' : '⚠️ Guardado — no enviado: '+(r.error_envio||''));
-    abrirChat(TEL, document.getElementById('c-nombre').textContent);
-  } else toast('Error: '+(r.error||'?'));
+  const btns = document.querySelectorAll('#copilot .cb');
+  btns.forEach(b => { b.disabled = true; b.style.opacity = .5; });   // BUG 5: feedback
+  const optId = pintarOptimista(texto);                // BUG 3: el mensaje aparece YA, sin recargar
+  document.getElementById('copilot').classList.remove('show');
+  document.getElementById('gen').classList.remove('show');
+  EDITANDO = false;
+  try {
+    const r = await fetch(API, {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'resolver', queue_id: QID, resolucion: tipo, texto_final: texto})}).then(x=>x.json());
+    if (!r.ok){ quitarOptimista(optId, texto); toast('⚠️ No se envió: '+(r.error||'?')); }
+    else if (!r.enviado){ quitarOptimista(optId, texto); toast('⚠️ No se envió: '+(r.error_envio||'WhatsApp no conectado')); }
+    else { QID = null; }   // sugerencia CONSUMIDA → los manuales siguientes van por envío directo (no reusar QID gastado)
+  } catch(e){ quitarOptimista(optId, texto); toast('⚠️ No se envió (red)'); }
+  btns.forEach(b => { b.disabled = false; b.style.opacity = 1; });
+  ENVIANDO = false;
 }
 
 async function enviarManual(){
+  if (ENVIANDO) return;
   const inp = document.getElementById('manual');
   const texto = inp.value.trim(); if (!texto) return;
-  let r;
-  if (QID && document.getElementById('copilot').classList.contains('show')===false){
-    r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'resolver', queue_id: QID, resolucion:'manual', texto_final: texto})}).then(x=>x.json());
-  } else {
-    r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'manual_directo', telefono: TEL, texto})}).then(x=>x.json());
-  }
-  if (r.ok){ inp.value=''; toast(r.enviado?'✅ Enviado':'⚠️ No enviado: '+(r.error_envio||'')); abrirChat(TEL, document.getElementById('c-nombre').textContent); }
-  else toast('Error: '+(r.error||'?'));
+  ENVIANDO = true;
+  const sb = document.getElementById('sendman'); if(sb){ sb.disabled=true; sb.style.opacity=.5; }
+  inp.value=''; inp.style.height='auto';
+  const optId = pintarOptimista(texto);                // aparece YA
+  const usarQueue = QID && document.getElementById('copilot').classList.contains('show')===false;
+  try {
+    let r;
+    if (usarQueue){
+      r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'resolver', queue_id: QID, resolucion:'manual', texto_final: texto})}).then(x=>x.json());
+    } else {
+      r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'manual_directo', telefono: TEL, texto})}).then(x=>x.json());
+    }
+    if (!r.ok){ quitarOptimista(optId, texto); toast('⚠️ No se envió: '+(r.error||'?')); }
+    else if (!r.enviado){ quitarOptimista(optId, texto); toast('⚠️ No se envió: '+(r.error_envio||'WhatsApp no conectado')); }
+    else if (usarQueue){ QID = null; }   // si el manual resolvió la sugerencia, consúmela (evita reusar el QID)
+  } catch(e){ quitarOptimista(optId, texto); toast('⚠️ No se envió (red)'); }
+  if(sb){ sb.disabled=false; sb.style.opacity=1; }
+  ENVIANDO = false;
 }
 
 cargarLista();
-setInterval(()=>{ if(!document.getElementById('scr-chat').classList.contains('open')) cargarLista(); }, 15000);
+connectTimbre();   // 🔔 conecta el timbre (WebSocket) — mensajes en vivo sin quemar lecturas
+// Fallback lento por si el timbre se cae: refresca la lista cada 90s SOLO en la pantalla de lista.
+setInterval(()=>{ if(!document.getElementById('scr-chat').classList.contains('open')) cargarLista(); }, 90000);
+// FAB scroll-to-bottom: aparece si lees historial arriba
+document.getElementById('msgs').addEventListener('scroll', function(){
+  document.getElementById('fab').classList.toggle('show', this.scrollHeight - this.scrollTop - this.clientHeight > 280);
+});
+// Input que crece con el texto (como WhatsApp)
+const _man = document.getElementById('manual');
+_man.addEventListener('input', () => { _man.style.height='auto'; _man.style.height=Math.min(_man.scrollHeight,110)+'px'; });
+_man.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); enviarManual(); } });
 </script>
 </body>
 </html>
