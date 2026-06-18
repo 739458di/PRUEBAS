@@ -255,9 +255,13 @@ module.exports = async function handler(req, res) {
             if (objetivoMid) idxObj = conv.mensajes.findIndex(m => m.msg_id === objetivoMid);
             if (idxObj < 0 && objetivoTxt) idxObj = conv.mensajes.map(m => m.mensaje).lastIndexOf(objetivoTxt);
             if (idxObj >= 0) {
-                // RESPONDER A ese mensaje: lo usamos como objetivo, con el historial HASTA él de contexto.
-                lastMsg = conv.mensajes[idxObj].mensaje;
-                historial = conv.mensajes.slice(Math.max(0, idxObj - 7), idxObj + 1).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+                // Objetivo = ese mensaje. Si es del CLIENTE (in) = "responder a" (incluirlo de
+                // contexto). Si es TUYO (out) = INSTRUCCIÓN a ejecutar (cita/cotizar/etc.): NO lo
+                // metas al historial, es el mensaje a procesar.
+                const obj = conv.mensajes[idxObj];
+                lastMsg = obj.mensaje;
+                const fin = obj.direccion === 'out' ? idxObj : idxObj + 1;
+                historial = conv.mensajes.slice(Math.max(0, idxObj - 7), fin).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
             } else if (objetivoTxt) {
                 // El objetivo no se encontró en la libreta (raro) → úsalo directo.
                 lastMsg = objetivoTxt;

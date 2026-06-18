@@ -53,12 +53,13 @@
   .chead .who span{font-size:12.5px;color:var(--acc);font-weight:500}
   #msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 6px;display:flex;flex-direction:column;gap:2px;background:var(--chatbg)}
   .bub{max-width:78%;padding:9px 13px 7px;border-radius:19px;font-size:15.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word;position:relative}
-  .bub.in[data-mid]{cursor:pointer}
+  .bub[data-mid]{cursor:pointer}
   .bub.media{padding:5px 5px 4px}
   .bmedia{display:block;max-width:240px;width:100%;border-radius:13px;cursor:pointer}
   .bub .bloc{display:flex;flex-direction:column;line-height:1.35}
   .bub .bloc a{color:#2f6df0;text-decoration:none;font-size:13px;margin-top:3px}
-  .bub.in.sel-obj{box-shadow:0 0 0 2.5px #2f6df0;background:#eaf1ff}
+  .bub.sel-obj{box-shadow:0 0 0 2.5px #2f6df0}
+  .bub.in.sel-obj{background:#eaf1ff}
   #obj-banner{display:none;align-items:center;gap:8px;margin:0 12px 6px;padding:8px 12px;background:#eaf1ff;border-left:3px solid #2f6df0;border-radius:10px;font-size:13.5px;color:#1f3a66}
   #obj-banner.show{display:flex}
   #obj-banner .ob-ic{color:#2f6df0;font-weight:700}
@@ -235,8 +236,10 @@ function burbujaHTML(m, prevDir){
   const lado = m.direccion==='in'?'in':'out';
   const cls = 'bub '+lado+(prevDir===m.direccion ? ' grouped' : ' first-of-group');
   const src = m.origen_envio ? '<span class="src">'+m.origen_envio+'</span>' : '';
-  // Mensajes del CLIENTE (entrantes) con folio = seleccionables para "responder a"
-  const sel = (lado==='in' && m.msg_id) ? (' data-mid="'+m.msg_id+'" data-txt="'+encodeURIComponent(m.mensaje||'')+'"') : '';
+  // Seleccionable para "responder a / ejecutar": mensajes de TEXTO con folio real (cliente
+  // O tuyos). En los tuyos (out), Seb EJECUTA lo que pusiste (cita, cotizar, etc.).
+  const selable = m.msg_id && String(m.msg_id).indexOf('opt:') !== 0 && m.tipo !== 'image' && m.tipo !== 'location';
+  const sel = selable ? (' data-mid="'+m.msg_id+'" data-txt="'+encodeURIComponent(m.mensaje||'')+'" data-dir="'+lado+'"') : '';
   const media = (m.tipo==='image') ? ' media' : '';
   let cont;
   if (m.tipo==='image'){                                  // CAPTURA del punto (control): imagen real
@@ -574,18 +577,21 @@ document.getElementById('msgs').addEventListener('scroll', function(){
 });
 // "RESPONDER A": tocar un mensaje del CLIENTE lo marca como objetivo de la sugerencia.
 document.getElementById('msgs').addEventListener('click', function(e){
-  const bub = e.target.closest('.bub.in[data-mid]');
+  const bub = e.target.closest('.bub[data-mid]');
   if (!bub) return;
   const mid = bub.dataset.mid;
   if (OBJETIVO && OBJETIVO.msgId === mid){ limpiarObjetivo(); return; }   // tocar otra vez = quitar
-  seleccionarObjetivo(mid, decodeURIComponent(bub.dataset.txt || ''));
+  seleccionarObjetivo(mid, decodeURIComponent(bub.dataset.txt || ''), bub.dataset.dir);
 });
-function seleccionarObjetivo(mid, texto){
+function seleccionarObjetivo(mid, texto, dir){
   document.querySelectorAll('#msgs .bub.sel-obj').forEach(b=>b.classList.remove('sel-obj'));
-  OBJETIVO = { msgId: mid, texto: texto };
-  const bub = document.querySelector('#msgs .bub.in[data-mid="'+mid+'"]');
+  OBJETIVO = { msgId: mid, texto: texto, dir: dir };
+  const bub = document.querySelector('#msgs .bub[data-mid="'+mid+'"]');
   if (bub) bub.classList.add('sel-obj');
-  document.getElementById('obj-preview').textContent = texto.length>70 ? texto.slice(0,70)+'…' : texto;
+  // Tu mensaje (out) = Seb EJECUTA lo que pusiste; mensaje del cliente (in) = responder a.
+  const esMio = dir === 'out';
+  document.querySelector('#obj-banner .ob-ic').textContent = esMio ? '⚡' : '↩';
+  document.getElementById('obj-preview').textContent = (esMio ? 'Ejecutar: ' : '') + (texto.length>64 ? texto.slice(0,64)+'…' : texto);
   document.getElementById('obj-banner').classList.add('show');
 }
 function limpiarObjetivo(){
