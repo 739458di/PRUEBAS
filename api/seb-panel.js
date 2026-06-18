@@ -325,6 +325,19 @@ module.exports = async function handler(req, res) {
             // 3) Intentar envío por el bridge (si está configurado y vivo)
             let enviado = false, error_envio = null;
             const bridgeUrl = process.env.BRIDGE_SEND_URL, bridgeKey = process.env.BRIDGE_API_KEY;
+            // PAQUETE DE UBICACIÓN: si la sugerencia usó la herramienta ubicacion, adjunta la
+            // captura branded + el pin guardados (punto_envio del auto). El bridge los manda
+            // junto con el texto formal. Si no hay paquete, va solo el texto.
+            let extra = {};
+            try {
+                if (meta.tools && meta.tools.includes('ubicacion') && meta.auto_id) {
+                    const pe = await query("SELECT image_b64, name, lat, lng FROM punto_envio WHERE auto_id = ?", [Number(meta.auto_id)]);
+                    if (pe[0]) {
+                        if (pe[0].image_b64) extra.image = pe[0].image_b64;
+                        if (pe[0].lat != null && pe[0].lng != null) extra.location = { lat: pe[0].lat, lng: pe[0].lng, name: pe[0].name || null };
+                    }
+                }
+            } catch (e) { /* sin paquete → solo texto */ }
             if (bridgeUrl && bridgeKey) {
                 try {
                     let phone = String(item.telefono).replace(/\D/g, '');
@@ -332,7 +345,7 @@ module.exports = async function handler(req, res) {
                     const r = await fetch(bridgeUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'x-api-key': bridgeKey },
-                        body: JSON.stringify({ phone, text: final })
+                        body: JSON.stringify({ phone, text: final, ...extra })
                     });
                     const d = await r.json().catch(() => ({}));
                     enviado = r.ok && d.ok !== false;
