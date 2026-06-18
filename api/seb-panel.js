@@ -127,6 +127,23 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, chats: [...porTel.values()] });
         }
 
+        // ============ IMAGEN DEL PUNTO (para control en FyraChat) ============
+        // Sirve la captura branded de punto_envio como JPEG, para que <img> la cargue.
+        if (action === 'ubic_img') {
+            const aid = Number(req.query.auto_id);
+            if (!aid) { res.statusCode = 400; return res.end('auto_id requerido'); }
+            const rows = await query("SELECT image_b64 FROM punto_envio WHERE auto_id = ?", [aid]);
+            if (!rows.length || !rows[0].image_b64) { res.statusCode = 404; return res.end('sin imagen'); }
+            const mm = String(rows[0].image_b64).match(/^data:(image\/[\w.+-]+);base64,([\s\S]*)$/);
+            const mime = mm ? mm[1] : 'image/jpeg';
+            const b64 = mm ? mm[2] : String(rows[0].image_b64).replace(/^data:[^,]+,/, '');
+            const buf = Buffer.from(b64, 'base64');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            res.statusCode = 200;
+            return res.end(buf);
+        }
+
         // ============ UN CHAT COMPLETO ============
         // FASE 3 — arma los mensajes desde la LIBRETA NUEVA (mensajes), ordenados por
         // HORA REAL (ts). Cada uno trae su FOLIO (msg_id) para que el front deduplique bien.
@@ -138,9 +155,9 @@ module.exports = async function handler(req, res) {
             let mensajes = [];
             if (conv.length) {
                 const rows = await query(
-                    "SELECT direccion, texto, ts, msg_id FROM mensajes WHERE conversacion_id = ? ORDER BY ts ASC, id ASC",
+                    "SELECT direccion, texto, ts, msg_id, tipo FROM mensajes WHERE conversacion_id = ? ORDER BY ts ASC, id ASC",
                     [conv[0].id]);
-                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id }));
+                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id, tipo: m.tipo || 'text' }));
                 // MODO PRUEBA: solo mensajes posteriores al reinicio
                 if (resetTs) mensajes = mensajes.filter(m => (m.timestamp * 1000) >= resetTs);
             }
@@ -347,10 +364,10 @@ module.exports = async function handler(req, res) {
             let extra = {};
             try {
                 if (meta.tools && meta.tools.includes('ubicacion') && meta.auto_id) {
-                    const pe = await query("SELECT image_b64, name, lat, lng FROM punto_envio WHERE auto_id = ?", [Number(meta.auto_id)]);
+                    const pe = await query("SELECT image_b64, name, lat, lng, maps_link FROM punto_envio WHERE auto_id = ?", [Number(meta.auto_id)]);
                     if (pe[0]) {
                         if (pe[0].image_b64) extra.image = pe[0].image_b64;
-                        if (pe[0].lat != null && pe[0].lng != null) extra.location = { lat: pe[0].lat, lng: pe[0].lng, name: pe[0].name || null };
+                        if (pe[0].lat != null && pe[0].lng != null) extra.location = { lat: pe[0].lat, lng: pe[0].lng, name: pe[0].name || null, maps_link: pe[0].maps_link || null };
                     }
                 }
             } catch (e) { /* sin paquete → solo texto */ }
@@ -373,6 +390,28 @@ module.exports = async function handler(req, res) {
             //    Fuente única: NO se escribe wa_messages aquí.
             await run("UPDATE seb_queue SET estado=?, texto_final=?, resuelto_en=? WHERE id=?",
                 [enviado ? 'enviado' : 'aprobado_sin_enviar', final, Date.now(), item.id]);
+
+            // 5) CONTROL: si fue paquete de ubicación, deja en FyraChat la CAPTURA + el PIN
+            //    renderizables (no como "[imagen]"). La imagen se sirve por action=ubic_img.
+            if (enviado && meta.auto_id && (extra.image || extra.location)) {
+                try {
+                    const cr = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + String(item.telefono)]);
+                    const cid = cr.length ? cr[0].id : null;
+                    if (cid) {
+                        const t0 = Date.now();
+                        if (extra.image) {
+                            await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                                [cid, 'pkgimg:' + item.id, t0, 'out', 'SRS010904', 'ubic-img:' + meta.auto_id, 'image', 1, t0]);
+                        }
+                        if (extra.location) {
+                            const L = extra.location;
+                            const txt = [L.name || '', L.lat, L.lng, L.maps_link || ''].join('|||');
+                            await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                                [cid, 'pkgloc:' + item.id, t0 + 1, 'out', 'SRS010904', txt, 'location', 1, t0 + 1]);
+                        }
+                    }
+                } catch (e) { /* control no crítico */ }
+            }
 
             return res.status(200).json({ ok: true, enviado, error_envio, similitud: sim });
         }

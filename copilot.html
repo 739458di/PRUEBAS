@@ -54,6 +54,10 @@
   #msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 6px;display:flex;flex-direction:column;gap:2px;background:var(--chatbg)}
   .bub{max-width:78%;padding:9px 13px 7px;border-radius:19px;font-size:15.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word;position:relative}
   .bub.in[data-mid]{cursor:pointer}
+  .bub.media{padding:5px 5px 4px}
+  .bmedia{display:block;max-width:240px;width:100%;border-radius:13px;cursor:pointer}
+  .bub .bloc{display:flex;flex-direction:column;line-height:1.35}
+  .bub .bloc a{color:#2f6df0;text-decoration:none;font-size:13px;margin-top:3px}
   .bub.in.sel-obj{box-shadow:0 0 0 2.5px #2f6df0;background:#eaf1ff}
   #obj-banner{display:none;align-items:center;gap:8px;margin:0 12px 6px;padding:8px 12px;background:#eaf1ff;border-left:3px solid #2f6df0;border-radius:10px;font-size:13.5px;color:#1f3a66}
   #obj-banner.show{display:flex}
@@ -233,7 +237,19 @@ function burbujaHTML(m, prevDir){
   const src = m.origen_envio ? '<span class="src">'+m.origen_envio+'</span>' : '';
   // Mensajes del CLIENTE (entrantes) con folio = seleccionables para "responder a"
   const sel = (lado==='in' && m.msg_id) ? (' data-mid="'+m.msg_id+'" data-txt="'+encodeURIComponent(m.mensaje||'')+'"') : '';
-  return '<div class="'+cls+'" data-k="'+claveMsg(m)+'" data-d="'+lado+'"'+sel+'>'+esc(m.mensaje)+
+  const media = (m.tipo==='image') ? ' media' : '';
+  let cont;
+  if (m.tipo==='image'){                                  // CAPTURA del punto (control): imagen real
+    const r = (m.mensaje||'').match(/^ubic-img:(\d+)/);
+    const isrc = r ? (API+'?action=ubic_img&auto_id='+r[1]) : (m.mensaje||'');
+    cont = '<a href="'+isrc+'" target="_blank" rel="noopener"><img class="bmedia" src="'+isrc+'" alt="mapa del punto" loading="lazy"></a>';
+  } else if (m.tipo==='location'){                         // PIN (control): card de ubicación
+    const p = (m.mensaje||'').split('|||'); const nom = esc(p[0]||'Ubicación'); const link = (p[3]||'').trim();
+    cont = '<div class="bloc">📍 <b>'+nom+'</b>'+(link?'<a href="'+esc(link)+'" target="_blank" rel="noopener">Ver en Maps</a>':'')+'</div>';
+  } else {
+    cont = esc(m.mensaje);
+  }
+  return '<div class="'+cls+media+'" data-k="'+claveMsg(m)+'" data-d="'+lado+'"'+sel+'>'+cont+
          '<span class="t">'+src+hora(m.timestamp)+(lado==='out'?' '+CHECK:'')+'</span></div>';
 }
 // Etiqueta de día para los separadores
