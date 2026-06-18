@@ -218,24 +218,40 @@ module.exports = async function handler(req, res) {
             const resets = await cargarResets();
             let conv = { mensajes: [] };
             if (convId) {
-                const mr = await query("SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
-                let msgs = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000) }));
+                const mr = await query("SELECT direccion, texto, ts, msg_id FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                let msgs = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id }));
                 const ms = resets[tel];
                 if (ms) msgs = msgs.filter(m => (m.timestamp * 1000) >= ms);
                 conv = { mensajes: msgs };
             }
             const entrantes = conv.mensajes.filter(m => m.direccion === 'in');
-            // BUG 9: usar el texto EXACTO que el front ya tiene en pantalla (evita el lag de ingesta);
-            // si no viene, caer al último entrante de la base.
+            // BUG 9: usar el texto EXACTO que el front ya tiene en pantalla (evita el lag de ingesta).
             const ultimoInBody = String((req.body && req.body.ultimo_in) || '').trim();
-            if (entrantes.length === 0 && !ultimoInBody) return res.status(400).json({ error: 'sin mensajes entrantes' });
-            const lastMsg = ultimoInBody || entrantes[entrantes.length - 1].mensaje;
-            // El botón SIEMPRE regenera con el ÚLTIMO mensaje (no se queda pegado).
-            // dedupe_key estable por conversación → el UPSERT reemplaza la sugerencia
-            // pendiente anterior (una sola sugerencia "viva" por chat, siempre fresca).
-            const dedupe = tel + ':' + (convId || 'x');
+            // "RESPONDER A": el front puede mandar un mensaje OBJETIVO específico del cliente
+            // (por folio msg_id, o por texto). Seb clasifica y responde a ESE, no al último.
+            const objetivoMid = String((req.body && req.body.objetivo_msgid) || '').trim();
+            const objetivoTxt = String((req.body && req.body.objetivo) || '').trim();
+            if (entrantes.length === 0 && !ultimoInBody && !objetivoTxt) return res.status(400).json({ error: 'sin mensajes entrantes' });
 
-            const historial = conv.mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            let lastMsg, historial;
+            let idxObj = -1;
+            if (objetivoMid) idxObj = conv.mensajes.findIndex(m => m.msg_id === objetivoMid);
+            if (idxObj < 0 && objetivoTxt) idxObj = conv.mensajes.map(m => m.mensaje).lastIndexOf(objetivoTxt);
+            if (idxObj >= 0) {
+                // RESPONDER A ese mensaje: lo usamos como objetivo, con el historial HASTA él de contexto.
+                lastMsg = conv.mensajes[idxObj].mensaje;
+                historial = conv.mensajes.slice(Math.max(0, idxObj - 7), idxObj + 1).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            } else if (objetivoTxt) {
+                // El objetivo no se encontró en la libreta (raro) → úsalo directo.
+                lastMsg = objetivoTxt;
+                historial = conv.mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            } else {
+                // NORMAL (sin selección): el último mensaje entrante, como siempre.
+                lastMsg = ultimoInBody || entrantes[entrantes.length - 1].mensaje;
+                historial = conv.mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            }
+            // dedupe_key estable por conversación → una sola sugerencia "viva" por chat.
+            const dedupe = tel + ':' + (convId || 'x');
             const resetTs = Number(resets[tel] || 0);
             const convEstado = await query("SELECT estado_json, auto_id_activo, updated_at FROM wa_conversations WHERE telefono=?", [tel]);
             // MODO PRUEBA: si el estado es ANTERIOR al reinicio (contestaste un anuncio nuevo),
