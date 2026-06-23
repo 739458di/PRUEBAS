@@ -114,8 +114,33 @@ function recordarLid(lid, phone) {
 // - Mueve el contexto del anuncio (auto/link) al teléfono.
 // - Si NO existe la del teléfono → re-apunta el huérfano al teléfono.
 // - Si existen AMBAS → fusiona los mensajes (huérfano primero, es más viejo) y borra el huérfano.
+// Fusiona la LIBRETA NUEVA (conversaciones + mensajes) cuando una conversación quedó bajo
+// el @lid y luego se aprende su teléfono. Sin esto, la conversación se ve PARTIDA en FyraChat.
+async function fusionarLibretaNueva(lid, phone) {
+    const orfanoT = 'whatsapp:' + lid, canonT = 'whatsapp:' + phone;
+    try {
+        const L = await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [orfanoT] });
+        if (!L.rows.length) return;
+        const lidId = L.rows[0].id;
+        const P = await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [canonT] });
+        if (!P.rows.length) {                                          // no existe la del teléfono → re-apuntar
+            await db.execute({ sql: 'UPDATE conversaciones SET channel_thread_id=?, telefono=? WHERE id=?', args: [canonT, phone, lidId] });
+            console.log('[FUSION-nueva] re-apuntada conv ' + lidId + ' → ' + canonT);
+            return;
+        }
+        const phoneId = P.rows[0].id;                                  // existen ambas → mover mensajes + borrar @lid
+        await db.execute({ sql: 'UPDATE OR IGNORE mensajes SET conversacion_id=? WHERE conversacion_id=?', args: [phoneId, lidId] });
+        await db.execute({ sql: 'DELETE FROM mensajes WHERE conversacion_id=?', args: [lidId] });
+        await db.execute({ sql: 'DELETE FROM conversaciones WHERE id=?', args: [lidId] });
+        const last = await db.execute({ sql: 'SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts DESC, id DESC LIMIT 1', args: [phoneId] });
+        if (last.rows.length) { const m = last.rows[0]; await db.execute({ sql: 'UPDATE conversaciones SET ult_texto=?, ult_dir=?, ult_msg_ts=? WHERE id=?', args: [String(m.texto || '').slice(0, 200), m.direccion, m.ts, phoneId] }); }
+        console.log('[FUSION-nueva] fusionada conv ' + lidId + ' → ' + phoneId);
+    } catch (e) { console.error('[FUSION-nueva] error:', e.message); }
+}
+
 async function fusionarSiHuerfano(lid, phone) {
     const orfanoT = 'whatsapp:' + lid, canonT = 'whatsapp:' + phone;
+    fusionarLibretaNueva(lid, phone).catch(() => {});   // NUEVO: fusiona también la libreta nueva (FyraChat)
     // 1) el anuncio (qué auto + link) sigue al teléfono
     db.execute({
         sql: 'INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) SELECT ?, ad_context, updated_at FROM ad_por_telefono WHERE telefono=? ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at',
