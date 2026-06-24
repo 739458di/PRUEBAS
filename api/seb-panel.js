@@ -226,6 +226,48 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, timestamp: Math.floor(when / 1000), direccion: dir });
         }
 
+        // ============ OPENER AUTO (autopilot del PRIMER mensaje) ============
+        // El bridge llama aquí cuando llega un primer contacto. Decide si aplica
+        // (comprador, primer contacto, auto resuelto, no vendedor) y devuelve la
+        // RÁFAGA del playbook. NO crea sugerencia pendiente: es para enviar solo.
+        if (action === 'opener_auto' && req.method === 'POST') {
+            const tel = String(req.body.telefono || '');
+            if (!tel) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            // Dueño/vendedor por teléfono → nunca autopilot.
+            const duenos = await telefonosDueno();
+            if (duenos.has(tel.replace(/\D/g, '').slice(-10))) return res.status(200).json({ ok: false, motivo: 'dueno' });
+
+            const convRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+            const convId = convRow.length ? convRow[0].id : null;
+            const nombreChat = convRow.length ? convRow[0].nombre : null;
+            let mensajes = [];
+            if (convId) {
+                const mr = await query("SELECT direccion, texto FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                mensajes = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion }));
+            }
+            // PRIMER CONTACTO: si ya hay un saliente nuestro, NO autopilot (lo maneja el flujo manual).
+            if (mensajes.some(m => m.direccion === 'out')) return res.status(200).json({ ok: false, motivo: 'no_primer_contacto' });
+            const entrantes = mensajes.filter(m => m.direccion === 'in');
+            if (!entrantes.length) return res.status(200).json({ ok: false, motivo: 'sin_entrantes' });
+
+            const lastMsg = entrantes[entrantes.length - 1].mensaje;
+            const textoFamilia = entrantes.map(e => e.mensaje).join(' ');   // junta la ráfaga del comprador (combo info+crédito en mensajes separados)
+            const historial = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            let mensajeCerebro = lastMsg;
+            try {
+                const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]);
+                if (adRow[0] && adRow[0].ad_context) mensajeCerebro = '[DESC: ' + adRow[0].ad_context + ']\n' + lastMsg;
+            } catch (e) { /* sin anuncio */ }
+
+            const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
+            const op = await responderOpener({
+                texto: textoFamilia, nombre: nombreChat,
+                auto_id: clasif.auto_id, intencion: clasif.intencion_principal
+            });
+            if (!op || !op.segmentos || !op.segmentos.length) return res.status(200).json({ ok: false, motivo: 'no_aplica' });
+            return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo });
+        }
+
         // ============ SUGERIR (corre el cerebro on-demand) ============
         // FUENTE ÚNICA: el cerebro también lee de raw_conversations.
         if (action === 'sugerir' && req.method === 'POST') {
