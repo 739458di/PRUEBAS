@@ -266,6 +266,8 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
+            // VENDEDOR / fuera de alcance → NO autopilot (Seb no atiende ventas; el owner lo ve y escala).
+            if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
             const op = await responderOpener({
                 texto: textoFamilia, nombre: nombreChat,
                 auto_id: clasif.auto_id, intencion: clasif.intencion_principal
@@ -340,6 +342,11 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* tabla aún no existe → sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado });
+            // VENDEDOR / fuera de alcance → Seb NO contesta nada, se ESCALA al humano.
+            // (El trade-in NO entra aquí — ese es comprador y sí se atiende.)
+            if (clasif.escalar) {
+                return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'no es para Seb (venta de auto / fuera de alcance) — escalar a humano' });
+            }
 
             // ===== MENSAJE INICIAL → BANCO DE FRASES (fuente única de verdad) =====
             // Si Seb AÚN NO ha respondido en esta conversación (post-reset) y NO es un
