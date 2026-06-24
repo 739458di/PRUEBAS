@@ -1,0 +1,109 @@
+{
+  "version": "1.0",
+  "descripcion": "Reglas fijas de primera contestacion del bot Seb segun el input del anuncio. Basado en 338 conversaciones reales.",
+  "leyes_globales": {
+    "responder_antes_de_min": 5,
+    "formato": "rafaga: un mensaje por burbuja, una idea por mensaje",
+    "estilo": "sobrio, sin emojis, sin signos de exclamacion",
+    "signo_interrogacion": "solo al final, nunca al inicio",
+    "recapitular_auto": true,
+    "usar_nombre_si_existe": true,
+    "una_sola_pregunta_gancho": true,
+    "ubicacion": "hablada, nunca pin de maps, formato: La tenemos en {punto_venta}, por {zona}"
+  },
+  "inicio_fijo": [
+    "Qué tal buen día",
+    "Cómo estás",
+    "Mucho gusto, mi nombre es Sebastián Romero, para servirte"
+  ],
+  "gancho_fijo": "Gustas venir a verlo y manejarlo?",
+  "inputs": [
+    {
+      "id": 1,
+      "nombre": "quiero_mas_informacion",
+      "detecta": ["quiero más información", "quiero mas info", "más información"],
+      "usa_inicio_fijo": true,
+      "resolucion": [
+        "Claro, déjame te mando la información del {auto}",
+        "Sigue disponible. Único dueño, factura de agencia, inspección mecánica y legal",
+        "La tenemos en {punto_venta}, por {zona}"
+      ],
+      "gancho": "Gustas venir a verlo y manejarlo?"
+    },
+    {
+      "id": 2,
+      "nombre": "quisiera_mas_detalles",
+      "detecta": ["quisiera más detalles", "más detalles de"],
+      "usa_inicio_fijo": true,
+      "resolucion": [
+        "Claro, déjame te mando la información del {auto}",
+        "Sigue disponible. Único dueño, factura de agencia, inspección mecánica y legal",
+        "La tenemos en {punto_venta}, por {zona}"
+      ],
+      "gancho": "Gustas venir a verlo y manejarlo?"
+    },
+    {
+      "id": 3,
+      "nombre": "me_interesa",
+      "detecta": ["me interesa el", "me interesa la"],
+      "usa_inicio_fijo": true,
+      "resolucion": [
+        "Claro que sí, el {auto} sigue disponible",
+        "Único dueño, factura de agencia, inspección mecánica y legal",
+        "La tenemos en {punto_venta}, por {zona}"
+      ],
+      "gancho": "Gustas venir a verlo y manejarlo?"
+    },
+    {
+      "id": 4,
+      "nombre": "financiamiento",
+      "detecta": ["procedimiento de financiamiento", "cómo queda financiado", "financiamiento", "financiado", "checan buró", "enganche", "mensualidad"],
+      "usa_inicio_fijo": true,
+      "sin_km": true,
+      "sin_ubicacion": true,
+      "resolucion": [
+        "Claro que sí, el financiamiento del {auto} queda así:",
+        "Enganche desde 30%, hasta 60 meses con Santander"
+      ],
+      "extra_si_buro": "Sí, es sujeto a aprobación bancaria",
+      "gancho": "Gustas venir a verlo y manejarlo?"
+    },
+    {
+      "id": 5,
+      "nombre": "pregunta_pegada",
+      "detecta": ["precio", "cuántos km", "kms", "toman a cuenta", "a cuenta", "color", "motor"],
+      "usa_inicio_fijo": false,
+      "saludo_corto": "Qué tal buen día",
+      "resolucion_plantilla": "Claro que sí, {respuesta_a_la_pregunta_exacta}",
+      "ejemplos": {
+        "precio": "Claro que sí, el {auto} está en ${precio}",
+        "km": "Claro que sí, el {auto} tiene {km} km",
+        "toma_a_cuenta": "Claro que sí, con gusto te lo tomamos a cuenta",
+        "buro": "Sí, es sujeto a aprobación bancaria"
+      },
+      "gancho": "Gustas venir a verlo y manejarlo?"
+    }
+  ],
+  "desvio_vendedor": {
+    "detecta": ["me interesa vender mi auto", "quiero vender", "vendo mi"],
+    "accion": "rutear a Ignacio, NO usar este playbook"
+  },
+  "prohibido": [
+    {"frase": "¿Te agendo cita o te cotizo crédito?", "razon": "doble CTA, 57% vs 80%"},
+    {"frase": "Sii está disponible", "razon": "-13.7 pts", "usar": "Sigue disponible / aún sigue disponible"},
+    {"frase": "Documentos verificados", "razon": "-12.8 pts"},
+    {"frase": "Te cotizo el crédito (como gancho)", "razon": "-5.9 pts"},
+    {"frase": "¿A crédito o contado?", "razon": "0-14% avanza a cita"},
+    {"frase": "Urgencia: hoy / se va / te aparto", "razon": "60% resp, 11% avanza"},
+    {"frase": "Soltar precio antes de invitar a verlo", "razon": "el precio frena el avance"},
+    {"frase": "Ficha tecnica completa de golpe", "razon": "satura y baja respuesta"}
+  ],
+  "variables": {
+    "auto": "modelo + año del anuncio de origen",
+    "precio": "del inventario",
+    "km": "del inventario",
+    "punto_venta": "config de puntos",
+    "zona": "config de puntos",
+    "nombre": "del comprador si se tiene"
+  }
+}
