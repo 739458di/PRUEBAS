@@ -101,6 +101,23 @@
   #gen{margin:10px 16px;display:none}
   #gen.show{display:block}
   #gen button{width:100%;padding:13px;border:1px dashed #b9cdf5;background:rgba(47,109,240,.05);color:var(--acc);border-radius:14px;font-size:14.5px;font-weight:700;cursor:pointer}
+  /* SECUENCIA del banco: cada mensaje se envía por separado (enviar, enviar, enviar) */
+  #seqbox{background:#fff;border-top:1px solid #eef1f6;padding:11px 14px 12px;display:none;position:relative;z-index:3;box-shadow:0 -6px 20px rgba(90,120,180,.06);max-height:46vh;overflow-y:auto}
+  #seqbox.show{display:block}
+  #seqbox .seqtag{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--acc);font-weight:700;margin-bottom:9px}
+  #seqbox .seqtag .int{background:#e7f0ff;color:#2257c4;padding:1px 9px;border-radius:9px;font-weight:600;font-size:11px;margin-left:auto}
+  .seqcard{display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;transition:opacity .2s}
+  .seqcard .seqn{flex:none;width:21px;height:21px;margin-top:6px;border-radius:50%;background:#eaf1ff;color:#2f6df0;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .seqtx{flex:1;min-width:0;resize:none;border:1px solid #e3e8f1;border-radius:13px;padding:9px 12px;font-family:inherit;font-size:14.5px;line-height:1.32;color:#13233d;background:#f7f9fc;overflow:hidden}
+  .seqtx:focus{outline:none;border-color:#9cc0ff;background:#fff}
+  .seqbtn{flex:none;align-self:stretch;min-width:74px;border:none;border-radius:13px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:700;color:#fff;background:linear-gradient(135deg,#3f86f5,#2f6df0);box-shadow:0 4px 12px rgba(47,109,240,.28);transition:transform .08s}
+  .seqbtn:active{transform:scale(.96)}
+  .seqcard.sent{opacity:.5}
+  .seqcard.sent .seqtx{background:#eef7ee;border-color:#cfe8cf;color:#5a7a5a}
+  .seqcard.sent .seqn{background:#dff0df;color:#2f9d52}
+  .seqcard.sent .seqbtn{background:#cfe6d2;color:#2f9d52;box-shadow:none;cursor:default}
+  .seqfoot{margin-top:4px}
+  .seqfoot button{width:100%;padding:9px 0;border-radius:12px;font-size:13px;font-weight:600;background:#f1f4f9;color:#8a93a6;border:none;cursor:pointer}
 
   /* ===== INPUT MANUAL ===== */
   .inputbar{display:flex;gap:9px;align-items:flex-end;padding:9px 12px calc(9px + env(safe-area-inset-bottom));background:rgba(255,255,255,.86);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid #eef1f6}
@@ -184,6 +201,7 @@
       </div>
     </div>
   </div>
+  <div id="seqbox"></div>
   <div class="inputbar">
     <textarea id="manual" rows="1" placeholder="Escribe un mensaje…"></textarea>
     <button id="sendman" onclick="enviarManual()"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
@@ -220,6 +238,8 @@
 const API = '/api/seb-panel';
 let TEL = null, QID = null, EDITANDO = false, SOLO_PEND = false, CHATS = [];
 let OBJETIVO = null;   // mensaje del cliente seleccionado para "responder a" (msgId + texto)
+const SENTINEL = '||SEQ||';   // separa los mensajes de una SECUENCIA del banco
+let SEQ = null, SEQ_CONSUMED = false;   // secuencia del opener en curso
 let ULTIMA_IN_SUGERIDA = 0, POLL = null, RENDERED_COUNT = -1;
 // EL TIMBRE: WebSocket al bridge (estilo WhatsApp). Recibe mensajes nuevos SIN preguntarle a Turso.
 const TIMBRE = 'wss://fat-simplified-sat-window.trycloudflare.com';
@@ -406,6 +426,7 @@ async function abrirChat(tel, nombre){
   document.getElementById('copilot').classList.remove('show');
   document.getElementById('gen').classList.remove('show');
   document.getElementById('draft').value = '';
+  SEQ = null; SEQ_CONSUMED = false; document.getElementById('seqbox').classList.remove('show');
   document.getElementById('scr-chat').classList.add('open');
   CARGA_FRESCA = true;
   cargarChat();
@@ -478,14 +499,73 @@ async function agregarMensaje(){
 }
 
 function mostrarBorrador(b){
-  const cop = document.getElementById('copilot'), gen = document.getElementById('gen');
+  const cop = document.getElementById('copilot'), gen = document.getElementById('gen'), seq = document.getElementById('seqbox');
+  // No pisar una SECUENCIA a medio enviar si el server ya no devuelve pendiente
+  // (la sugerencia se "consume" al primer mensaje → quedaría null en el siguiente poll).
+  if (SEQ && SEQ.some(s => !s.enviado) && (!b || !b.borrador)) return;
   if (b && b.borrador){
     QID = b.id;
+    if (String(b.borrador).indexOf(SENTINEL) !== -1){     // → SECUENCIA del banco
+      mostrarSecuencia(String(b.borrador), b.intencion);
+      cop.classList.remove('show'); gen.classList.remove('show');
+      return;
+    }
+    SEQ = null; seq.classList.remove('show');
     document.getElementById('draft').value = b.borrador;
     document.getElementById('draft').setAttribute('readonly','');
     document.getElementById('c-int').textContent = b.intencion || '';
     cop.classList.add('show'); gen.classList.remove('show');
-  } else { cop.classList.remove('show'); gen.classList.add('show'); }
+  } else { SEQ = null; cop.classList.remove('show'); seq.classList.remove('show'); gen.classList.add('show'); }
+}
+
+// Pinta la SECUENCIA: una tarjeta por mensaje, cada una con su botón Enviar.
+// Sebastián pica enviar, enviar, enviar — se mandan como mensajes separados, en orden.
+function mostrarSecuencia(raw, intencion){
+  const segs = raw.split(SENTINEL).map(s => s.trim()).filter(Boolean);
+  SEQ = segs.map(t => ({ texto:t, enviado:false }));
+  SEQ_CONSUMED = false;
+  const box = document.getElementById('seqbox');
+  let html = '<div class="seqtag"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Secuencia de Seb · pícale Enviar en orden <span class="int">'+esc0(intencion||'')+'</span></div>';
+  SEQ.forEach((s,i)=>{
+    html += '<div class="seqcard" id="seqc-'+i+'"><span class="seqn">'+(i+1)+'</span>'
+      + '<textarea class="seqtx" id="seqtx-'+i+'" rows="1"></textarea>'
+      + '<button class="seqbtn" id="seqb-'+i+'" onclick="enviarSeg('+i+')">Enviar</button></div>';
+  });
+  html += '<div class="seqfoot"><button onclick="cerrarSecuencia()">Descartar secuencia</button></div>';
+  box.innerHTML = html;
+  box.classList.add('show');     // mostrar ANTES de medir (oculto, scrollHeight=0 → clip)
+  // El texto se asigna por .value (puede traer saltos de línea, emojis, comillas)
+  SEQ.forEach((s,i)=>{ const tx=document.getElementById('seqtx-'+i); if(tx){ tx.value=s.texto; autoSizeTA(tx); tx.addEventListener('input',()=>autoSizeTA(tx)); } });
+}
+function autoSizeTA(t){ t.style.height='auto'; t.style.height=Math.max(38, Math.min(t.scrollHeight,120))+'px'; }
+const esc0 = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+async function enviarSeg(i){
+  if (!SEQ || !SEQ[i] || SEQ[i].enviado) return;
+  const tx = document.getElementById('seqtx-'+i);
+  const texto = (tx.value||'').trim(); if(!texto) return;
+  const btn = document.getElementById('seqb-'+i);
+  btn.disabled = true; btn.textContent='…';
+  const optId = pintarOptimista(texto);
+  const body = { action:'manual_directo', telefono: TEL, texto };
+  if (!SEQ_CONSUMED && QID) body.consume_qid = QID;     // el 1er mensaje consume la sugerencia
+  try {
+    const r = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
+    if (!r.ok || !r.enviado){ quitarOptimista(optId, texto); btn.disabled=false; btn.textContent='Enviar';
+      toast('⚠️ No se envió: '+(r.error_envio||r.error||'WhatsApp no conectado')); return; }
+    if (body.consume_qid){ SEQ_CONSUMED = true; QID = null; }   // consumida → los demás van directos
+    SEQ[i].enviado = true;
+    document.getElementById('seqc-'+i).classList.add('sent');
+    tx.setAttribute('readonly',''); btn.textContent='✓ Enviado';
+    const next = SEQ.findIndex(s=>!s.enviado);
+    if (next < 0) setTimeout(cerrarSecuencia, 650);            // todos enviados → cerrar
+    else { const nb=document.getElementById('seqb-'+next); if(nb) nb.focus(); }
+  } catch(e){ quitarOptimista(optId, texto); btn.disabled=false; btn.textContent='Enviar'; toast('⚠️ No se envió (red)'); }
+}
+function cerrarSecuencia(){
+  SEQ = null;
+  document.getElementById('seqbox').classList.remove('show');
+  document.getElementById('gen').classList.add('show');
 }
 
 async function sugerir(ultimoIn){

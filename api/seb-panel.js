@@ -11,6 +11,7 @@
 const { query, run } = require('../lib/seb/db.js');
 const { entender } = require('../lib/seb/clasificador.js');
 const { pensar } = require('../lib/seb/loop.js');
+const { responder: responderOpener, SENTINEL } = require('../lib/seb/opener.js');
 
 // Similitud simple por tokens (1 = idéntico, 0 = nada en común)
 function similitud(a, b) {
@@ -230,8 +231,9 @@ module.exports = async function handler(req, res) {
         if (action === 'sugerir' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             // FASE 3 — el cerebro también lee de la LIBRETA NUEVA (mensajes), limpio y ordenado.
-            const convRow = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+            const convRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
             const convId = convRow.length ? convRow[0].id : null;
+            const nombreChat = convRow.length ? convRow[0].nombre : null;
             const resets = await cargarResets();
             let conv = { mensajes: [] };
             if (convId) {
@@ -290,7 +292,34 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* tabla aún no existe → sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado });
-            const r = await pensar({ telefono: tel, mensaje: lastMsg, clasificacion: clasif, estado });
+
+            // ===== MENSAJE INICIAL → BANCO DE FRASES (fuente única de verdad) =====
+            // Si Seb AÚN NO ha respondido en esta conversación (post-reset) y NO es un
+            // "responder a/ejecutar", el opener lo arma el BANCO como SECUENCIA de
+            // mensajes exactos (no el loop de IA). El front la parte para enviarlos uno
+            // por uno. ubicacion/credito/sin-auto → null → cae al loop normal.
+            const esOpener = !conv.mensajes.some(m => m.direccion === 'out') && !objetivoTxt && !objetivoMid;
+            let r = null;
+            if (esOpener) {
+                try {
+                    const op = await responderOpener({
+                        texto: lastMsg, nombre: nombreChat,
+                        auto_id: clasif.auto_id, intencion: clasif.intencion_principal
+                    });
+                    if (op && op.segmentos && op.segmentos.length) {
+                        r = {
+                            ok: true,
+                            borrador: op.segmentos.join('\n' + SENTINEL + '\n'),
+                            tools_usadas: [],
+                            estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null }
+                        };
+                    }
+                } catch (e) { /* si el banco falla, cae al loop normal */ }
+            }
+
+            if (!r) {
+                r = await pensar({ telefono: tel, mensaje: lastMsg, clasificacion: clasif, estado });
+            }
             if (!r.ok) {
                 return res.status(200).json({ ok: false, escalar: true, motivo: r.motivo, intencion: clasif.intencion_principal });
             }
@@ -424,6 +453,9 @@ module.exports = async function handler(req, res) {
         if (action === 'manual_directo' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             const texto = String(req.body.texto || '').trim();
+            // consume_qid: en una SECUENCIA del banco, el PRIMER mensaje "consume" la
+            // sugerencia encolada (marca enviado + avanza estado), sin re-enviar nada.
+            const consumeQid = Number(req.body.consume_qid || 0) || null;
             if (!tel || !texto) return res.status(400).json({ error: 'telefono y texto requeridos' });
             let enviado = false, error_envio = null;
             const bridgeUrl = process.env.BRIDGE_SEND_URL, bridgeKey = process.env.BRIDGE_API_KEY;
@@ -441,6 +473,29 @@ module.exports = async function handler(req, res) {
                     if (!enviado) error_envio = d.error || ('bridge ' + r.status);
                 } catch (e) { error_envio = e.message; }
             } else { error_envio = 'bridge no configurado'; }
+
+            // CONSUMIR la sugerencia de secuencia UNA sola vez (atómico: WHERE estado='pendiente').
+            // No re-envía: solo marca 'enviado', avanza el estado de la conversación y deja
+            // rastro de entrenamiento. Así el pendiente no queda colgado tras enviar el opener.
+            if (consumeQid && enviado) {
+                try {
+                    const claim = await run("UPDATE seb_queue SET estado='enviado', resuelto_en=? WHERE id=? AND estado='pendiente'", [Date.now(), consumeQid]);
+                    if (claim.rowsAffected) {
+                        const q = await query("SELECT * FROM seb_queue WHERE id=?", [consumeQid]);
+                        if (q.length) {
+                            const meta = JSON.parse(q[0].tools_usadas || '{}');
+                            if (meta.estado_nuevo) {
+                                const upd = await run("UPDATE wa_conversations SET estado_json=?, auto_id_activo=?, updated_at=? WHERE telefono=?",
+                                    [JSON.stringify(meta.estado_nuevo), meta.estado_nuevo.auto_id_activo || null, Date.now(), q[0].telefono]);
+                                if (!upd.rowsAffected) await run("INSERT INTO wa_conversations (telefono, estado, platform, estado_json, auto_id_activo, updated_at) VALUES (?, 'seb', 'whatsapp', ?, ?, ?)",
+                                    [q[0].telefono, JSON.stringify(meta.estado_nuevo), meta.estado_nuevo.auto_id_activo || null, Date.now()]);
+                            }
+                            await run("INSERT INTO seb_entrenamiento (queue_id, telefono, intencion, auto_id, borrador, texto_final, accion, similitud, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                                [q[0].id, q[0].telefono, q[0].intencion, meta.auto_id || null, q[0].borrador, texto, 'secuencia', 0, Date.now()]);
+                        }
+                    }
+                } catch (e) { /* consumo no crítico */ }
+            }
             // Fuente única: el saliente llega a raw_conversations vía el bridge, no se escribe wa_messages.
             return res.status(200).json({ ok: true, enviado, error_envio });
         }
