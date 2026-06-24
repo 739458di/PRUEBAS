@@ -240,10 +240,16 @@ module.exports = async function handler(req, res) {
             const convRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
             const convId = convRow.length ? convRow[0].id : null;
             const nombreChat = convRow.length ? convRow[0].nombre : null;
+            // MODO PRUEBA: respeta el reinicio — todo lo ANTERIOR al reset se ignora, así
+            // un número de prueba que contesta un anuncio cuenta como PRIMER CONTACTO fresco.
+            const resetsOA = await cargarResets();
+            const resetTsOA = Number(resetsOA[tel] || 0);
             let mensajes = [];
             if (convId) {
-                const mr = await query("SELECT direccion, texto FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
-                mensajes = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion }));
+                const mr = await query("SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts) }));
+                if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
+                mensajes = rows;
             }
             // PRIMER CONTACTO: si ya hay un saliente nuestro, NO autopilot (lo maneja el flujo manual).
             if (mensajes.some(m => m.direccion === 'out')) return res.status(200).json({ ok: false, motivo: 'no_primer_contacto' });

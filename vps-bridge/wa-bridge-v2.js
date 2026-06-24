@@ -464,7 +464,8 @@ async function conectar() {
             emitir({ tipo: 'mensaje', telefono: tel, mensaje: texto, direccion: esSaliente ? 'out' : 'in', timestamp: Math.floor(msgTs / 1000), nombre: esSaliente ? null : (m.pushName || null), msg_id: m.key.id });
             console.log((esSaliente ? '→ ' : '← ') + tel + ': ' + String(texto).slice(0, 50) + (adContext ? '  [ANUNCIO]' : ''));
             // AUTOPILOT: primer mensaje de un COMPRADOR → el bot contesta solo (ráfaga).
-            if (!esSaliente && !TEST_NUMEROS.has(tel.slice(-10))) programarAutoOpener(tel);
+            // El cerebro (/opener_auto, reset-aware) decide si aplica; aquí solo debounce.
+            if (!esSaliente) programarAutoOpener(tel);
         }
     });
 }
@@ -474,7 +475,7 @@ async function conectar() {
 // SOLO la ráfaga del playbook (1 burbuja por mensaje, ~1s de diferencia). Una vez
 // por conversación. El cerebro (FyraChat /opener_auto) decide si aplica.
 const autoOpenerTimers = new Map();   // tel → timeout (debounce: junta su ráfaga)
-const autoOpenerHecho = new Set();    // tel → ya se auto-respondió (anti-repetición)
+const autoOpenerEnVuelo = new Set();  // tel → procesando ahora (anti-concurrencia)
 
 // Envía UN texto saliente del bot y lo registra/emite a FyraChat (igual que /api/send).
 async function autoEnviarTexto(p, text) {
@@ -495,7 +496,7 @@ async function autoEnviarTexto(p, text) {
 
 // Debounce: cada entrante reinicia el reloj; al expirar (no llegaron más) dispara una vez.
 function programarAutoOpener(tel) {
-    if (!AUTO_OPENER || autoOpenerHecho.has(tel)) return;
+    if (!AUTO_OPENER) return;
     if (autoOpenerTimers.has(tel)) clearTimeout(autoOpenerTimers.get(tel));
     autoOpenerTimers.set(tel, setTimeout(() => {
         autoOpenerTimers.delete(tel);
@@ -504,34 +505,29 @@ function programarAutoOpener(tel) {
 }
 
 async function dispararAutoOpener(tel) {
-    if (autoOpenerHecho.has(tel) || estado !== 'conectado') return;
-    // 1) Confirmar PRIMER CONTACTO (sin ningún saliente nuestro en este hilo).
+    if (estado !== 'conectado' || autoOpenerEnVuelo.has(tel)) return;
+    autoOpenerEnVuelo.add(tel);   // lock anti-concurrencia mientras procesa/envía
     try {
-        const conv = await db.execute({ sql: "SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", args: ['whatsapp:' + tel] });
-        if (conv.rows.length) {
-            const out = await db.execute({ sql: "SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='out'", args: [conv.rows[0].id] });
-            if (Number(out.rows[0].n) > 0) { autoOpenerHecho.add(tel); return; }   // ya hubo respuesta → no autopilot
+        // El cerebro (reset-aware) decide TODO: primer contacto, auto resuelto,
+        // no dueño/vendedor. Si no aplica → no manda nada (queda en modo manual).
+        let segmentos = null;
+        try {
+            const r = await fetch(OPENER_AUTO_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'opener_auto', telefono: tel })
+            });
+            const d = await r.json().catch(() => ({}));
+            if (d && d.ok && Array.isArray(d.segmentos) && d.segmentos.length) segmentos = d.segmentos;
+        } catch (e) { console.error('[auto-opener] cerebro:', e.message); }
+        if (!segmentos) return;
+        // Mandar la ráfaga: 1 burbuja por mensaje, ~1s de diferencia.
+        let p = tel.replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
+        for (let i = 0; i < segmentos.length; i++) {
+            try { await autoEnviarTexto(p, segmentos[i]); } catch (e) { console.error('[auto-opener] envío:', e.message); }
+            if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
         }
-    } catch (e) { return; }   // si la BD falla, NO arriesgar un envío
-    // 2) Pedir la ráfaga al cerebro.
-    autoOpenerHecho.add(tel);   // marca ANTES de enviar (anti-doble)
-    let segmentos = null;
-    try {
-        const r = await fetch(OPENER_AUTO_URL, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'opener_auto', telefono: tel })
-        });
-        const d = await r.json().catch(() => ({}));
-        if (d && d.ok && Array.isArray(d.segmentos) && d.segmentos.length) segmentos = d.segmentos;
-    } catch (e) { console.error('[auto-opener] cerebro:', e.message); }
-    if (!segmentos) { autoOpenerHecho.delete(tel); return; }   // no aplica → deja manual, permite reintento futuro
-    // 3) Mandar la ráfaga: 1 burbuja por mensaje, ~1s de diferencia.
-    let p = tel.replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
-    for (let i = 0; i < segmentos.length; i++) {
-        try { await autoEnviarTexto(p, segmentos[i]); } catch (e) { console.error('[auto-opener] envío:', e.message); }
-        if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
-    }
-    console.log('[auto-opener] ráfaga enviada a ' + tel + ' (' + segmentos.length + ' msgs)');
+        console.log('[auto-opener] ráfaga enviada a ' + tel + ' (' + segmentos.length + ' msgs)');
+    } finally { autoOpenerEnVuelo.delete(tel); }
 }
 
 // SERVIDOR HTTP: /status, /qr y /api/send (+ WebSocket "timbre" abajo)
