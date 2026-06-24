@@ -26,6 +26,11 @@ const SB_KEY = process.env.SALESBRAIN_KEY || 'fyradrive-sb-2026';
 // MODO PRUEBA: estos números (por últimos 10 dígitos), cuando contestan un anuncio,
 // REINICIAN su conversación (contexto fresco, como comprador nuevo).
 const TEST_NUMEROS = new Set((process.env.TEST_NUMEROS || '8120066355').split(',').map(s => s.trim()).filter(Boolean));
+// AUTOPILOT del PRIMER mensaje: el bot contesta solo la ráfaga (default ON; AUTO_OPENER=0 lo apaga).
+const AUTO_OPENER = process.env.AUTO_OPENER !== '0';
+const OPENER_AUTO_URL = process.env.OPENER_AUTO_URL || 'https://fyrachat.vercel.app/api/seb-panel';
+const AUTO_OPENER_DELAY = Number(process.env.AUTO_OPENER_DELAY || 6000);   // espera para juntar la ráfaga del comprador
+const AUTO_OPENER_GAP = Number(process.env.AUTO_OPENER_GAP || 1000);       // ~1s entre cada burbuja
 
 const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
 let sock = null;
@@ -458,8 +463,75 @@ async function conectar() {
             // 🔔 TIMBRE: empuja el mensaje a FyraChat al instante (con FOLIO + hora real)
             emitir({ tipo: 'mensaje', telefono: tel, mensaje: texto, direccion: esSaliente ? 'out' : 'in', timestamp: Math.floor(msgTs / 1000), nombre: esSaliente ? null : (m.pushName || null), msg_id: m.key.id });
             console.log((esSaliente ? '→ ' : '← ') + tel + ': ' + String(texto).slice(0, 50) + (adContext ? '  [ANUNCIO]' : ''));
+            // AUTOPILOT: primer mensaje de un COMPRADOR → el bot contesta solo (ráfaga).
+            if (!esSaliente && !TEST_NUMEROS.has(tel.slice(-10))) programarAutoOpener(tel);
         }
     });
+}
+
+// ── AUTOPILOT DEL PRIMER MENSAJE ─────────────────────────────────────────────
+// Cuando un comprador escribe por PRIMERA vez (no hemos respondido), el bot manda
+// SOLO la ráfaga del playbook (1 burbuja por mensaje, ~1s de diferencia). Una vez
+// por conversación. El cerebro (FyraChat /opener_auto) decide si aplica.
+const autoOpenerTimers = new Map();   // tel → timeout (debounce: junta su ráfaga)
+const autoOpenerHecho = new Set();    // tel → ya se auto-respondió (anti-repetición)
+
+// Envía UN texto saliente del bot y lo registra/emite a FyraChat (igual que /api/send).
+async function autoEnviarTexto(p, text) {
+    const destino = phoneALid.has(p) ? (phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+    const r = await sock.sendMessage(destino, { text });
+    if (r?.key?.id) {
+        enviadosPorPanel.add(r.key.id);
+        sentStore.set(r.key.id, r);
+        setTimeout(() => { enviadosPorPanel.delete(r.key.id); sentStore.delete(r.key.id); }, 60 * 60000);
+    }
+    const ts = Date.now();
+    await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: 1 }).catch(() => {});
+    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: text, tipo: 'text', nombre: null, ai_generated: 1 }).catch(() => {});
+    emitir({ tipo: 'mensaje', telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id });
+    encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
+    return r;
+}
+
+// Debounce: cada entrante reinicia el reloj; al expirar (no llegaron más) dispara una vez.
+function programarAutoOpener(tel) {
+    if (!AUTO_OPENER || autoOpenerHecho.has(tel)) return;
+    if (autoOpenerTimers.has(tel)) clearTimeout(autoOpenerTimers.get(tel));
+    autoOpenerTimers.set(tel, setTimeout(() => {
+        autoOpenerTimers.delete(tel);
+        dispararAutoOpener(tel).catch(e => console.error('[auto-opener]', e && e.message));
+    }, AUTO_OPENER_DELAY));
+}
+
+async function dispararAutoOpener(tel) {
+    if (autoOpenerHecho.has(tel) || estado !== 'conectado') return;
+    // 1) Confirmar PRIMER CONTACTO (sin ningún saliente nuestro en este hilo).
+    try {
+        const conv = await db.execute({ sql: "SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", args: ['whatsapp:' + tel] });
+        if (conv.rows.length) {
+            const out = await db.execute({ sql: "SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='out'", args: [conv.rows[0].id] });
+            if (Number(out.rows[0].n) > 0) { autoOpenerHecho.add(tel); return; }   // ya hubo respuesta → no autopilot
+        }
+    } catch (e) { return; }   // si la BD falla, NO arriesgar un envío
+    // 2) Pedir la ráfaga al cerebro.
+    autoOpenerHecho.add(tel);   // marca ANTES de enviar (anti-doble)
+    let segmentos = null;
+    try {
+        const r = await fetch(OPENER_AUTO_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'opener_auto', telefono: tel })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (d && d.ok && Array.isArray(d.segmentos) && d.segmentos.length) segmentos = d.segmentos;
+    } catch (e) { console.error('[auto-opener] cerebro:', e.message); }
+    if (!segmentos) { autoOpenerHecho.delete(tel); return; }   // no aplica → deja manual, permite reintento futuro
+    // 3) Mandar la ráfaga: 1 burbuja por mensaje, ~1s de diferencia.
+    let p = tel.replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
+    for (let i = 0; i < segmentos.length; i++) {
+        try { await autoEnviarTexto(p, segmentos[i]); } catch (e) { console.error('[auto-opener] envío:', e.message); }
+        if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
+    }
+    console.log('[auto-opener] ráfaga enviada a ' + tel + ' (' + segmentos.length + ' msgs)');
 }
 
 // SERVIDOR HTTP: /status, /qr y /api/send (+ WebSocket "timbre" abajo)
