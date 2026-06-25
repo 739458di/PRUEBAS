@@ -29,7 +29,7 @@ const TEST_NUMEROS = new Set((process.env.TEST_NUMEROS || '8120066355').split(',
 // AUTOPILOT del PRIMER mensaje: el bot contesta solo la ráfaga (default ON; AUTO_OPENER=0 lo apaga).
 const AUTO_OPENER = process.env.AUTO_OPENER !== '0';
 const OPENER_AUTO_URL = process.env.OPENER_AUTO_URL || 'https://fyrachat.vercel.app/api/seb-panel';
-const AUTO_OPENER_DELAY = Number(process.env.AUTO_OPENER_DELAY || 9000);   // espera para juntar la ráfaga del comprador (info + pregunta pegada)
+const AUTO_OPENER_DELAY = Number(process.env.AUTO_OPENER_DELAY || 6000);   // espera para juntar la ráfaga del comprador
 const AUTO_OPENER_GAP = Number(process.env.AUTO_OPENER_GAP || 1000);       // ~1s entre cada burbuja
 
 const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
