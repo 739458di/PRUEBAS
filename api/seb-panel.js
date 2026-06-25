@@ -266,14 +266,16 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
-            // VENDEDOR / fuera de alcance → NO autopilot (Seb no atiende ventas; el owner lo ve y escala).
-            if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
+            // Primero intenta el opener: si SABE contestar (incl. foráneo), contesta — aunque
+            // Haiku haya querido escalar (a veces marca foráneo como fuera de alcance por error).
             const op = await responderOpener({
                 texto: textoFamilia, nombre: nombreChat,
                 auto_id: clasif.auto_id, intencion: clasif.intencion_principal
             });
-            if (!op || !op.segmentos || !op.segmentos.length) return res.status(200).json({ ok: false, motivo: 'no_aplica' });
-            return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo });
+            if (op && op.segmentos && op.segmentos.length) return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo });
+            // El opener no supo (vendedor → null, o fuera de alcance) → NO autopilot, el owner lo ve.
+            if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
+            return res.status(200).json({ ok: false, motivo: 'no_aplica' });
         }
 
         // ============ SUGERIR (corre el cerebro on-demand) ============
@@ -342,11 +344,6 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* tabla aún no existe → sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado });
-            // VENDEDOR / fuera de alcance → Seb NO contesta nada, se ESCALA al humano.
-            // (El trade-in NO entra aquí — ese es comprador y sí se atiende.)
-            if (clasif.escalar) {
-                return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'no es para Seb (venta de auto / fuera de alcance) — escalar a humano' });
-            }
 
             // ===== MENSAJE INICIAL → BANCO DE FRASES (fuente única de verdad) =====
             // Si Seb AÚN NO ha respondido en esta conversación (post-reset) y NO es un
@@ -372,6 +369,11 @@ module.exports = async function handler(req, res) {
                 } catch (e) { /* si el banco falla, cae al loop normal */ }
             }
 
+            // Si el opener NO supo contestar Y es vendedor/fuera de alcance → ESCALAR (no es para
+            // Seb). El opener ya cubre foráneo, así que esto solo pega a vendedores/junk reales.
+            if (!r && clasif.escalar) {
+                return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'no es para Seb (venta de auto / fuera de alcance) — escalar a humano' });
+            }
             if (!r) {
                 r = await pensar({ telefono: tel, mensaje: lastMsg, clasificacion: clasif, estado });
             }
