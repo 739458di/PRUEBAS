@@ -11,7 +11,7 @@
 const { query, run } = require('../lib/seb/db.js');
 const { entender } = require('../lib/seb/clasificador.js');
 const { pensar } = require('../lib/seb/loop.js');
-const { responder: responderOpener, SENTINEL } = require('../lib/seb/opener.js');
+const { responder: responderOpener, SENTINEL, necesitaCerebro } = require('../lib/seb/opener.js');
 
 // Similitud simple por tokens (1 = idéntico, 0 = nada en común)
 function similitud(a, b) {
@@ -266,15 +266,31 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
-            // Primero intenta el opener: si SABE contestar (incl. foráneo), contesta — aunque
-            // Haiku haya querido escalar (a veces marca foráneo como fuera de alcance por error).
+
+            // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la
+            // voz del owner (nucleo), en vez de deflectar a "info" genérico.
+            if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
+                try {
+                    const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
+                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: [p.borrador], tipo: 'cerebro' });
+                } catch (e) { /* si el cerebro falla, cae al opener */ }
+            }
+
+            // Opener determinístico (familias claras, voz exacta).
             const op = await responderOpener({
                 texto: textoFamilia, nombre: nombreChat,
                 auto_id: clasif.auto_id, intencion: clasif.intencion_principal
             });
             if (op && op.segmentos && op.segmentos.length) return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo });
-            // El opener no supo (vendedor → null, o fuera de alcance) → NO autopilot, el owner lo ve.
+            // El opener no supo (vendedor → null) → si es vendedor/junk, no autopilot.
             if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
+            // Hay auto y es comprador, pero el opener no tiene familia → al CEREBRO (voz del owner).
+            if (clasif.auto_id) {
+                try {
+                    const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
+                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: [p.borrador], tipo: 'cerebro' });
+                } catch (e) { /* sin cerebro → no_aplica */ }
+            }
             return res.status(200).json({ ok: false, motivo: 'no_aplica' });
         }
 
@@ -352,7 +368,9 @@ module.exports = async function handler(req, res) {
             // por uno. ubicacion/credito/sin-auto → null → cae al loop normal.
             const esOpener = !conv.mensajes.some(m => m.direccion === 'out') && !objetivoTxt && !objetivoMid;
             let r = null;
-            if (esOpener) {
+            // Si es multi-pregunta o rareza, NO uses el banco determinístico → deja que el
+            // cerebro (loop, voz del owner) lo conteste abajo en pensar().
+            if (esOpener && !necesitaCerebro(lastMsg)) {
                 try {
                     const op = await responderOpener({
                         texto: lastMsg, nombre: nombreChat,
