@@ -100,3 +100,18 @@ Lo que VARÍA según la sub-intención: la **maquillada**, el **orden**, el **# 
 - No mandar la ubicación → SIEMPRE se manda.
 - Doble pregunta en el gancho.
 - Conector que no pegue con el verbo del sub-input.
+
+
+---
+
+## ACTUALIZACIÓN (pitch de seguridad + escala) — aplicada en continuacion.js
+**PITCH = TIPO B (seguridad), pool de 3 (rota):**
+- V1: El auto es de un dueño particular y nosotros te respaldamos como agencia — te quitamos el riesgo de comprarle a un desconocido y le damos toda la formalidad legal
+- V2: Le compras directo al dueño particular, pero a través de nosotros, para darte seguridad de compra y herramientas financieras
+- V3: Es de un dueño particular, pero la compra va a través de nosotros — así te llevas la seguridad de una agencia y las herramientas financieras, sin el riesgo de hacerlo por tu cuenta
+
+**REGLA DE ORO:** el pitch SOLO se manda CUANDO se manda el pin, y SIEMPRE DESPUÉS del pin. Sin pin → sin pitch.
+**DÓNDE:** SÍ pitch en input 1/2 (exactitud "¿dónde está / la veo?"). NO pitch en general/pásame/envío/horarios/lejana.
+Orden con pitch: conector+nombre → pin + "Aquí es nuestro punto de venta, [dir]" → PITCH → gancho.
+
+**ESCALA a humano (el bot NO contesta):** #4 ya coordinando hora/lugar; #8 ubicación + otra duda no-manual ("¿precio y dónde se ubica?"); técnico ("no me deja abrirlo"); objeción compleja o lo que no caiga limpio.
