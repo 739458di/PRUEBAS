@@ -12,6 +12,7 @@ const { query, run } = require('../lib/seb/db.js');
 const { entender } = require('../lib/seb/clasificador.js');
 const { pensar } = require('../lib/seb/loop.js');
 const { responder: responderOpener, SENTINEL, necesitaCerebro } = require('../lib/seb/opener.js');
+const { responderCont } = require('../lib/seb/continuacion.js');
 
 // Similitud simple por tokens (1 = idéntico, 0 = nada en común)
 function similitud(a, b) {
@@ -251,20 +252,36 @@ module.exports = async function handler(req, res) {
                 if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
                 mensajes = rows;
             }
-            // PRIMER CONTACTO: si ya hay un saliente nuestro, NO autopilot (lo maneja el flujo manual).
-            if (mensajes.some(m => m.direccion === 'out')) return res.status(200).json({ ok: false, motivo: 'no_primer_contacto' });
             const entrantes = mensajes.filter(m => m.direccion === 'in');
             if (!entrantes.length) return res.status(200).json({ ok: false, motivo: 'sin_entrantes' });
+            // ESTADO por # de RÁFAGAS salientes nuestras (respeta el reset).
+            let bursts = 0, prevDir = null, lastOutIdx = -1;
+            mensajes.forEach((m, i) => { if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });
+            const lastDir = mensajes[mensajes.length - 1].direccion;
+            let adCtx = null;
+            try { const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]); if (adRow[0]) adCtx = adRow[0].ad_context; } catch (e) { /* sin anuncio */ }
+            const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
 
+            // ===== EN_CURSO: PRIMERA respuesta del comprador al opener (1 ráfaga nuestra + último=entrante) =====
+            // Solo financiamiento / ubicación (sus manuales). Lo demás → silencio (lo ve el owner).
+            if (bursts === 1 && lastDir === 'in') {
+                const followup = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ');
+                const mcC = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
+                const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
+                const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses });
+                if (cont && cont.segmentos && cont.segmentos.length) {
+                    return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero });
+                }
+                return res.status(200).json({ ok: false, motivo: 'continuacion_no_aplica' });
+            }
+            // Ya hablamos (opener + continuación, o más turnos) → SILENCIO total (modo manual).
+            if (bursts >= 1) return res.status(200).json({ ok: false, motivo: 'en_curso_silencio' });
+
+            // ===== PRIMER CONTACTO (bursts === 0) → OPENER =====
             const lastMsg = entrantes[entrantes.length - 1].mensaje;
-            const textoFamilia = entrantes.map(e => e.mensaje).join(' ');   // junta la ráfaga del comprador (combo info+crédito en mensajes separados)
-            const historial = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
-            let mensajeCerebro = lastMsg;
-            try {
-                const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]);
-                if (adRow[0] && adRow[0].ad_context) mensajeCerebro = '[DESC: ' + adRow[0].ad_context + ']\n' + lastMsg;
-            } catch (e) { /* sin anuncio */ }
-
+            const textoFamilia = entrantes.map(e => e.mensaje).join(' ');   // junta la ráfaga del comprador
+            const historial = histCorto;
+            const mensajeCerebro = adCtx ? '[DESC: ' + adCtx + ']\n' + lastMsg : lastMsg;
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
 
             // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la

@@ -504,29 +504,53 @@ function programarAutoOpener(tel) {
     }, AUTO_OPENER_DELAY));
 }
 
+// Manda el PIN del punto (captura branded + ubicación nativa) — para la continuación de
+// ubicación. No crea burbuja en FyraChat (el eco de media saliente se salta por tipo).
+async function autoEnviarUbicacion(p, autoId) {
+    try {
+        const pe = await db.execute({ sql: "SELECT image_b64, name, lat, lng FROM punto_envio WHERE auto_id=?", args: [Number(autoId)] });
+        if (!pe.rows.length) return;
+        const e = pe.rows[0];
+        const destino = phoneALid.has(p) ? (phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+        const marca = (r) => { if (r && r.key && r.key.id) { enviadosPorPanel.add(r.key.id); sentStore.set(r.key.id, r); setTimeout(() => { enviadosPorPanel.delete(r.key.id); sentStore.delete(r.key.id); }, 60 * 60000); } };
+        if (e.image_b64) { const buf = Buffer.from(String(e.image_b64).replace(/^data:[^,]+,/, ''), 'base64'); marca(await sock.sendMessage(destino, { image: buf })); }
+        if (e.lat != null && e.lng != null) { const loc = { degreesLatitude: Number(e.lat), degreesLongitude: Number(e.lng) }; if (e.name) loc.name = String(e.name); marca(await sock.sendMessage(destino, { location: loc })); }
+    } catch (err) { console.error('[auto-opener] pin:', err.message); }
+}
+
 async function dispararAutoOpener(tel) {
     if (estado !== 'conectado' || autoOpenerEnVuelo.has(tel)) return;
     autoOpenerEnVuelo.add(tel);   // lock anti-concurrencia mientras procesa/envía
     try {
-        // El cerebro (reset-aware) decide TODO: primer contacto, auto resuelto,
-        // no dueño/vendedor. Si no aplica → no manda nada (queda en modo manual).
-        let segmentos = null;
+        // El cerebro (reset-aware) decide TODO: primer contacto (opener), primera respuesta
+        // (continuación fin/ubic), o silencio. Si no aplica → no manda nada (queda manual).
+        let d = null;
         try {
             const r = await fetch(OPENER_AUTO_URL, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'opener_auto', telefono: tel })
             });
-            const d = await r.json().catch(() => ({}));
-            if (d && d.ok && Array.isArray(d.segmentos) && d.segmentos.length) segmentos = d.segmentos;
+            d = await r.json().catch(() => ({}));
         } catch (e) { console.error('[auto-opener] cerebro:', e.message); }
-        if (!segmentos) return;
-        // Mandar la ráfaga: 1 burbuja por mensaje, ~1s de diferencia.
+        if (!(d && d.ok && Array.isArray(d.segmentos) && d.segmentos.length)) return;
+        const segmentos = d.segmentos;
         let p = tel.replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
-        for (let i = 0; i < segmentos.length; i++) {
-            try { await autoEnviarTexto(p, segmentos[i]); } catch (e) { console.error('[auto-opener] envío:', e.message); }
-            if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
+        const envTexto = async (s) => { try { await autoEnviarTexto(p, s); } catch (e) { console.error('[auto-opener] envío:', e.message); } };
+
+        if (d.ubicacion_auto_id && d.pin_primero) {
+            // "Pásame la ubicación" → PIN primero, luego texto.
+            await autoEnviarUbicacion(p, d.ubicacion_auto_id); await sleep(AUTO_OPENER_GAP);
+            for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
+        } else if (d.ubicacion_auto_id) {
+            // Ubicación normal: maquillada → PIN → resto (acción + gancho).
+            await envTexto(segmentos[0]); await sleep(AUTO_OPENER_GAP);
+            await autoEnviarUbicacion(p, d.ubicacion_auto_id); await sleep(AUTO_OPENER_GAP);
+            for (let i = 1; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
+        } else {
+            // Opener / financiamiento: solo texto, 1s entre cada burbuja.
+            for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
         }
-        console.log('[auto-opener] ráfaga enviada a ' + tel + ' (' + segmentos.length + ' msgs)');
+        console.log('[auto-opener] ' + (d.modo || 'opener') + ' → ' + tel + ' (' + segmentos.length + ' msgs' + (d.ubicacion_auto_id ? ' +pin' : '') + ')');
     } finally { autoOpenerEnVuelo.delete(tel); }
 }
 
