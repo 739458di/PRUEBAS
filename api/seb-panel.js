@@ -270,7 +270,7 @@ module.exports = async function handler(req, res) {
                 const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
                 const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses });
                 if (cont && cont.segmentos && cont.segmentos.length) {
-                    return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero });
+                    return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero, pin_after_index: (cont.pin_after_index != null ? cont.pin_after_index : null), fotos: cont.fotos || null, fotos_after_index: (cont.fotos_after_index != null ? cont.fotos_after_index : null) });
                 }
                 return res.status(200).json({ ok: false, motivo: 'continuacion_no_aplica' });
             }
@@ -298,7 +298,7 @@ module.exports = async function handler(req, res) {
                 texto: textoFamilia, nombre: nombreChat,
                 auto_id: clasif.auto_id, intencion: clasif.intencion_principal
             });
-            if (op && op.segmentos && op.segmentos.length) return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo });
+            if (op && op.segmentos && op.segmentos.length) return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo, fotos: op.fotos || null, fotos_after_index: (op.fotos_after_index != null ? op.fotos_after_index : null) });
             // El opener no supo (vendedor → null) → si es vendedor/junk, no autopilot.
             if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
             // Hay auto y es comprador, pero el opener no tiene familia → al CEREBRO (voz del owner).

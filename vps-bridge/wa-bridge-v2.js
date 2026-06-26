@@ -518,6 +518,21 @@ async function autoEnviarUbicacion(p, autoId) {
     } catch (err) { console.error('[auto-opener] pin:', err.message); }
 }
 
+// Descarga cada URL de foto (Vercel Blob, pública) y la manda como imagen por WhatsApp.
+async function autoEnviarFotos(p, urls) {
+    const destino = phoneALid.has(p) ? (phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+    for (const url of (urls || [])) {
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) continue;
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const m = await sock.sendMessage(destino, { image: buf });
+            if (m && m.key && m.key.id) { enviadosPorPanel.add(m.key.id); sentStore.set(m.key.id, m); setTimeout(() => { enviadosPorPanel.delete(m.key.id); sentStore.delete(m.key.id); }, 60 * 60000); }
+            await sleep(900);
+        } catch (e) { console.error('[auto-opener] foto:', e.message); }
+    }
+}
+
 async function dispararAutoOpener(tel) {
     if (estado !== 'conectado' || autoOpenerEnVuelo.has(tel)) return;
     autoOpenerEnVuelo.add(tel);   // lock anti-concurrencia mientras procesa/envía
@@ -550,11 +565,19 @@ async function dispararAutoOpener(tel) {
                 if (i === pinIdx) { await sleep(AUTO_OPENER_GAP); await autoEnviarUbicacion(p, d.ubicacion_auto_id); }
                 if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
             }
+        } else if (d.fotos && d.fotos.length) {
+            // FOTOS: manda el texto y, tras fotos_after_index, las fotos descargadas.
+            const fi = Number.isInteger(d.fotos_after_index) ? d.fotos_after_index : 0;
+            for (let i = 0; i < segmentos.length; i++) {
+                await envTexto(segmentos[i]);
+                if (i === fi) { await sleep(AUTO_OPENER_GAP); await autoEnviarFotos(p, d.fotos); }
+                if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
+            }
         } else {
             // Opener / financiamiento: solo texto, 1s entre cada burbuja.
             for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
         }
-        console.log('[auto-opener] ' + (d.modo || 'opener') + ' → ' + tel + ' (' + segmentos.length + ' msgs' + (d.ubicacion_auto_id ? ' +pin' : '') + ')');
+        console.log('[auto-opener] ' + (d.modo || 'opener') + ' → ' + tel + ' (' + segmentos.length + ' msgs' + (d.ubicacion_auto_id ? ' +pin' : '') + (d.fotos ? ' +' + d.fotos.length + 'fotos' : '') + ')');
     } finally { autoOpenerEnVuelo.delete(tel); }
 }
 
