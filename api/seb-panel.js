@@ -398,10 +398,33 @@ module.exports = async function handler(req, res) {
                             ok: true,
                             borrador: op.segmentos.join('\n' + SENTINEL + '\n'),
                             tools_usadas: [],
-                            estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null }
+                            estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null },
+                            _fotos: op.fotos || null
                         };
                     }
                 } catch (e) { /* si el banco falla, cae al loop normal */ }
+            }
+
+            // ===== EN_CURSO → BANCO DE CONTINUACIÓN (fin/ubic/info/precio/fotos) — MISMA lógica
+            // que el autopilot, pero SUGIRIENDO (rápido, sin Sonnet). Solo la 1ra respuesta al opener.
+            if (!r && !objetivoTxt && !objetivoMid) {
+                let bursts = 0, prevDir = null, lastOutIdx = -1;
+                conv.mensajes.forEach((m, i) => { if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });
+                const lastDir = conv.mensajes.length ? conv.mensajes[conv.mensajes.length - 1].direccion : null;
+                if (bursts === 1 && lastDir === 'in') {
+                    const followup = conv.mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || lastMsg;
+                    const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses });
+                    if (cont && cont.segmentos && cont.segmentos.length) {
+                        r = {
+                            ok: true,
+                            borrador: cont.segmentos.join('\n' + SENTINEL + '\n'),
+                            tools_usadas: [],
+                            estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null },
+                            _ubic: cont.ubicacion_auto_id || null,
+                            _fotos: cont.fotos || null
+                        };
+                    }
+                }
             }
 
             // Si el opener NO supo contestar Y es vendedor/fuera de alcance → ESCALAR (no es para
@@ -423,7 +446,7 @@ module.exports = async function handler(req, res) {
                  ON CONFLICT(dedupe_key) DO UPDATE SET borrador=excluded.borrador, estado='pendiente',
                    intencion=excluded.intencion, tools_usadas=excluded.tools_usadas, creado_en=excluded.creado_en`,
                 [tel, r.borrador, clasif.intencion_principal,
-                 JSON.stringify({ tools: r.tools_usadas.map(t => t.tool), estado_nuevo: r.estado_nuevo, auto_id: clasif.auto_id }),
+                 JSON.stringify({ tools: r.tools_usadas.map(t => t.tool), estado_nuevo: r.estado_nuevo, auto_id: clasif.auto_id, ubic: r._ubic || null, fotos: r._fotos || null }),
                  dedupe, Date.now()]);
             // Limpieza: descarta cualquier OTRA sugerencia pendiente vieja de este chat
             // (acumuladas con dedupe_keys distintos) — solo vive la recién creada.
@@ -584,6 +607,27 @@ module.exports = async function handler(req, res) {
                             }
                             await run("INSERT INTO seb_entrenamiento (queue_id, telefono, intencion, auto_id, borrador, texto_final, accion, similitud, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                                 [q[0].id, q[0].telefono, q[0].intencion, meta.auto_id || null, q[0].borrador, texto, 'secuencia', 0, Date.now()]);
+                            // MEDIA del banco (pin de ubicación / fotos) — se manda al consumir el QID.
+                            const bUrl = process.env.BRIDGE_SEND_URL, bKey = process.env.BRIDGE_API_KEY;
+                            if (bUrl && bKey) {
+                                let ph = String(q[0].telefono).replace(/\D/g, ''); if (ph.length === 10) ph = '521' + ph;
+                                if (meta.ubic) {
+                                    try {
+                                        const pe = await query("SELECT image_b64, name, lat, lng, maps_link FROM punto_envio WHERE auto_id=?", [Number(meta.ubic)]);
+                                        if (pe[0]) {
+                                            const ex = {};
+                                            if (pe[0].image_b64) ex.image = pe[0].image_b64;
+                                            if (pe[0].lat != null && pe[0].lng != null) ex.location = { lat: pe[0].lat, lng: pe[0].lng, name: pe[0].name || null, maps_link: pe[0].maps_link || null };
+                                            if (ex.image || ex.location) await fetch(bUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': bKey }, body: JSON.stringify({ phone: ph, ...ex }) }).catch(() => {});
+                                        }
+                                    } catch (e) { /* sin pin */ }
+                                }
+                                if (meta.fotos && meta.fotos.length) {
+                                    try {
+                                        await fetch(bUrl.replace(/\/api\/send$/, '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': bKey }, body: JSON.stringify({ phone: ph, urls: meta.fotos }) }).catch(() => {});
+                                    } catch (e) { /* sin fotos */ }
+                                }
+                            }
                         }
                     }
                 } catch (e) { /* consumo no crítico */ }

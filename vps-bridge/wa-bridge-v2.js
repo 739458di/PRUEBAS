@@ -651,6 +651,25 @@ const server = http.createServer(async (req, res) => {
         });
         return;
     }
+    // FOTOS: FyraChat (resolver/manual) manda URLs → el bridge las descarga y envía.
+    if (req.url === '/api/send-fotos' && req.method === 'POST') {
+        if (req.headers['x-api-key'] !== SEND_KEY) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', async () => {
+            try {
+                const { phone, urls } = JSON.parse(body || '{}');
+                if (!phone || !Array.isArray(urls) || !urls.length) { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'phone y urls[] requeridos' })); }
+                if (estado !== 'conectado') { res.statusCode = 503; return res.end(JSON.stringify({ ok: false, error: 'whatsapp no conectado' })); }
+                let p = String(phone).replace(/\D/g, '');
+                if (lidAPhone.has(p)) p = lidAPhone.get(p);
+                if (p.length === 10) p = '521' + p;
+                await autoEnviarFotos(p, urls);
+                res.end(JSON.stringify({ ok: true, n: urls.length }));
+            } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ ok: false, error: e.message })); }
+        });
+        return;
+    }
     res.statusCode = 404; res.end(JSON.stringify({ ok: false }));
 });
 // EL TIMBRE: WebSocket sobre el mismo servidor/puerto. FyraChat se conecta aquí.
