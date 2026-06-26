@@ -542,10 +542,14 @@ async function dispararAutoOpener(tel) {
             await autoEnviarUbicacion(p, d.ubicacion_auto_id); await sleep(AUTO_OPENER_GAP);
             for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
         } else if (d.ubicacion_auto_id) {
-            // Ubicación normal: maquillada → PIN → resto (acción + gancho).
-            await envTexto(segmentos[0]); await sleep(AUTO_OPENER_GAP);
-            await autoEnviarUbicacion(p, d.ubicacion_auto_id); await sleep(AUTO_OPENER_GAP);
-            for (let i = 1; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
+            // El PIN va DESPUÉS del segmento pin_after_index (default 0 = tras la maquillada;
+            // en el combo crédito+ubicación = 2, tras la línea de ubicación).
+            const pinIdx = Number.isInteger(d.pin_after_index) ? d.pin_after_index : 0;
+            for (let i = 0; i < segmentos.length; i++) {
+                await envTexto(segmentos[i]);
+                if (i === pinIdx) { await sleep(AUTO_OPENER_GAP); await autoEnviarUbicacion(p, d.ubicacion_auto_id); }
+                if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
+            }
         } else {
             // Opener / financiamiento: solo texto, 1s entre cada burbuja.
             for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
