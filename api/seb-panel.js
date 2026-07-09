@@ -227,6 +227,17 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, timestamp: Math.floor(when / 1000), direccion: dir });
         }
 
+        // ============ GHOST SCAN (etapa 3 · toque de 3 horas) ============
+        // El bridge llama aquí cada ~15 min. Devuelve los recordatorios de ghosting
+        // que tocan AHORA (con todos los candados adentro de ghosting.js) + la lista
+        // para el personal del owner. dry=1 → solo muestra, no registra ni envía.
+        if (action === 'ghost_scan' && req.method === 'POST') {
+            const { ghostScan } = require('../lib/seb/ghosting.js');
+            const duenos = await telefonosDueno();
+            const r = await ghostScan({ duenos, dry: !!(req.body && req.body.dry) });
+            return res.status(200).json({ ok: true, ...r });
+        }
+
         // ============ OPENER AUTO (autopilot del PRIMER mensaje) ============
         // El bridge llama aquí cuando llega un primer contacto. Decide si aplica
         // (comprador, primer contacto, auto resuelto, no vendedor) y devuelve la
@@ -268,12 +279,47 @@ module.exports = async function handler(req, res) {
                 const followup = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ');
                 const mcC = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
                 const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
-                const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses });
+                const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses, intencion: clasifC.intencion_principal });
+                const escNomC = require('../lib/seb/opener.js').nombreReal(nombreChat) || nombreChat || null;
+                // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
+                if (cont && cont.escalar) {
+                    if (cont.puente) return res.status(200).json({ ok: true, modo: 'continuacion', segmentos: [cont.puente], escalar_owner: true, escala_motivo: cont.motivo, escala_nombre: escNomC, escala_ultimo: followup });
+                    return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: cont.motivo, escala_nombre: escNomC, escala_ultimo: followup });
+                }
+                if (cont && cont.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
                 if (cont && cont.segmentos && cont.segmentos.length) {
                     return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero, pin_after_index: (cont.pin_after_index != null ? cont.pin_after_index : null), fotos: cont.fotos || null, fotos_after_index: (cont.fotos_after_index != null ? cont.fotos_after_index : null) });
                 }
-                return res.status(200).json({ ok: false, motivo: 'continuacion_no_aplica' });
+                // Nada aplicó → fuera de la lista blanca → lo ves tú (antes: silencio mudo).
+                return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: 'fuera de la lista blanca (continuación, no claro) — lo ves tú', escala_nombre: escNomC, escala_ultimo: followup });
             }
+            // ===== ETAPA 3 AUTOMÁTICO (turno 3+): CONTESTABLE lo manda solo; lo que no es
+            // claro / no maximiza la venta → ESCALA al owner (NO improvisa con Sonnet). =====
+            const AUTO_ETAPA3 = process.env.AUTO_ETAPA3 !== '0';   // interruptor maestro (default ON)
+            if (AUTO_ETAPA3 && bursts >= 2 && lastDir === 'in') {
+                const followupE = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes.length ? entrantes[entrantes.length - 1].mensaje : '');
+                const mcE = adCtx ? '[DESC: ' + adCtx + ']\n' + followupE : followupE;
+                const clasifE = await entender({ mensaje: mcE, historial: histCorto, estado: {} });
+                let autoE = clasifE.auto_id;
+                if (!autoE) { try { const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wc[0] && wc[0].auto_id_activo) autoE = Number(wc[0].auto_id_activo); } catch (e) { } }
+                const { responderEtapa3 } = require('../lib/seb/etapa3.js');
+                const { nombreReal } = require('../lib/seb/opener.js');
+                const e3 = await responderEtapa3({ texto: followupE, auto_id: autoE, conv_id: convId, clasif: clasifE });
+                const escNom = nombreReal(nombreChat) || nombreChat || null;
+                if (e3 && e3.escalar) {
+                    // Escala: si hay PUENTE, se lo mandamos al comprador (no queda colgado) y te avisamos;
+                    // si no hay puente, solo te avisamos (tú contestas).
+                    if (e3.puente) return res.status(200).json({ ok: true, modo: 'etapa3', segmentos: [e3.puente], escalar_owner: true, escala_motivo: e3.motivo, escala_nombre: escNom, escala_ultimo: followupE });
+                    return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: e3.motivo, escala_nombre: escNom, escala_ultimo: followupE });
+                }
+                if (e3 && e3.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
+                if (e3 && e3.segmentos && e3.segmentos.length) {
+                    return res.status(200).json({ ok: true, modo: 'etapa3', tipo: 'e3_' + (e3.universo || ''), segmentos: e3.segmentos, ubicacion_auto_id: e3.ubicacion_auto_id || null, pin_primero: !!e3.pin_primero, pin_after_index: (e3.pin_after_index != null ? e3.pin_after_index : (e3.ubicacion_auto_id ? 0 : null)), fotos: e3.fotos || null, fotos_after_index: (e3.fotos_after_index != null ? e3.fotos_after_index : 0) });
+                }
+                // responderEtapa3 = null → LONG-TAIL / no es claro → ESCALA al owner (jamás Sonnet suelto).
+                return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: 'mensaje fuera de banco (no claro / requiere tu criterio)', escala_nombre: escNom, escala_ultimo: followupE });
+            }
+
             // Ya hablamos (opener + continuación, o más turnos) → SILENCIO total (modo manual).
             if (bursts >= 1) return res.status(200).json({ ok: false, motivo: 'en_curso_silencio' });
 
@@ -307,6 +353,24 @@ module.exports = async function handler(req, res) {
                     const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
                     if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: [p.borrador], tipo: 'cerebro' });
                 } catch (e) { /* sin cerebro → no_aplica */ }
+            }
+            // FALLBACK UNIVERSAL (caso Sahara): es COMPRADOR pero no se pudo resolver QUÉ auto
+            // (anuncio viejo, texto raro, sin [DESC]). Antes → silencio (apagón). Ahora se
+            // contesta SIEMPRE con la pregunta del owner (su frase real de la data) — cualquier
+            // opener de comprador recibe respuesta.
+            {
+                const intOk = ['info_inicial', 'disponibilidad', 'estado_auto', 'cotizar_credito', 'cita_ubicacion', 'precio_negociacion', 'fotos_videos', 'otro'].includes(clasif.intencion_principal);
+                if (intOk && !clasif.escalar) {
+                    const { nombreReal, saludoHora } = require('../lib/seb/opener.js');
+                    const nm = nombreReal(nombreChat);
+                    return res.status(200).json({
+                        ok: true, tipo: 'opener_sin_auto', segmentos: [
+                            `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
+                            'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
+                            'Claro que sí, de qué auto buscas información? Para poderte ayudar'
+                        ]
+                    });
+                }
             }
             return res.status(200).json({ ok: false, motivo: 'no_aplica' });
         }
@@ -413,7 +477,7 @@ module.exports = async function handler(req, res) {
                 const lastDir = conv.mensajes.length ? conv.mensajes[conv.mensajes.length - 1].direccion : null;
                 if (bursts === 1 && lastDir === 'in') {
                     const followup = conv.mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || lastMsg;
-                    const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses });
+                    const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses, intencion: clasif.intencion_principal });
                     if (cont && cont.segmentos && cont.segmentos.length) {
                         r = {
                             ok: true,
@@ -425,8 +489,75 @@ module.exports = async function handler(req, res) {
                         };
                     }
                 }
+                // ===== ETAPA 3 (turno 3+) → EL JUEGO LIBRE, SOLO COPILOTO =====
+                // Mismo motor que sería el automático (bancos + herramientas + CTA por estado,
+                // ráfagas estratégicas), disparado por el click en sugerir. Las acciones (fotos/
+                // pin) viajan en meta y se ejecutan AL APROBAR, idéntico al autopilot. Si el
+                // motor no reconoce el universo → cae al cerebro (Sonnet, voz del owner) abajo.
+                if (bursts >= 2 && lastDir === 'in') {
+                    const followup = conv.mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || lastMsg;
+                    const { responderEtapa3 } = require('../lib/seb/etapa3.js');
+                    const e3 = await responderEtapa3({ texto: followup, auto_id: clasif.auto_id || estado.auto_id_activo || null, conv_id: convId, clasif });
+                    if (e3 && e3.escalar) {
+                        // ESCALA CON PUENTE: se PROPONE el puente como borrador (el comprador no
+                        // se queda colgado) y se avisa que además escala al owner para lo que sigue.
+                        if (e3.puente) return res.status(200).json({ ok: true, borrador: e3.puente, tools_usadas: [], escala_ademas: 'etapa 3: ' + e3.motivo, estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null } });
+                        return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'etapa 3: ' + e3.motivo });
+                    }
+                    if (e3 && e3.silencio) {
+                        return res.status(200).json({ ok: false, silencio: true, intencion: clasif.intencion_principal, motivo: 'etapa 3: ' + e3.motivo });
+                    }
+                    if (e3 && e3.segmentos && e3.segmentos.length) {
+                        r = {
+                            ok: true,
+                            borrador: e3.segmentos.join('\n' + SENTINEL + '\n'),
+                            tools_usadas: [],
+                            estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null },
+                            _ubic: e3.ubicacion_auto_id || null,
+                            _fotos: e3.fotos || null
+                        };
+                    }
+                }
             }
 
+            // ===== "RESPONDER A" un mensaje DEL COMPRADOR → el motor de etapa 3 TAMBIÉN aplica =====
+            // Tocar el mensaje del cliente en FyraChat manda objetivo → antes eso brincaba TODOS
+            // los bancos y caía a Sonnet (visto con Lucy: "que datos te tengo que enviar?" no dio
+            // el banco de requisitos). Solo cuando el objetivo NO es un mensaje del comprador
+            // (instrucción libre del owner) se va directo al cerebro.
+            if (!r && (objetivoTxt || objetivoMid)) {
+                const objMsg = idxObj >= 0 ? conv.mensajes[idxObj] : null;
+                if (objMsg && objMsg.direccion === 'in') {
+                    let bursts3 = 0, prevDir3 = null;
+                    conv.mensajes.forEach(m => { if (m.direccion === 'out') { if (prevDir3 !== 'out') bursts3++; } prevDir3 = m.direccion; });
+                    if (bursts3 >= 2) {
+                        const { responderEtapa3 } = require('../lib/seb/etapa3.js');
+                        const e3 = await responderEtapa3({ texto: objMsg.mensaje, auto_id: clasif.auto_id || estado.auto_id_activo || null, conv_id: convId, clasif });
+                        if (e3 && e3.escalar) {
+                            return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'etapa 3: ' + e3.motivo });
+                        }
+                        if (e3 && e3.silencio) {
+                            return res.status(200).json({ ok: false, silencio: true, intencion: clasif.intencion_principal, motivo: 'etapa 3: ' + e3.motivo });
+                        }
+                        if (e3 && e3.segmentos && e3.segmentos.length) {
+                            r = {
+                                ok: true,
+                                borrador: e3.segmentos.join('\n' + SENTINEL + '\n'),
+                                tools_usadas: [],
+                                estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null },
+                                _ubic: e3.ubicacion_auto_id || null,
+                                _fotos: e3.fotos || null
+                            };
+                        }
+                    }
+                }
+            }
+
+            // GARANTÍA → ESCALA SIEMPRE (decisión del owner: sin política fija; que no la
+            // invente Sonnet). Aplica en cualquier etapa cuando ningún banco la atrapó antes.
+            if (!r && /garant/i.test(lastMsg || '')) {
+                return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'pregunta GARANTÍA (sin política fija — contéstala tú)' });
+            }
             // Si el opener NO supo contestar Y es vendedor/fuera de alcance → ESCALAR (no es para
             // Seb). El opener ya cubre foráneo, así que esto solo pega a vendedores/junk reales.
             if (!r && clasif.escalar) {
