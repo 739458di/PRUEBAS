@@ -532,6 +532,37 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, match: { ...M, cita_ts: Number(M.cita_ts), match_ts: Number(M.match_ts || 0), sim_ts: Number(M.sim_ts || 0), recordatorios: JSON.parse(M.recordatorios || '[]') } });
         }
 
+        // ══════════════ 📝 CAJITA DE RETRO (por sesión, texto libre del owner) ══════════════
+        // El owner escribe TODA su retroalimentación ahí; "procesa el training" la lee
+        // junto con los 🚩 y se arregla directo. Se guarda con contexto (últimos turnos).
+        if (action === 'retro' && req.method === 'POST') {
+            const texto = String(req.body.texto || '').trim();
+            if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
+            await run(`CREATE TABLE IF NOT EXISTS sandbox_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, carril TEXT, texto TEXT,
+                contexto TEXT, procesado INTEGER DEFAULT 0)`);
+            let ctxTurnos = [];
+            try {
+                const t = await query("SELECT id, texto_in, universo, ruta, respuesta FROM sandbox_turnos WHERE carril=? ORDER BY id DESC LIMIT 6", [carril || 'owner']);
+                ctxTurnos = t.reverse().map(x => ({ id: x.id, in: x.texto_in, universo: x.universo, ruta: x.ruta, out: String(x.respuesta || '').slice(0, 300) }));
+            } catch (e) { }
+            const ins = await run("INSERT INTO sandbox_feedback (ts, carril, texto, contexto) VALUES (?,?,?,?)",
+                [Date.now(), carril || 'owner', texto.slice(0, 4000), JSON.stringify(ctxTurnos)]);
+            return res.status(200).json({ ok: true, id: Number(ins.lastInsertRowid) || null });
+        }
+        if (action === 'retros') {
+            await run(`CREATE TABLE IF NOT EXISTS sandbox_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, carril TEXT, texto TEXT,
+                contexto TEXT, procesado INTEGER DEFAULT 0)`).catch(() => {});
+            const fl = await query("SELECT * FROM sandbox_feedback WHERE procesado=0 ORDER BY id ASC").catch(() => []);
+            return res.status(200).json({ ok: true, retros: fl });
+        }
+        if (action === 'retro_done' && req.method === 'POST') {
+            const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map(Number).filter(n => n > 0);
+            if (ids.length) await run("UPDATE sandbox_feedback SET procesado=1 WHERE id IN (" + ids.join(',') + ")");
+            return res.status(200).json({ ok: true, n: ids.length });
+        }
+
         // ── 🚩 FLAG: el owner marca un turno como "esto está mal" (con nota opcional) ──
         if (action === 'flag' && req.method === 'POST') {
             const id = Number(req.body.turno_id || 0);

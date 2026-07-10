@@ -79,6 +79,21 @@
   .tl .btn-next:active { transform:scale(.96); }
   .rec-chip { display:inline-block; background:#2b2413; color:#ffd279; font-size:10px; font-weight:700; border-radius:20px; padding:2px 9px; margin:6px 0 2px; }
   .sys .b.match-banner { background:linear-gradient(90deg,#0e2b23,#123a2e); border:1px solid #00a884; color:#00e5a0; font-weight:800; }
+  /* ═══ 📝 CAJITA DE RETRO ═══ */
+  .btn-retro { background:#2b2413; color:#ffd279; border:1px solid #ffd27955; border-radius:8px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+  .retro-ov { display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:50; align-items:center; justify-content:center; padding:16px; }
+  .retro-ov.on { display:flex; }
+  .retro-box { background:#111b21; border:1px solid #ffd27944; border-radius:14px; width:100%; max-width:560px; max-height:86vh; overflow:auto; padding:16px; }
+  .retro-box h3 { color:#ffd279; font-size:15px; margin-bottom:4px; }
+  .retro-box p { color:#8696a0; font-size:12px; margin-bottom:10px; }
+  .retro-box textarea { width:100%; min-height:130px; background:#0b141a; border:1px solid #2a3942; border-radius:10px; color:#e9edef; font-size:14px; padding:10px 12px; resize:vertical; outline:none; font-family:inherit; }
+  .retro-acts { display:flex; gap:8px; margin-top:10px; }
+  .retro-acts button { flex:1; border:none; border-radius:8px; padding:11px; font-size:13px; font-weight:800; cursor:pointer; }
+  .retro-save { background:#ffd279; color:#0b141a; }
+  .retro-close { background:#2a3942; color:#e9edef; }
+  .retro-list { margin-top:12px; }
+  .retro-item { background:#182229; border:1px solid #2a3942; border-radius:8px; padding:8px 10px; margin-top:6px; color:#c9d1d9; font-size:12.5px; white-space:pre-wrap; }
+  .retro-item small { color:#8696a0; display:block; margin-top:3px; }
 </style>
 </head>
 <body>
@@ -87,6 +102,7 @@
     <div class="top comp">
       <div class="ava s">S</div>
       <div class="who"><b>Seb · Comprador</b><span id="estado">en línea</span></div>
+      <button class="btn-retro" onclick="abrirRetro()">📝 Retro</button>
       <button class="btn-reset" onclick="reiniciar()">↺ Reiniciar</button>
     </div>
     <div class="adbar">
@@ -125,6 +141,20 @@
     <div class="foot vsel">
       <input id="vtxt" placeholder="Contesta como vendedor…" autocomplete="off">
       <button class="send vsel" id="vbtn" onclick="enviarVend()">➤</button>
+    </div>
+  </div>
+
+  <!-- ═══════ 📝 CAJITA DE RETRO (por sesión) ═══════ -->
+  <div class="retro-ov" id="retroOv" onclick="if(event.target===this)cerrarRetro()">
+    <div class="retro-box">
+      <h3>📝 Retroalimentación de esta sesión</h3>
+      <p>Escribe TODO lo que viste (libre, como te salga). Cuando le digas a Claude <b>"procesa el training"</b>, lee esta caja + tus 🚩 y lo arregla directo.</p>
+      <textarea id="retroTxt" placeholder="Ej: cuando el dueño dijo X el bot debió... / me faltó que... / el recordatorio de la víspera mejor que diga..."></textarea>
+      <div class="retro-acts">
+        <button class="retro-close" onclick="cerrarRetro()">Cerrar</button>
+        <button class="retro-save" onclick="guardarRetro()">💾 Guardar retro</button>
+      </div>
+      <div class="retro-list" id="retroList"></div>
     </div>
   </div>
 
@@ -386,6 +416,25 @@ async function reiniciar(){
   sistema('↺ Conversación reiniciada — eres un comprador nuevo', true);
   fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'reset' }) }).catch(()=>{});
   txt.focus();
+}
+
+// ══════════ 📝 CAJITA DE RETRO ══════════
+function abrirRetro(){ document.getElementById('retroOv').classList.add('on'); document.getElementById('retroTxt').focus(); }
+function cerrarRetro(){ document.getElementById('retroOv').classList.remove('on'); }
+async function guardarRetro(){
+  const ta = document.getElementById('retroTxt');
+  const t = ta.value.trim(); if (!t) return;
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'retro', texto: t }) });
+    const d = await r.json();
+    if (!d.ok) { alert('no se pudo guardar: ' + (d.error || '')); return; }
+    const item = document.createElement('div'); item.className = 'retro-item';
+    item.textContent = t;
+    const s = document.createElement('small'); s.textContent = '✓ guardada #' + d.id + ' · ' + hora() + ' — pendiente de "procesa el training"';
+    item.appendChild(s);
+    document.getElementById('retroList').prepend(item);
+    ta.value = '';
+  } catch(e){ alert('red: ' + e.message); }
 }
 
 txt.addEventListener('keydown', e => { if (e.key === 'Enter') enviar(); });
