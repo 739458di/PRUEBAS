@@ -90,11 +90,17 @@ function planRecordatorios(match_ts, cita_ts, ctx) {
             add('dia_comprador', diaD, 'comprador', `Buen día ${ctx.nombre}. Hoy nos vemos a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
         }
         add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+        // 📝#6 (owner: "un recordatorio más, estratégico"): AVISO DE SALIDA a los 30 min
+        // — el anti-no-show del playbook de Cita Segura ("pide aviso de salida").
+        add('en_camino', cita_ts - 1800000, 'comprador', `${ctx.nombre}, ya casi es la hora — vienes en camino? Aquí te esperamos 👍`);
     } else {
         if (gap > 2.5 * 3600000) {
             add('confirmacion_hoy', match_ts + Math.round(gap / 2), 'comprador', `Todo listo para hoy a las ${ctx.hora}, ${ctx.nombre}. Aquí ando pendiente 👍`);
         }
-        if (gap > 75 * 60000) add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+        if (gap > 75 * 60000) {
+            add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+            add('en_camino', cita_ts - 1800000, 'comprador', `${ctx.nombre}, ya casi es la hora — vienes en camino? Aquí te esperamos 👍`);
+        }
         else if (gap > 40 * 60000) add('ya_casi', match_ts + Math.round(gap / 2), 'comprador', `${ctx.nombre}, ya casi nos vemos — a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
     }
     return R.sort((a, b) => a.ts - b.ts);
@@ -383,7 +389,7 @@ module.exports = async function handler(req, res) {
                             citaDueno.match_directo = { fecha: cd.fecha, hora: cd.hora, auto: autoNom, dueno: P.dueno, cita_ts: citaTs, match_ts: matchTs, sim_ts: matchTs, recordatorios: recs };
                             citaDueno.vendedor_aviso = `Listo ${P.dueno}, el comprador confirmó — quedamos ${cuando} ✅`;
                             // 📝 señal de match al comprador ("ahí nos vemos").
-                            citaDueno.comprador_aviso = `Ahí nos vemos ${cuando} 👍`;
+                            citaDueno.comprador_aviso = `Listo, el dueño particular confirmó ✅ Ahí nos vemos ${cuando} — te atendemos nosotros junto con el dueño 👍`;
                             await guardarMsg(convId, 'out', citaDueno.comprador_aviso, 'text');
                         } else {
                             await run(`INSERT INTO sandbox_match (carril, estado, auto_id, auto_nombre, dueno, fecha, hora, cita_ts, match_ts, sim_ts, recordatorios, updated)
@@ -462,7 +468,9 @@ module.exports = async function handler(req, res) {
                 // 📝 retro owner: al confirmarse el MATCH, al COMPRADOR le llega el
                 // "ahí nos vemos" — la señal de que hay match y arrancan sus recordatorios.
                 const artM = /^(hoy|manana|mañana|pasado)/i.test(String(M.fecha)) ? '' : 'el ';
-                const aviso = `Listo ${nombreComp}, quedó confirmado con el dueño — ahí nos vemos ${artM}${M.fecha} a las ${M.hora} 👍`;
+                // 📝#5: el aviso del match transmite CONFIANZA (dueño particular confirmado
+                // + los atendemos NOSOTROS junto con el dueño).
+                const aviso = `Listo ${nombreComp}, el dueño particular ya confirmó ✅ Ahí nos vemos ${artM}${M.fecha} a las ${M.hora} — te atendemos nosotros junto con el dueño 👍`;
                 await guardarMsg(convId, 'out', aviso, 'text');
                 return res.status(200).json({
                     ok: true, accion: 'afirma',
