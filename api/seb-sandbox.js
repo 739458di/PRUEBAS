@@ -104,19 +104,36 @@ async function ensureMatchTable() {
         carril TEXT PRIMARY KEY, estado TEXT, auto_id INTEGER, auto_nombre TEXT, dueno TEXT,
         fecha TEXT, hora TEXT, cita_ts INTEGER, match_ts INTEGER, sim_ts INTEGER,
         recordatorios TEXT, updated INTEGER)`);
+    await run("ALTER TABLE sandbox_match ADD COLUMN prop_fecha TEXT").catch(() => {});
+    await run("ALTER TABLE sandbox_match ADD COLUMN prop_hora TEXT").catch(() => {});
 }
-// IA intérprete de la respuesta del VENDEDOR: afirma | negativo | propone_hora.
+// ¿Misma hora/fecha? (para el MATCH DIRECTO: el comprador aceptó lo que el dueño propuso)
+function mismaHora(a, b) {
+    const pa = parseHora(a), pb = parseHora(b);
+    return !!(pa && pb && pa.h === pb.h && pa.min === pb.min);
+}
+function mismaFecha(a, b) {
+    const n = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^el /, '').trim();
+    return n(a) === n(b) && n(a) !== '';
+}
+// IA intérprete de la respuesta del VENDEDOR:
+//   afirma | negativo (auto NO disponible/se vendió/cancela) |
+//   propone_hora (da alternativa CONCRETA) | no_puede_hora (no puede a esa hora
+//   pero NO propone otra → Seb le PIDE el horario ahí mismo — mecánica del owner).
 async function clasificarVendedor(texto, cita) {
     const fb = (() => {   // respaldo por regex si la IA falla
         const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        if (/(no (puedo|voy|va|estoy|esta|estara|se va a poder)|ya se vendio|no disponible|no lo tengo|imposible|cancel)/.test(t)) return { accion: 'negativo' };
-        if (/(mejor|otro dia|otra hora|puedo (a las|el)|que sea (a las|el)|cambia|se puede (a las|el)|hasta las|despues de)/.test(t) || /a las \d/.test(t)) {
-            const mh = t.match(/a las (\d{1,2}(:\d{2})?\s?(am|pm)?)/);
-            const mf = t.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
+        const mh = t.match(/a las (\d{1,2}(:\d{2})?\s?(am|pm)?)/);
+        const mf = t.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
+        if (/(ya se vendio|se vendio|no disponible|ya no (esta|lo tengo)|no lo tengo|lo aparte|cancel|ya no quiero)/.test(t)) return { accion: 'negativo', fecha: null, hora: null };
+        if (/(mejor|otro dia|otra hora|puedo (a las|el)|que sea (a las|el)|cambia|se puede (a las|el)|hasta las|despues de)/.test(t) && (mh || mf)) {
             return { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null };
         }
-        if (/(^| )(si+|sii+|claro|va|vale|sale|perfecto|de acuerdo|confirmo|disponible|ahi (estare|estara)|esta bien|adelante|por supuesto|listo)/.test(t)) return { accion: 'afirma' };
-        return { accion: 'afirma' };
+        if (/(no (puedo|voy|va|estoy|estare|alcanzo|me queda|se va a poder)|imposible|complicado|dificil)/.test(t)) {
+            return (mh || mf) ? { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null } : { accion: 'no_puede_hora', fecha: null, hora: null };
+        }
+        if (mh || mf) return { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null };
+        return { accion: 'afirma', fecha: null, hora: null };
     })();
     const apiKey = process.env.CLAUDE_API_KEY;
     if (!apiKey) return fb;
@@ -126,12 +143,17 @@ async function clasificarVendedor(texto, cita) {
             headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
             body: JSON.stringify({
                 model: 'claude-haiku-4-5', max_tokens: 150,
-                system: `Interpretas la respuesta de un VENDEDOR de auto a esta solicitud de cita: "${cita.fecha} a las ${cita.hora}". Clasifica en: "afirma" (está disponible/de acuerdo), "negativo" (no puede / auto no disponible / cancela), "propone_hora" (puede pero en OTRO momento — extrae la fecha y/u hora que propone, ej. "mejor a las 6" → hora "6pm"). Responde SOLO el JSON.`,
+                system: `Interpretas la respuesta de un VENDEDOR de auto a esta solicitud de cita: "${cita.fecha} a las ${cita.hora}". Clasifica en:
+- "afirma": está disponible / de acuerdo con esa cita.
+- "negativo": el AUTO ya no está disponible (se vendió, lo apartó, cancela todo).
+- "propone_hora": puede pero en OTRO momento y da la alternativa CONCRETA (extrae fecha y/u hora, ej. "mejor a las 6" → hora "6pm").
+- "no_puede_hora": NO puede a esa hora/día pero NO dice cuál sí le queda (ej. "a esa hora no puedo").
+Responde SOLO el JSON.`,
                 messages: [{ role: 'user', content: `VENDEDOR: "${texto}"` }],
                 output_config: { format: { type: 'json_schema', schema: {
                     type: 'object',
                     properties: {
-                        accion: { type: 'string', description: 'afirma | negativo | propone_hora' },
+                        accion: { type: 'string', description: 'afirma | negativo | propone_hora | no_puede_hora' },
                         fecha: { type: ['string', 'null'], description: 'fecha propuesta si propone_hora (hoy/mañana/sábado/el 15) o null' },
                         hora: { type: ['string', 'null'], description: 'hora propuesta si propone_hora (ej 6pm, 17:00) o null' }
                     }, required: ['accion', 'fecha', 'hora'], additionalProperties: false } } }
@@ -141,7 +163,7 @@ async function clasificarVendedor(texto, cita) {
         const data = await r.json();
         const tb = (data.content || []).find(b => b.type === 'text');
         const out = JSON.parse(tb.text);
-        if (!['afirma', 'negativo', 'propone_hora'].includes(out.accion)) return fb;
+        if (!['afirma', 'negativo', 'propone_hora', 'no_puede_hora'].includes(out.accion)) return fb;
         return out;
     } catch (e) { return fb; }
 }
@@ -338,15 +360,30 @@ module.exports = async function handler(req, res) {
                         mensaje: `Qué tal${dn ? ' ' + dn : ''}, tengo cita para ver tu ${autoNom} ${cuando}. Me confirmas que esté disponible porfavor?`
                     };
                     // Persistir la SOLICITUD para el lado vendedor (match + línea del tiempo).
+                    // MATCH DIRECTO: si el comprador confirmó EXACTAMENTE lo que el dueño ya
+                    // propuso (contrapropuesta), el dueño NO re-confirma → match de una.
                     try {
                         await ensureMatchTable();
+                        const laneKey = carril || 'owner';
                         const citaTs = resolverCitaTs(cd.fecha, cd.hora);
-                        await run(`INSERT INTO sandbox_match (carril, estado, auto_id, auto_nombre, dueno, fecha, hora, cita_ts, match_ts, sim_ts, recordatorios, updated)
-                                   VALUES (?,?,?,?,?,?,?,?,NULL,NULL,NULL,?)
-                                   ON CONFLICT(carril) DO UPDATE SET estado='solicitud', auto_id=excluded.auto_id, auto_nombre=excluded.auto_nombre,
-                                     dueno=excluded.dueno, fecha=excluded.fecha, hora=excluded.hora, cita_ts=excluded.cita_ts,
-                                     match_ts=NULL, sim_ts=NULL, recordatorios=NULL, updated=excluded.updated`,
-                            [carril || 'owner', 'solicitud', autoActivo || null, autoNom, dn || 'Vendedor', cd.fecha || '', cd.hora || '', citaTs, Date.now()]);
+                        const prevM = await query("SELECT * FROM sandbox_match WHERE carril=?", [laneKey]);
+                        const P = prevM[0];
+                        if (P && P.estado === 'contrapropuesta' && mismaHora(P.prop_hora || P.hora, cd.hora) && mismaFecha(P.prop_fecha || P.fecha, cd.fecha)) {
+                            const matchTs = Date.now();
+                            const ctx = { nombre: NOMBRE_COMPRADOR, dueno: P.dueno, auto: autoNom, hora: cd.hora };
+                            const recs = planRecordatorios(matchTs, citaTs, ctx);
+                            await run("UPDATE sandbox_match SET estado='match', fecha=?, hora=?, cita_ts=?, match_ts=?, sim_ts=?, recordatorios=?, updated=? WHERE carril=?",
+                                [cd.fecha || '', cd.hora || '', citaTs, matchTs, matchTs, JSON.stringify(recs), Date.now(), laneKey]);
+                            citaDueno.match_directo = { fecha: cd.fecha, hora: cd.hora, auto: autoNom, dueno: P.dueno, cita_ts: citaTs, match_ts: matchTs, sim_ts: matchTs, recordatorios: recs };
+                            citaDueno.vendedor_aviso = `Listo ${P.dueno}, el comprador confirmó — quedamos ${cuando} ✅`;
+                        } else {
+                            await run(`INSERT INTO sandbox_match (carril, estado, auto_id, auto_nombre, dueno, fecha, hora, cita_ts, match_ts, sim_ts, recordatorios, updated)
+                                       VALUES (?,?,?,?,?,?,?,?,NULL,NULL,NULL,?)
+                                       ON CONFLICT(carril) DO UPDATE SET estado='solicitud', auto_id=excluded.auto_id, auto_nombre=excluded.auto_nombre,
+                                         dueno=excluded.dueno, fecha=excluded.fecha, hora=excluded.hora, cita_ts=excluded.cita_ts,
+                                         match_ts=NULL, sim_ts=NULL, recordatorios=NULL, updated=excluded.updated`,
+                                [laneKey, 'solicitud', autoActivo || null, autoNom, dn || 'Vendedor', cd.fecha || '', cd.hora || '', citaTs, Date.now()]);
+                        }
                     } catch (e) { console.error('[sandbox] match upsert:', e.message); }
                 }
             }
@@ -415,10 +452,20 @@ module.exports = async function handler(req, res) {
                 for (const s of compMsgs) await guardarMsg(convId, 'out', s, 'text');
                 return res.status(200).json({ ok: true, accion: 'negativo', vendedor_msgs: ['Entendido, gracias por avisarme 👍'], comprador_msgs: compMsgs });
             }
-            // propone_hora → rebote al comprador con "te agendo en firme ... va?" (el cerrador
-            // existente toma el "si" del comprador y re-dispara la solicitud al vendedor).
+            // NO PUEDE a esa hora (sin alternativa) → mecánica del owner: se le PIDE el
+            // horario al dueño AHÍ MISMO; al comprador no le llega nada todavía.
+            if (cls.accion === 'no_puede_hora' || (M.estado === 'esperando_horario' && cls.accion === 'afirma' && !cls.hora && !cls.fecha)) {
+                await run("UPDATE sandbox_match SET estado='esperando_horario', updated=? WHERE carril=?", [Date.now(), laneKey]);
+                return res.status(200).json({
+                    ok: true, accion: 'no_puede_hora',
+                    vendedor_msgs: ['Entendido, sin tema', 'Qué día y horario te acomoda mejor? Y yo lo amarro con el comprador']
+                });
+            }
+            // propone_hora → SEB YA TRAE EL HORARIO DEL DUEÑO: se lo lleva al comprador EN
+            // FIRME para amarrar. Cuando el comprador diga "va" → MATCH DIRECTO (el dueño
+            // no re-confirma lo que él mismo propuso).
             const nf = cls.fecha || M.fecha, nh = cls.hora || M.hora;
-            await run("UPDATE sandbox_match SET estado='contrapropuesta', updated=? WHERE carril=?", [Date.now(), laneKey]);
+            await run("UPDATE sandbox_match SET estado='contrapropuesta', prop_fecha=?, prop_hora=?, updated=? WHERE carril=?", [nf, nh, Date.now(), laneKey]);
             const artN = /^(hoy|manana|mañana|pasado)/i.test(String(nf)) ? '' : 'el ';
             const compMsgs = [
                 `Oye ${nombreComp}, me comenta el dueño que se le acomoda mejor ${artN}${nf} a las ${nh}`,

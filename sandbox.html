@@ -189,6 +189,16 @@ async function cargarAutos(){
 let citaPendiente = null;
 function ofrecerVendedor(cd){
   citaPendiente = cd;
+  // MATCH DIRECTO: el comprador confirmó lo que el dueño YA propuso → sin re-solicitud.
+  if (cd.match_directo) {
+    sistema('🤝 MATCH DIRECTO — el comprador aceptó el horario del dueño. Arrastra el reloj para simular el tiempo.', false);
+    if (document.body.classList.contains('dual')) {
+      burbujaEn(vchat, 'seb', cd.vendedor_aviso || 'Listo, el comprador confirmó ✅');
+      sistemaEn(vchat, '🤝 MATCH — cita amarrada en ambos lados', false).classList.add('match-banner');
+    }
+    iniciarTimeline(cd.match_directo);
+    return;
+  }
   apagarTimeline();   // nueva cita = nuevo ciclo (mata la línea del tiempo anterior)
   const b = sistema('📅 CITA CONFIRMADA con el comprador — ' + (cd.cuando || ''), false);
   if (document.body.classList.contains('dual')) {
@@ -239,10 +249,12 @@ async function enviarVend(){
         sistemaEn(vchat, '❌ El dueño NO puede — Seb regresa con el comprador a reacomodar', true);
         for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
         apagarTimeline();
+      } else if (d.accion === 'no_puede_hora') {
+        sistemaEn(vchat, '⏳ No puede a esa hora — Seb le pide AL DUEÑO su horario para ir en firme con el comprador', true);
       } else if (d.accion === 'propone_hora') {
-        sistemaEn(vchat, '🔁 Propuso otro horario — Seb se lo lleva al comprador para dejarlo en firme', true);
+        sistemaEn(vchat, '🔁 El dueño dio SU horario — Seb se lo lleva al comprador EN FIRME para amarrar', true);
         for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
-        sistema('👆 El dueño propuso ' + (d.fecha || '') + ' a las ' + (d.hora || '') + ' — contesta como comprador ("va") para confirmar y re-solicitar al dueño.', true);
+        sistema('👆 El dueño propuso ' + (d.fecha || '') + ' a las ' + (d.hora || '') + ' — si el comprador dice "va", es MATCH directo (el dueño ya no re-confirma).', true);
       }
     }
   } catch(e){ typ.remove(); sistemaEn(vchat, '❌ red: ' + e.message, true); }
