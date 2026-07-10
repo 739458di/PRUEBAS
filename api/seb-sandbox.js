@@ -283,6 +283,13 @@ module.exports = async function handler(req, res) {
                 const mAct = await query("SELECT * FROM sandbox_match WHERE carril=? AND estado='match'", [carril || 'owner']);
                 if (mAct.length) {
                     const MC = mAct[0];
+                    // "ya voy en camino" (respuesta al aviso de salida) → acuse y listo.
+                    const tEC = String(texto).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                    if (/(ya voy|voy en camino|en camino|ya salgo|saliendo|voy para alla|alla voy|ya merito llego|ya casi llego)/.test(tEC) && !/(no |cancel)/.test(tEC)) {
+                        const ack = 'Va, aquí te esperamos 👍';
+                        await guardarMsg(convId, 'out', ack, 'text');
+                        return res.status(200).json({ ok: true, etapa: 'CITA', ruta: 'en_camino_ack', universo: 'cita', segmentos: [ack] });
+                    }
                     const cc = await clasificarCancelacion(texto, { fecha: MC.fecha, hora: MC.hora });
                     if (cc.cancela) {
                         await run("UPDATE sandbox_match SET estado='cancelada', updated=? WHERE carril=?", [Date.now(), carril || 'owner']);
