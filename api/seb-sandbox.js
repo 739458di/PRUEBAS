@@ -174,6 +174,33 @@ Responde SOLO el JSON.`,
     } catch (e) { return fb; }
 }
 
+// 📝#7: ¿el COMPRADOR está CANCELANDO / avisando que no asiste? (solo con match activo).
+// IA interpreta; respaldo por regex. Si propone OTRA hora clara, NO es cancelación
+// (eso lo toma el cerrador y se re-coordina).
+async function clasificarCancelacion(texto, cita) {
+    const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const proponeOtra = /(mejor (a las|el)|puedo (a las|el)|que sea (a las|el)|cambiamos? a|a las \d{1,2}\b)/.test(t);
+    const fb = !proponeOtra && /(no (voy a |vamos a )?(poder|podre|podremos)|no (llego|logro llegar|alcanzo|alcanzare)|no (voy|ire|asistire|vamos)\b|cancel(a|o|ar|amos|emos|ada)|ya no (voy|quiero|puedo|podre|me interesa)|se me complico|me surgio (algo|un|una)|no me va a dar tiempo|imposible (llegar|ir)|no va a poderse|no se va a poder)/.test(t);
+    const apiKey = process.env.CLAUDE_API_KEY;
+    if (!apiKey) return { cancela: fb };
+    try {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({
+                model: 'claude-haiku-4-5', max_tokens: 60,
+                system: `El COMPRADOR tiene una cita CONFIRMADA (${cita.fecha} a las ${cita.hora}) para ver un auto. Interpreta su mensaje: cancela=true SOLO si está cancelando o avisando que NO asistirá (sin proponer una nueva hora concreta). Si propone otra hora/día concreto, o es cualquier otra cosa (pregunta, confirmación, "ya voy"), cancela=false. Responde SOLO el JSON.`,
+                messages: [{ role: 'user', content: `COMPRADOR: "${texto}"` }],
+                output_config: { format: { type: 'json_schema', schema: { type: 'object', properties: { cancela: { type: 'boolean' } }, required: ['cancela'], additionalProperties: false } } }
+            })
+        });
+        if (!r.ok) return { cancela: fb };
+        const data = await r.json();
+        const tb = (data.content || []).find(b => b.type === 'text');
+        return { cancela: JSON.parse(tb.text).cancela === true };
+    } catch (e) { return { cancela: fb }; }
+}
+
 let seq = 0;
 async function guardarMsg(convId, direccion, texto, tipo) {
     const ts = Date.now() + (seq++ % 50);   // ts únicos y en orden dentro del request
@@ -248,6 +275,32 @@ module.exports = async function handler(req, res) {
             }
 
             await guardarMsg(convId, 'in', texto, 'text');
+
+            // 📝#7: con MATCH ACTIVO, primero se interpreta si el comprador CANCELA →
+            // "cita cancelada", muere el flujo de recordatorios y se avisa al vendedor.
+            try {
+                await ensureMatchTable();
+                const mAct = await query("SELECT * FROM sandbox_match WHERE carril=? AND estado='match'", [carril || 'owner']);
+                if (mAct.length) {
+                    const MC = mAct[0];
+                    const cc = await clasificarCancelacion(texto, { fecha: MC.fecha, hora: MC.hora });
+                    if (cc.cancela) {
+                        await run("UPDATE sandbox_match SET estado='cancelada', updated=? WHERE carril=?", [Date.now(), carril || 'owner']);
+                        const segsCanc = [
+                            'Va, sin tema — cita cancelada ❌',
+                            'Cualquier cosa aquí ando para reagendarte cuando gustes 👍'
+                        ];
+                        for (const sx of segsCanc) await guardarMsg(convId, 'out', sx, 'text');
+                        const artC = /^(hoy|manana|mañana|pasado)/i.test(String(MC.fecha)) ? '' : 'el ';
+                        return res.status(200).json({
+                            ok: true, etapa: 'CITA', ruta: 'cancelacion', universo: 'cita_cancelada',
+                            segmentos: segsCanc,
+                            cancelacion: { vendedor_aviso: `Qué tal ${MC.dueno}, una disculpa — el comprador canceló la cita de ${artC}${MC.fecha} a las ${MC.hora}. Yo te aviso si se reagenda 👍` },
+                            silencio: false
+                        });
+                    }
+                }
+            } catch (e) { console.error('[sandbox] cancelacion:', e.message); }
 
             // Estado de la conversación (idéntico a opener_auto)
             const mr = await query("SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);

@@ -403,6 +403,15 @@ async function enviar(){
         for (const s of (d.segmentos || [])) { burbuja('seb', s); await sleep(260); }
         if (d.fotos && d.fotos.length) burbuja('seb', '', '<div class="fotos">' + d.fotos.map(u => '<img src="' + u + '">').join('') + '</div>');
         if (d.pin) burbuja('seb', '', '<div class="pin">📍 ' + d.pin.nombre + ' <span style="color:#8696a0">(pin de ubicación)</span></div>');
+        if (d.cancelacion) {
+          // 📝#7: cancelación del comprador → muere el flujo + aviso al vendedor
+          sistema('❌ CITA CANCELADA — recordatorios detenidos', false);
+          apagarTimeline();
+          if (document.body.classList.contains('dual')) {
+            burbujaEn(vchat, 'seb', d.cancelacion.vendedor_aviso);
+            sistemaEn(vchat, '❌ El comprador canceló — Seb avisó al vendedor', true);
+          }
+        }
         if (d.cita_dueno) ofrecerVendedor(d.cita_dueno);
       }
     }
