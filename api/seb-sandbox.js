@@ -500,6 +500,17 @@ module.exports = async function handler(req, res) {
             });
         }
 
+        // ══════════════ ⇄ HUMAN-IN-THE-LOOP: el owner escribe COMO SEB ══════════════
+        // Se guarda como OUT en la conversación (sin correr el bot): el estado, el
+        // sí-pelón y el cerrador SÍ leen estos mensajes (entiende lo que el owner dijo).
+        if (action === 'mensaje_out' && req.method === 'POST') {
+            const texto = String(req.body.texto || '').trim();
+            if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
+            const convId = await ensureConv();
+            await guardarMsg(convId, 'out', texto, 'text');
+            return res.status(200).json({ ok: true });
+        }
+
         // ══════════════ LADO VENDEDOR: su respuesta a la solicitud ══════════════
         // IA interpreta → afirma (MATCH) | negativo | propone_hora (rebota al comprador).
         if (action === 'vendedor_responde' && req.method === 'POST') {

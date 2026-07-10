@@ -81,6 +81,8 @@
   .sys .b.match-banner { background:linear-gradient(90deg,#0e2b23,#123a2e); border:1px solid #00a884; color:#00e5a0; font-weight:800; }
   /* ═══ 📝 CAJITA DE RETRO ═══ */
   .btn-retro { background:#2b2413; color:#ffd279; border:1px solid #ffd27955; border-radius:8px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+  .btn-rol { background:#132a3a; color:#7fc2ff; border:1px solid #2f6df055; border-radius:8px; padding:9px 10px; font-size:12px; font-weight:800; cursor:pointer; }
+  .btn-rol.seb { background:#0e3a30; color:#00e5a0; border-color:#00a88477; }
   .retro-ov { display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:50; align-items:center; justify-content:center; padding:16px; }
   .retro-ov.on { display:flex; }
   .retro-box { background:#111b21; border:1px solid #ffd27944; border-radius:14px; width:100%; max-width:560px; max-height:86vh; overflow:auto; padding:16px; }
@@ -102,6 +104,7 @@
     <div class="top comp">
       <div class="ava s">S</div>
       <div class="who"><b>Seb · Comprador</b><span id="estado">en línea</span></div>
+      <button class="btn-rol" id="btnRol" onclick="toggleRol()" title="cambiar quién escribe (human-in-the-loop)">⇄ escribes: COMPRADOR</button>
       <button class="btn-retro" onclick="abrirRetro()">📝 Retro</button>
       <button class="btn-reset" onclick="reiniciar()">↺ Reiniciar</button>
     </div>
@@ -388,6 +391,7 @@ function siguienteEvento(){
 async function enviar(){
   const t = txt.value.trim();
   if (!t || ocupado) return;
+  if (ROL === 'seb') { txt.value=''; await enviarComoSeb(t); txt.focus(); return; }
   ocupado = true; btn.disabled = true; txt.value = '';
   burbuja('yo', t);
   const typing = document.createElement('div'); typing.className = 'typing'; typing.textContent = 'Seb está escribiendo…';
@@ -438,6 +442,37 @@ async function reiniciar(){
   fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'reset' }) }).catch(()=>{});
   txt.focus();
 }
+
+// ══════════ ⇄ HUMAN-IN-THE-LOOP: escribir como SEB ══════════
+let ROL = 'comprador';
+function toggleRol(){
+  ROL = ROL === 'comprador' ? 'seb' : 'comprador';
+  const b = document.getElementById('btnRol');
+  b.textContent = '⇄ escribes: ' + (ROL === 'seb' ? 'SEB (tú)' : 'COMPRADOR');
+  b.classList.toggle('seb', ROL === 'seb');
+  txt.placeholder = ROL === 'seb' ? 'Escribe como SEB (se guarda como mensaje tuyo, sin bot)…' : 'Escribe como comprador…';
+  txt.focus();
+}
+async function enviarComoSeb(t){
+  burbuja('seb', t);
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'mensaje_out', texto: t }) });
+    const d = await r.json();
+    if (!d.ok) sistema('❌ no se guardó: ' + (d.error||''), true);
+  } catch(e){ sistema('❌ red: ' + e.message, true); }
+}
+
+// ══════════ detector de VERSIÓN NUEVA (pestañas que se quedan abiertas entre deploys) ══════════
+let ETAG0 = null;
+async function checkVersion(){
+  try {
+    const r = await fetch('/sandbox.html', { method:'HEAD', cache:'no-store' });
+    const e = r.headers.get('etag');
+    if (!ETAG0) { ETAG0 = e; return; }
+    if (e && e !== ETAG0) { sistema('🔄 Hay una versión NUEVA del sandbox — recarga con ⌘R para traértela', false); ETAG0 = e; }
+  } catch(e){}
+}
+setInterval(checkVersion, 4*60*1000); checkVersion();
 
 // ══════════ 📝 CAJITA DE RETRO ══════════
 function abrirRetro(){ document.getElementById('retroOv').classList.add('on'); document.getElementById('retroTxt').focus(); }
