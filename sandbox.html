@@ -251,6 +251,8 @@ async function enviarVend(){
         apagarTimeline();
       } else if (d.accion === 'no_puede_hora') {
         sistemaEn(vchat, '⏳ No puede a esa hora — Seb le pide AL DUEÑO su horario para ir en firme con el comprador', true);
+      } else if (d.accion === 'falta_hora') {
+        sistemaEn(vchat, '📅 Dio el día (' + (d.fecha || '') + ') pero falta LA HORA — cita = día + hora amarrados. Seb se la pide.', true);
       } else if (d.accion === 'propone_hora') {
         sistemaEn(vchat, '🔁 El dueño dio SU horario — Seb se lo lleva al comprador EN FIRME para amarrar', true);
         for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }

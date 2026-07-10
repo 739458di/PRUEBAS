@@ -461,10 +461,23 @@ module.exports = async function handler(req, res) {
                     vendedor_msgs: ['Entendido, sin tema', 'Qué día y horario te acomoda mejor? Y yo lo amarro con el comprador']
                 });
             }
-            // propone_hora → SEB YA TRAE EL HORARIO DEL DUEÑO: se lo lleva al comprador EN
-            // FIRME para amarrar. Cuando el comprador diga "va" → MATCH DIRECTO (el dueño
-            // no re-confirma lo que él mismo propuso).
-            const nf = cls.fecha || M.fecha, nh = cls.hora || M.hora;
+            // propone_hora → CITA = DÍA + HORA, ambos amarrados con el dueño (orden owner):
+            // si dio solo el DÍA (ej. "miércoles"), Seb le pide LA HORA antes de ir al
+            // comprador — jamás se asume la hora vieja en un día nuevo.
+            if (!cls.fecha && !cls.hora) {
+                await run("UPDATE sandbox_match SET estado='esperando_horario', updated=? WHERE carril=?", [Date.now(), laneKey]);
+                return res.status(200).json({ ok: true, accion: 'no_puede_hora', vendedor_msgs: ['Entendido, sin tema', 'Qué día y horario te acomoda mejor? Y yo lo amarro con el comprador'] });
+            }
+            if (cls.fecha && !cls.hora) {
+                await run("UPDATE sandbox_match SET estado='esperando_horario', prop_fecha=?, prop_hora=NULL, updated=? WHERE carril=?", [cls.fecha, Date.now(), laneKey]);
+                return res.status(200).json({
+                    ok: true, accion: 'falta_hora', fecha: cls.fecha,
+                    vendedor_msgs: [`Va, ${cls.fecha} entonces`, 'A qué hora te acomoda? Y así lo amarro en firme con el comprador']
+                });
+            }
+            // hora presente: el día viene de lo que él propuso (aunque haya sido en el
+            // mensaje anterior — prop_fecha), NUNCA del día viejo si él lo cambió.
+            const nf = cls.fecha || M.prop_fecha || M.fecha, nh = cls.hora;
             await run("UPDATE sandbox_match SET estado='contrapropuesta', prop_fecha=?, prop_hora=?, updated=? WHERE carril=?", [nf, nh, Date.now(), laneKey]);
             const artN = /^(hoy|manana|mañana|pasado)/i.test(String(nf)) ? '' : 'el ';
             const compMsgs = [
