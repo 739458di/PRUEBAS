@@ -301,6 +301,13 @@ module.exports = async function handler(req, res) {
             }
             const entrantes = mensajes.filter(m => m.direccion === 'in');
             if (!entrantes.length) return res.status(200).json({ ok: false, motivo: 'sin_entrantes' });
+            // 🚩fyrachat#2: si en la ventana reciente hay un MENSAJE NO DESCIFRADO (Baileys),
+            // el bot NO sabe qué no vio → JAMÁS el fallback genérico: escala al owner.
+            const ventanaIn = entrantes.slice(-4).map(m => m.mensaje).join(' ');
+            if (/no descifrado|no se pudo descifrar|mensaje cifrado|⚠️/.test(ventanaIn)) {
+                const nomEsc = (convRow.length && convRow[0].nombre) || null;
+                return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: 'hay un MENSAJE NO DESCIFRADO en la conversación (el bot no sabe qué no vio) — revísala tú', escala_nombre: nomEsc, escala_ultimo: entrantes[entrantes.length - 1].mensaje });
+            }
             // ESTADO por # de RÁFAGAS salientes nuestras (respeta el reset).
             let bursts = 0, prevDir = null, lastOutIdx = -1;
             mensajes.forEach((m, i) => { if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });
