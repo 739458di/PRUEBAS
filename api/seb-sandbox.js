@@ -427,7 +427,20 @@ module.exports = async function handler(req, res) {
             const rows = await query("SELECT * FROM sandbox_match WHERE carril=?", [laneKey]);
             if (!rows.length || !rows[0].cita_ts) return res.status(200).json({ ok: false, error: 'no hay solicitud de cita activa' });
             const M = rows[0];
-            const cls = await clasificarVendedor(texto, { fecha: M.fecha, hora: M.hora });
+            let cls = await clasificarVendedor(texto, { fecha: M.fecha, hora: M.hora });
+            // EN ESPERA DE HORARIO: lo que diga el dueño se lee PRIMERO como su horario
+            // ("a las 5 está bien" venía saliendo como 'afirma' → matcheaba la cita VIEJA).
+            if (M.estado === 'esperando_horario' && cls.accion !== 'negativo') {
+                const tN = String(texto).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                const mh = tN.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+                const mf = tN.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|el \d{1,2})\b/);
+                const horaX = (mh && Number(mh[1]) <= 23) ? (mh[1] + (mh[2] ? ':' + mh[2] : '') + (mh[3] || '')) : null;
+                cls = {
+                    accion: (horaX || mf || cls.fecha || cls.hora) ? 'propone_hora' : 'no_puede_hora',
+                    fecha: cls.fecha || (mf ? mf[1] : null),
+                    hora: cls.hora || horaX
+                };
+            }
             const convId = await ensureConv();
             const nombreComp = NOMBRE_COMPRADOR;
 
