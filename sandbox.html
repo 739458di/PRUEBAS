@@ -288,7 +288,21 @@ async function enviarVend(){
   if (ROL_V === 'seb') {
     vtxt.value = '';
     burbujaEn(vchat, 'seb', t);
-    fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'vendedor_out', texto: t }) }).catch(()=>{});
+    try {
+      const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'vendedor_out', texto: t }) });
+      const d = await r.json();
+      // LA SEÑAL: "cita confirmada" manual = MATCH real; "cita cancelada" = mata el flujo
+      if (d.senal === 'confirmada' && d.match) {
+        sistemaEn(vchat, '🤝 MATCH — confirmado por TI (señal manual)', false).classList.add('match-banner');
+        for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
+        sistema('🤝 MATCH — señal manual del owner. Arrastra el reloj para simular el tiempo.', false);
+        iniciarTimeline(d.match);
+      } else if (d.senal === 'cancelada') {
+        sistemaEn(vchat, '❌ CITA CANCELADA (señal manual) — Seb reacomoda con el comprador', true);
+        for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
+        apagarTimeline();
+      }
+    } catch(e){}
     vtxt.focus(); return;
   }
   vOcupado = true; document.getElementById('vbtn').disabled = true; vtxt.value = '';

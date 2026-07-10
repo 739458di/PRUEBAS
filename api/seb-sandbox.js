@@ -527,11 +527,43 @@ module.exports = async function handler(req, res) {
             if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
             await ensureMatchTable();
             const laneKey = carril || 'owner';
-            const rows = await query("SELECT avisos_vendedor FROM sandbox_match WHERE carril=?", [laneKey]);
-            if (rows.length) {
-                const arr = (() => { try { return JSON.parse(rows[0].avisos_vendedor || '[]'); } catch (e) { return []; } })();
+            const rows = await query("SELECT * FROM sandbox_match WHERE carril=?", [laneKey]);
+            const M = rows[0] || null;
+            if (M) {
+                const arr = (() => { try { return JSON.parse(M.avisos_vendedor || '[]'); } catch (e) { return []; } })();
                 arr.push(texto);
                 await run("UPDATE sandbox_match SET avisos_vendedor=?, updated=? WHERE carril=?", [JSON.stringify(arr), Date.now(), laneKey]);
+            }
+            // ══ LA SEÑAL DEL OWNER (human-in-the-loop): los dueños muchas veces confirman
+            // POR TELÉFONO — el owner entra como Seb y escribe "cita confirmada" → se
+            // EJECUTA el match real (confianza al comprador + recordatorios + timeline).
+            // Su gemela: "cita cancelada" → mata el flujo y reacomoda con el comprador.
+            const tS = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+            if (M && /confirmad/.test(tS) && !/no |cancel/.test(tS) && ['solicitud', 'contrapropuesta', 'esperando_horario'].includes(M.estado) && M.cita_ts) {
+                const matchTs = Date.now();
+                const ctx = { nombre: NOMBRE_COMPRADOR, dueno: M.dueno, auto: M.auto_nombre, hora: M.hora };
+                const recs = planRecordatorios(matchTs, Number(M.cita_ts), ctx);
+                await run("UPDATE sandbox_match SET estado='match', match_ts=?, sim_ts=?, recordatorios=?, updated=? WHERE carril=?",
+                    [matchTs, matchTs, JSON.stringify(recs), Date.now(), laneKey]);
+                const artM = /^(hoy|manana|mañana|pasado)/i.test(String(M.fecha)) ? '' : 'el ';
+                const aviso = `Listo ${NOMBRE_COMPRADOR}, el dueño particular ya confirmó ✅ Ahí nos vemos ${artM}${M.fecha} a las ${M.hora} — te atendemos nosotros junto con el dueño 👍`;
+                const convId = await ensureConv();
+                await guardarMsg(convId, 'out', aviso, 'text');
+                return res.status(200).json({
+                    ok: true, senal: 'confirmada', comprador_msgs: [aviso],
+                    match: { fecha: M.fecha, hora: M.hora, auto: M.auto_nombre, dueno: M.dueno, cita_ts: Number(M.cita_ts), match_ts: matchTs, sim_ts: matchTs, recordatorios: recs }
+                });
+            }
+            if (M && /cancelad/.test(tS) && ['match', 'solicitud', 'contrapropuesta', 'esperando_horario'].includes(M.estado)) {
+                await run("UPDATE sandbox_match SET estado='cancelada', updated=? WHERE carril=?", [Date.now(), laneKey]);
+                const artC = /^(hoy|manana|mañana|pasado)/i.test(String(M.fecha)) ? '' : 'el ';
+                const compMsgs = [
+                    `Oye ${NOMBRE_COMPRADOR}, una disculpa — surgió un imprevisto con el auto para ${artC}${M.fecha} a las ${M.hora}`,
+                    'Te acomodo otro día u horario? Tú dime y lo dejamos en firme'
+                ];
+                const convId = await ensureConv();
+                for (const sx of compMsgs) await guardarMsg(convId, 'out', sx, 'text');
+                return res.status(200).json({ ok: true, senal: 'cancelada', comprador_msgs: compMsgs });
             }
             return res.status(200).json({ ok: true });
         }
