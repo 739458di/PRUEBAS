@@ -326,7 +326,7 @@ function pintarTimeline(){
   track.querySelectorAll('.mark').forEach(x => x.remove());
   const span = Math.max(1, TL.cita_ts - TL.match_ts);
   const pct = ts => Math.max(0, Math.min(100, (ts - TL.match_ts) / span * 100));
-  const NOM = { vispera:'víspera (noche antes)', dia_comprador:'día de la cita', dia_vendedor:'día · al vendedor', '1h_antes':'1 hora antes', en_camino:'aviso de salida (30 min)', confirmacion_hoy:'confirmación de hoy', ya_casi:'ya casi' };
+  const NOM = { vispera:'víspera (noche antes)', dia_comprador:'día de la cita', dia_vendedor:'día · al vendedor', '1h_antes':'1 hora antes', en_camino:'aviso de salida (30 min)', dia_vendedor_espera:'día · vendedor en espera', confirmacion_hoy:'confirmación de hoy', ya_casi:'ya casi' };
   for (const r of (TL.recordatorios || [])) {
     const mk = document.createElement('div');
     mk.className = 'mark' + (r.enviado ? ' on' : '');
@@ -417,6 +417,9 @@ async function enviar(){
         for (const s of (d.segmentos || [])) { burbuja('seb', s); await sleep(260); }
         if (d.fotos && d.fotos.length) burbuja('seb', '', '<div class="fotos">' + d.fotos.map(u => '<img src="' + u + '">').join('') + '</div>');
         if (d.pin) burbuja('seb', '', '<div class="pin">📍 ' + d.pin.nombre + ' <span style="color:#8696a0">(pin de ubicación)</span></div>');
+        if (d.vendedor_aviso && document.body.classList.contains('dual')) {
+          burbujaEn(vchat, 'seb', d.vendedor_aviso);
+        }
         if (d.cancelacion) {
           // 📝#7: cancelación del comprador → muere el flujo + aviso al vendedor
           sistema('❌ CITA CANCELADA — recordatorios detenidos', false);

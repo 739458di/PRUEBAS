@@ -88,17 +88,21 @@ function planRecordatorios(match_ts, cita_ts, ctx) {
         const diaD = Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate(), 9, 30) + MTY_OFF;
         if (diaD < cita_ts - 75 * 60000) {
             add('dia_comprador', diaD, 'comprador', `Buen día ${ctx.nombre}. Hoy nos vemos a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
+            // 📝#12: al VENDEDOR el día de la cita — que NO haga movimiento hasta que el
+            // comprador nos ACREDITE que ya va en camino (anti-plantada).
+            add('dia_vendedor_espera', diaD + 120000, 'vendedor', `Qué tal ${ctx.dueno}, hoy es la cita de tu ${ctx.auto} a las ${ctx.hora}. De favor no hagas movimiento todavía — yo te aviso en cuanto el comprador me acredite que ya va en camino 👍`);
         }
-        add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+        add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. De favor, me avisas en cuanto vayas en camino? Así ya te estamos esperando listos 👍`);
         // 📝#6 (owner: "un recordatorio más, estratégico"): AVISO DE SALIDA a los 30 min
         // — el anti-no-show del playbook de Cita Segura ("pide aviso de salida").
         add('en_camino', cita_ts - 1800000, 'comprador', `${ctx.nombre}, ya casi es la hora — vienes en camino? Aquí te esperamos 👍`);
     } else {
         if (gap > 2.5 * 3600000) {
             add('confirmacion_hoy', match_ts + Math.round(gap / 2), 'comprador', `Todo listo para hoy a las ${ctx.hora}, ${ctx.nombre}. Aquí ando pendiente 👍`);
+            add('dia_vendedor_espera', match_ts + Math.round(gap / 2) + 120000, 'vendedor', `Qué tal ${ctx.dueno}, hoy es la cita de tu ${ctx.auto} a las ${ctx.hora}. De favor no hagas movimiento todavía — yo te aviso en cuanto el comprador me acredite que ya va en camino 👍`);
         }
         if (gap > 75 * 60000) {
-            add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+            add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. De favor, me avisas en cuanto vayas en camino? Así ya te estamos esperando listos 👍`);
             add('en_camino', cita_ts - 1800000, 'comprador', `${ctx.nombre}, ya casi es la hora — vienes en camino? Aquí te esperamos 👍`);
         }
         else if (gap > 40 * 60000) add('ya_casi', match_ts + Math.round(gap / 2), 'comprador', `${ctx.nombre}, ya casi nos vemos — a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
@@ -289,7 +293,12 @@ module.exports = async function handler(req, res) {
                     if (/(ya voy|voy en camino|en camino|ya salgo|saliendo|voy para alla|alla voy|ya merito llego|ya casi llego)/.test(tEC) && !/(no |cancel)/.test(tEC)) {
                         const ack = 'Va, aquí te esperamos 👍';
                         await guardarMsg(convId, 'out', ack, 'text');
-                        return res.status(200).json({ ok: true, etapa: 'CITA', ruta: 'en_camino_ack', universo: 'cita', segmentos: [ack] });
+                        // 📝#12: ACREDITAR el camino al vendedor — ahora sí puede moverse.
+                        const avisoCamino = `${MC.dueno}, listo — el comprador ya va en camino 👍 Puedes ir preparando el ${MC.auto_nombre}`;
+                        const avisosEC = (() => { try { return JSON.parse(MC.avisos_vendedor || '[]'); } catch (e) { return []; } })();
+                        avisosEC.push(avisoCamino);
+                        await run("UPDATE sandbox_match SET avisos_vendedor=?, updated=? WHERE carril=?", [JSON.stringify(avisosEC), Date.now(), carril || 'owner']);
+                        return res.status(200).json({ ok: true, etapa: 'CITA', ruta: 'en_camino_ack', universo: 'cita', segmentos: [ack], vendedor_aviso: avisoCamino });
                     }
                     const cc = await clasificarCancelacion(texto, { fecha: MC.fecha, hora: MC.hora });
                     if (cc.cancela) {
@@ -614,12 +623,16 @@ module.exports = async function handler(req, res) {
             const recs = JSON.parse(M.recordatorios || '[]');
             const due = [];
             const convId = await ensureConv();
+            const avisosT = (() => { try { return JSON.parse(M.avisos_vendedor || '[]'); } catch (e) { return []; } })();
+            let avisosDirty = false;
             for (const r of recs) {
                 if (!r.enviado && r.ts <= simTs) {
                     r.enviado = 1; due.push(r);
                     if (r.para === 'comprador') await guardarMsg(convId, 'out', r.texto, 'text');
+                    if (r.para === 'vendedor') { avisosT.push(r.texto); avisosDirty = true; }
                 }
             }
+            if (avisosDirty) await run("UPDATE sandbox_match SET avisos_vendedor=? WHERE carril=?", [JSON.stringify(avisosT), laneKey]);
             const nuevoSim = Math.max(simTs, Number(M.sim_ts || 0));
             await run("UPDATE sandbox_match SET sim_ts=?, recordatorios=?, updated=? WHERE carril=?", [nuevoSim, JSON.stringify(recs), Date.now(), laneKey]);
             return res.status(200).json({ ok: true, sim_ts: nuevoSim, due, recordatorios: recs, cita_ts: Number(M.cita_ts) });
