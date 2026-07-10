@@ -221,6 +221,7 @@ function ofrecerVendedor(cd){
   citaPendiente = cd;
   // MATCH DIRECTO: el comprador confirmó lo que el dueño YA propuso → sin re-solicitud.
   if (cd.match_directo) {
+    if (cd.comprador_aviso) burbuja('seb', cd.comprador_aviso);
     sistema('🤝 MATCH DIRECTO — el comprador aceptó el horario del dueño. Arrastra el reloj para simular el tiempo.', false);
     if (document.body.classList.contains('dual')) {
       burbujaEn(vchat, 'seb', cd.vendedor_aviso || 'Listo, el comprador confirmó ✅');
@@ -273,7 +274,8 @@ async function enviarVend(){
       for (const s of (d.vendedor_msgs || [])) { burbujaEn(vchat, 'seb', s); await sleep(260); }
       if (d.accion === 'afirma') {
         sistemaEn(vchat, '🤝 MATCH — cita amarrada en ambos lados', false).classList.add('match-banner');
-        sistema('🤝 MATCH — el dueño confirmó. Arrastra el reloj de la línea del tiempo para simular el paso de las horas (cron).', false);
+        for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
+        sistema('🤝 MATCH — el dueño confirmó y al comprador le llegó el "ahí nos vemos". Arrastra el reloj para simular el tiempo (cron).', false);
         iniciarTimeline(d.match);
       } else if (d.accion === 'negativo') {
         sistemaEn(vchat, '❌ El dueño NO puede — Seb regresa con el comprador a reacomodar', true);

@@ -80,19 +80,19 @@ function planRecordatorios(match_ts, cita_ts, ctx) {
     const c = sh(cita_ts), m = sh(match_ts);
     const mismoDia = c.getUTCFullYear() === m.getUTCFullYear() && c.getUTCMonth() === m.getUTCMonth() && c.getUTCDate() === m.getUTCDate();
     const gap = cita_ts - match_ts;
+    // 📝 retro owner (2026-07-10): al VENDEDOR CERO mensajes de timing (esos los maneja
+    // él por ahora) — solo la solicitud inicial y esperar. Recordatorios = SOLO comprador.
     if (!mismoDia) {
         add('vispera', Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate() - 1, 20, 0) + MTY_OFF, 'comprador',
             `Qué tal ${ctx.nombre}, buenas noches. Te recuerdo tu cita de mañana a las ${ctx.hora} para el ${ctx.auto}. Seguimos en pie?`);
         const diaD = Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate(), 9, 30) + MTY_OFF;
         if (diaD < cita_ts - 75 * 60000) {
             add('dia_comprador', diaD, 'comprador', `Buen día ${ctx.nombre}. Hoy nos vemos a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
-            add('dia_vendedor', diaD + 120000, 'vendedor', `Qué tal ${ctx.dueno}, te recuerdo la cita de hoy a las ${ctx.hora} para tu ${ctx.auto}. Me confirmas que todo esté listo porfavor?`);
         }
         add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
     } else {
         if (gap > 2.5 * 3600000) {
             add('confirmacion_hoy', match_ts + Math.round(gap / 2), 'comprador', `Todo listo para hoy a las ${ctx.hora}, ${ctx.nombre}. Aquí ando pendiente 👍`);
-            add('dia_vendedor', match_ts + Math.round(gap / 2) + 120000, 'vendedor', `Qué tal ${ctx.dueno}, te recuerdo la cita de hoy a las ${ctx.hora} para tu ${ctx.auto}. Me confirmas que todo esté listo porfavor?`);
         }
         if (gap > 75 * 60000) add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
         else if (gap > 40 * 60000) add('ya_casi', match_ts + Math.round(gap / 2), 'comprador', `${ctx.nombre}, ya casi nos vemos — a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
@@ -353,11 +353,17 @@ module.exports = async function handler(req, res) {
                     const art = /^(hoy|manana|mañana|pasado)/i.test(cd.fecha || '') ? '' : 'el ';
                     const cuando = [art + (cd.fecha || ''), cd.hora ? 'a las ' + cd.hora : ''].filter(Boolean).join(' ').trim();
                     const dn = String(duenoNom || '').replace(/\s*-\s*$/, '').trim();   // limpia "Sebastian -"
+                    // 📝 retro owner: la solicitud SIEMPRE dice EL LUGAR del auto (su punto).
+                    let lugarCita = cd.lugar || null;
+                    if (!lugarCita && autoActivo) {
+                        try { const { datosPunto } = require('../lib/seb/continuacion.js'); const dpM = await datosPunto(autoActivo); lugarCita = dpM && dpM.dir ? dpM.dir : null; } catch (e) { }
+                    }
                     citaDueno = {
                         auto: autoNom,
                         dueno: dn || 'Vendedor',
                         cuando,
-                        mensaje: `Qué tal${dn ? ' ' + dn : ''}, tengo cita para ver tu ${autoNom} ${cuando}. Me confirmas que esté disponible porfavor?`
+                        lugar: lugarCita || null,
+                        mensaje: `Qué tal${dn ? ' ' + dn : ''}, tengo cita para ver tu ${autoNom} ${cuando}${lugarCita ? ' ahí en ' + lugarCita : ''}. Me confirmas que esté disponible porfavor?`
                     };
                     // Persistir la SOLICITUD para el lado vendedor (match + línea del tiempo).
                     // MATCH DIRECTO: si el comprador confirmó EXACTAMENTE lo que el dueño ya
@@ -376,6 +382,9 @@ module.exports = async function handler(req, res) {
                                 [cd.fecha || '', cd.hora || '', citaTs, matchTs, matchTs, JSON.stringify(recs), Date.now(), laneKey]);
                             citaDueno.match_directo = { fecha: cd.fecha, hora: cd.hora, auto: autoNom, dueno: P.dueno, cita_ts: citaTs, match_ts: matchTs, sim_ts: matchTs, recordatorios: recs };
                             citaDueno.vendedor_aviso = `Listo ${P.dueno}, el comprador confirmó — quedamos ${cuando} ✅`;
+                            // 📝 señal de match al comprador ("ahí nos vemos").
+                            citaDueno.comprador_aviso = `Ahí nos vemos ${cuando} 👍`;
+                            await guardarMsg(convId, 'out', citaDueno.comprador_aviso, 'text');
                         } else {
                             await run(`INSERT INTO sandbox_match (carril, estado, auto_id, auto_nombre, dueno, fecha, hora, cita_ts, match_ts, sim_ts, recordatorios, updated)
                                        VALUES (?,?,?,?,?,?,?,?,NULL,NULL,NULL,?)
@@ -450,9 +459,15 @@ module.exports = async function handler(req, res) {
                 const recs = planRecordatorios(matchTs, Number(M.cita_ts), ctx);
                 await run("UPDATE sandbox_match SET estado='match', match_ts=?, sim_ts=?, recordatorios=?, updated=? WHERE carril=?",
                     [matchTs, matchTs, JSON.stringify(recs), Date.now(), laneKey]);
+                // 📝 retro owner: al confirmarse el MATCH, al COMPRADOR le llega el
+                // "ahí nos vemos" — la señal de que hay match y arrancan sus recordatorios.
+                const artM = /^(hoy|manana|mañana|pasado)/i.test(String(M.fecha)) ? '' : 'el ';
+                const aviso = `Listo ${nombreComp}, quedó confirmado con el dueño — ahí nos vemos ${artM}${M.fecha} a las ${M.hora} 👍`;
+                await guardarMsg(convId, 'out', aviso, 'text');
                 return res.status(200).json({
                     ok: true, accion: 'afirma',
                     vendedor_msgs: [`Perfecto, muchas gracias ${M.dueno} 👍`, 'Quedamos en firme, ahí estaremos con el comprador'],
+                    comprador_msgs: [aviso],
                     match: { fecha: M.fecha, hora: M.hora, auto: M.auto_nombre, dueno: M.dueno, cita_ts: Number(M.cita_ts), match_ts: matchTs, sim_ts: matchTs, recordatorios: recs }
                 });
             }
