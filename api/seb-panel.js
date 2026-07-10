@@ -23,6 +23,16 @@ function similitud(a, b) {
     return Math.round((2 * inter / (ta.size + tb.size)) * 100) / 100;
 }
 
+// 🚩fyrachat#5: el borrador del CEREBRO sale EN RÁFAGA (burbujas cortas, estilo del
+// owner), no en un solo bloque. Se parte por SENTINEL y por líneas en blanco; las
+// tarjetas (multilínea con saltos simples) se conservan enteras.
+function partirRafaga(borrador) {
+    return String(borrador || '')
+        .split(/\|\|SEQ\|\||\n\s*\n/)
+        .map(x => x.trim())
+        .filter(Boolean);
+}
+
 async function telefonosDueno() {
     const rows = await query("SELECT DISTINCT dueno_telefono t FROM inventario_autos WHERE dueno_telefono IS NOT NULL");
     return new Set(rows.map(r => String(r.t).replace(/\D/g, '').slice(-10)).filter(x => x.length === 10));
@@ -378,7 +388,7 @@ module.exports = async function handler(req, res) {
             if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
                 try {
                     const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
-                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: [p.borrador], tipo: 'cerebro' });
+                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: partirRafaga(p.borrador), tipo: 'cerebro' });
                 } catch (e) { /* si el cerebro falla, cae al opener */ }
             }
 
@@ -394,7 +404,7 @@ module.exports = async function handler(req, res) {
             if (clasif.auto_id) {
                 try {
                     const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
-                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: [p.borrador], tipo: 'cerebro' });
+                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: partirRafaga(p.borrador), tipo: 'cerebro' });
                 } catch (e) { /* sin cerebro → no_aplica */ }
             }
             // FALLBACK UNIVERSAL (caso Sahara): es COMPRADOR pero no se pudo resolver QUÉ auto

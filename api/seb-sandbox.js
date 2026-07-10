@@ -362,7 +362,7 @@ module.exports = async function handler(req, res) {
             if (bursts === 0) {
                 etapa = 'OPENER';
                 if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
-                    try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: [p.borrador], tipo: 'cerebro' }; } catch (e) { }
+                    try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
                 }
                 if (!out) {
                     const op = await responderOpener({ texto: textoFamilia, nombre: NOMBRE_COMPRADOR, auto_id: clasif.auto_id, intencion: clasif.intencion_principal });
@@ -370,7 +370,7 @@ module.exports = async function handler(req, res) {
                 }
                 if (!out && clasif.escalar) out = { escala: true, motivo: 'vendedor / fuera de alcance' };
                 if (!out && clasif.auto_id) {
-                    try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: [p.borrador], tipo: 'cerebro' }; } catch (e) { }
+                    try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
                 }
                 if (!out) {
                     const intOk = ['info_inicial', 'disponibilidad', 'estado_auto', 'cotizar_credito', 'cita_ubicacion', 'precio_negociacion', 'fotos_videos', 'otro'].includes(clasif.intencion_principal);
