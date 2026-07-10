@@ -112,6 +112,7 @@ async function ensureMatchTable() {
         recordatorios TEXT, updated INTEGER)`);
     await run("ALTER TABLE sandbox_match ADD COLUMN prop_fecha TEXT").catch(() => {});
     await run("ALTER TABLE sandbox_match ADD COLUMN prop_hora TEXT").catch(() => {});
+    await run("ALTER TABLE sandbox_match ADD COLUMN avisos_vendedor TEXT").catch(() => {});
 }
 // ¿Misma hora/fecha? (para el MATCH DIRECTO: el comprador aceptó lo que el dueño propuso)
 function mismaHora(a, b) {
@@ -292,7 +293,11 @@ module.exports = async function handler(req, res) {
                     }
                     const cc = await clasificarCancelacion(texto, { fecha: MC.fecha, hora: MC.hora });
                     if (cc.cancela) {
-                        await run("UPDATE sandbox_match SET estado='cancelada', updated=? WHERE carril=?", [Date.now(), carril || 'owner']);
+                        const artC0 = /^(hoy|manana|mañana|pasado)/i.test(String(MC.fecha)) ? '' : 'el ';
+                        const avisoV = `Qué tal ${MC.dueno}, una disculpa — el comprador canceló la cita de ${artC0}${MC.fecha} a las ${MC.hora}. Yo te aviso si se reagenda 👍`;
+                        const avisosPrev = (() => { try { return JSON.parse(MC.avisos_vendedor || '[]'); } catch (e) { return []; } })();
+                        avisosPrev.push(avisoV);
+                        await run("UPDATE sandbox_match SET estado='cancelada', avisos_vendedor=?, updated=? WHERE carril=?", [JSON.stringify(avisosPrev), Date.now(), carril || 'owner']);
                         const segsCanc = [
                             'Va, sin tema — cita cancelada ❌',
                             'Cualquier cosa aquí ando para reagendarte cuando gustes 👍'
@@ -448,6 +453,9 @@ module.exports = async function handler(req, res) {
                                 [cd.fecha || '', cd.hora || '', citaTs, matchTs, matchTs, JSON.stringify(recs), Date.now(), laneKey]);
                             citaDueno.match_directo = { fecha: cd.fecha, hora: cd.hora, auto: autoNom, dueno: P.dueno, cita_ts: citaTs, match_ts: matchTs, sim_ts: matchTs, recordatorios: recs };
                             citaDueno.vendedor_aviso = `Listo ${P.dueno}, el comprador confirmó — quedamos ${cuando} ✅`;
+                            const avisosP = (() => { try { return JSON.parse(P.avisos_vendedor || '[]'); } catch (e) { return []; } })();
+                            avisosP.push(citaDueno.vendedor_aviso);
+                            await run("UPDATE sandbox_match SET avisos_vendedor=? WHERE carril=?", [JSON.stringify(avisosP), laneKey]);
                             // 📝 señal de match al comprador ("ahí nos vemos").
                             citaDueno.comprador_aviso = `Listo, el dueño particular confirmó ✅ Ahí nos vemos ${cuando} — te atendemos nosotros junto con el dueño 👍`;
                             await guardarMsg(convId, 'out', citaDueno.comprador_aviso, 'text');
@@ -612,7 +620,7 @@ module.exports = async function handler(req, res) {
             const rows = await query("SELECT * FROM sandbox_match WHERE carril=?", [carril || 'owner']);
             if (!rows.length) return res.status(200).json({ ok: true, match: null });
             const M = rows[0];
-            return res.status(200).json({ ok: true, match: { ...M, cita_ts: Number(M.cita_ts), match_ts: Number(M.match_ts || 0), sim_ts: Number(M.sim_ts || 0), recordatorios: JSON.parse(M.recordatorios || '[]') } });
+            return res.status(200).json({ ok: true, match: { ...M, cita_ts: Number(M.cita_ts), match_ts: Number(M.match_ts || 0), sim_ts: Number(M.sim_ts || 0), recordatorios: JSON.parse(M.recordatorios || '[]'), avisos_vendedor: (() => { try { return JSON.parse(M.avisos_vendedor || '[]'); } catch (e) { return []; } })() } });
         }
 
         // ══════════════ 📝 CAJITA DE RETRO (por sesión, texto libre del owner) ══════════════

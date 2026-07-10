@@ -249,9 +249,19 @@ function abrirVendedor(){
   document.getElementById('vrol').textContent = 'Tú eres: ' + (citaPendiente.dueno || 'Vendedor') + ' · dueño del ' + (citaPendiente.auto || 'auto');
   vchat.innerHTML = '';
   sistemaEn(vchat, 'Así se vería tu WhatsApp como vendedor. Seb (Fyradrive) te escribe:', true);
-  setTimeout(() => {
+  setTimeout(async () => {
     burbujaEn(vchat, 'seb', citaPendiente.mensaje);
     sistemaEn(vchat, 'Contesta como el dueño: confirma, di que no puedes, o propón otra hora — la IA interpreta tu respuesta.', true);
+    // 📝#9: avisos PERSISTIDOS (cancelaciones/confirmaciones que pasaron con el panel
+    // cerrado) + repintar el estado del match/línea del tiempo.
+    try {
+      const r = await fetch(API + '?action=match_estado'); const d = await r.json();
+      if (d.match) {
+        for (const a of (d.match.avisos_vendedor || [])) burbujaEn(vchat, 'seb', a);
+        if (d.match.estado === 'match') iniciarTimeline({ fecha: d.match.fecha, hora: d.match.hora, cita_ts: d.match.cita_ts, match_ts: d.match.match_ts, sim_ts: d.match.sim_ts, recordatorios: d.match.recordatorios });
+        if (d.match.estado === 'cancelada') sistemaEn(vchat, '❌ La última cita quedó CANCELADA', true);
+      }
+    } catch(e){}
     vtxt.focus();
   }, 350);
 }
