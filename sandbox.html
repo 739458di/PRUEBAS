@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>🧪 Sandbox · Seb</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100vh; height:100dvh; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,sans-serif; background:#0b141a; display:flex; overflow:hidden; }
+  /* PANELES */
+  .panel { display:flex; flex-direction:column; height:100vh; height:100dvh; min-width:0; flex:1; }
+  .panel.vend { border-left:3px solid #075e54; display:none; }
+  body.dual .panel.vend { display:flex; }
+  /* HEADER */
+  .top { padding:10px 14px; display:flex; align-items:center; gap:12px; flex-shrink:0; }
+  .top.comp { background:#1f2c33; }
+  .top.vsel { background:#0e3a30; }
+  .ava { width:40px; height:40px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:18px; flex-shrink:0; }
+  .ava.s { background:linear-gradient(135deg,#00a884,#075e54); }
+  .ava.v { background:linear-gradient(135deg,#f0a020,#b5730a); }
+  .who { flex:1; min-width:0; }
+  .who b { color:#e9edef; font-size:16px; display:block; }
+  .who span { color:#8696a0; font-size:12px; }
+  .btn-reset { background:#ea4335; color:#fff; border:none; border-radius:8px; padding:9px 16px; font-size:13px; font-weight:700; cursor:pointer; }
+  .btn-reset:active { transform:scale(.96); }
+  .btn-x { background:#2a3942; color:#e9edef; border:none; border-radius:8px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+  /* AD BAR */
+  .adbar { background:#111b21; padding:8px 14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #222d34; flex-shrink:0; }
+  .adbar label { color:#8696a0; font-size:12px; white-space:nowrap; }
+  .adbar select { flex:1; background:#1f2c33; color:#e9edef; border:1px solid #2a3942; border-radius:8px; padding:7px 10px; font-size:13px; max-width:100%; }
+  /* CHAT */
+  .chatbox { flex:1; overflow-y:auto; padding:14px 12px 8px; background:#0b141a url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" opacity="0.03"><circle cx="20" cy="20" r="1.5" fill="white"/><circle cx="60" cy="50" r="1.5" fill="white"/></svg>'); }
+  .row { display:flex; margin:3px 0; }
+  .row.yo { justify-content:flex-end; }
+  .b { max-width:80%; padding:7px 11px 8px; border-radius:10px; font-size:14.5px; line-height:1.35; color:#e9edef; white-space:pre-wrap; word-break:break-word; box-shadow:0 1px 1px rgba(0,0,0,.3); }
+  .yo .b { background:#005c4b; border-top-right-radius:2px; }
+  .seb .b { background:#1f2c33; border-top-left-radius:2px; }
+  .hora { font-size:10px; color:#ffffff66; text-align:right; margin-top:3px; }
+  .sys { display:flex; justify-content:center; margin:8px 0; }
+  .sys .b { background:#182229; color:#ffd279; font-size:12.5px; text-align:center; max-width:92%; border:1px solid #2a3942; }
+  .sys.gris .b { color:#8696a0; }
+  .sys .abrir { display:block; margin:8px auto 0; background:#00a884; color:#053; border:none; border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; }
+  .sys .abrir:active { transform:scale(.97); }
+  .chip { display:inline-block; background:#0e2b23; color:#00a884; font-size:10px; font-weight:700; letter-spacing:.5px; border-radius:20px; padding:2px 9px; margin:6px 0 2px; }
+  .flagb { background:none; border:none; cursor:pointer; font-size:12px; opacity:.4; padding:2px 4px; vertical-align:middle; }
+  .flagb:hover { opacity:1; }
+  .flagb.on { opacity:1; color:#ffd279; font-size:10.5px; font-weight:700; cursor:default; }
+  .fotos { display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; }
+  .fotos img { width:104px; height:104px; object-fit:cover; border-radius:8px; }
+  .pin { display:flex; align-items:center; gap:8px; background:#182229; border-radius:8px; padding:8px 10px; margin-top:4px; color:#e9edef; font-size:13px; }
+  .typing { color:#8696a0; font-size:12.5px; padding:4px 12px; font-style:italic; }
+  /* INPUT */
+  .foot { padding:8px 10px; display:flex; gap:8px; align-items:center; flex-shrink:0; }
+  .foot.comp { background:#1f2c33; }
+  .foot.vsel { background:#0e3a30; }
+  .foot input { flex:1; background:#2a3942; border:none; border-radius:22px; padding:12px 16px; color:#e9edef; font-size:15px; outline:none; }
+  .send { width:46px; height:46px; border-radius:50%; border:none; color:#fff; font-size:19px; cursor:pointer; flex-shrink:0; }
+  .send.comp { background:#00a884; }
+  .send.vsel { background:#f0a020; }
+  .send:disabled { opacity:.5; }
+  /* ═══ LÍNEA DEL TIEMPO (el cron de película) ═══ */
+  .tl { display:none; width:118px; flex:none; background:#0e1b21; border-left:1px solid #223; border-right:1px solid #223; flex-direction:column; align-items:center; padding:10px 4px; position:relative; }
+  body.timeline .tl { display:flex; }
+  .tl .tlt { color:#ffd279; font-size:10px; font-weight:700; text-align:center; letter-spacing:.5px; }
+  .tl .cita-lbl { color:#00e5a0; font-size:12px; font-weight:800; text-align:center; margin-top:6px; }
+  .tl .now-lbl { color:#8696a0; font-size:11px; text-align:center; margin-bottom:4px; }
+  .tl .track { flex:1; width:8px; background:#1f2c33; border-radius:6px; margin:8px 0; position:relative; cursor:pointer; }
+  .tl .fill { position:absolute; bottom:0; left:0; width:100%; background:linear-gradient(180deg,#00e5a0,#075e54); border-radius:6px; }
+  .tl .mark { position:absolute; left:-42px; width:100px; display:flex; align-items:center; gap:4px; transform:translateY(50%); }
+  .tl .mark .dot { width:12px; height:12px; border-radius:50%; background:#2a3942; border:2px solid #4a5962; margin-left:36px; flex:none; }
+  .tl .mark.on .dot { background:#00e5a0; border-color:#00e5a0; box-shadow:0 0 8px #00e5a088; }
+  .tl .mark span { font-size:8.5px; color:#8696a0; line-height:1.1; }
+  .tl .mark.on span { color:#00e5a0; font-weight:700; }
+  .tl .handle { position:absolute; left:50%; transform:translate(-50%,50%); width:30px; height:30px; border-radius:50%; background:#ffd279; color:#0b141a; display:flex; align-items:center; justify-content:center; font-size:14px; cursor:grab; box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:3; touch-action:none; }
+  .tl .handle:active { cursor:grabbing; }
+  .tl .sim-clock { background:#182229; border:1px solid #ffd27955; color:#ffd279; border-radius:8px; padding:5px 6px; font-size:11px; font-weight:700; text-align:center; min-width:104px; }
+  .tl .btn-next { background:#1f2c33; color:#e9edef; border:1px solid #2a3942; border-radius:8px; padding:6px 6px; font-size:10.5px; font-weight:700; cursor:pointer; margin-top:6px; width:104px; }
+  .tl .btn-next:active { transform:scale(.96); }
+  .rec-chip { display:inline-block; background:#2b2413; color:#ffd279; font-size:10px; font-weight:700; border-radius:20px; padding:2px 9px; margin:6px 0 2px; }
+  .sys .b.match-banner { background:linear-gradient(90deg,#0e2b23,#123a2e); border:1px solid #00a884; color:#00e5a0; font-weight:800; }
+</style>
+</head>
+<body>
+  <!-- ═══════ LADO COMPRADOR ═══════ -->
+  <div class="panel comp">
+    <div class="top comp">
+      <div class="ava s">S</div>
+      <div class="who"><b>Seb · Comprador</b><span id="estado">en línea</span></div>
+      <button class="btn-reset" onclick="reiniciar()">↺ Reiniciar</button>
+    </div>
+    <div class="adbar">
+      <label>📢 Vengo del anuncio de:</label>
+      <select id="anuncio"><option value="">(sin anuncio)</option></select>
+    </div>
+    <div id="chat" class="chatbox"></div>
+    <div class="foot comp">
+      <input id="txt" placeholder="Escribe como comprador…" autocomplete="off">
+      <button class="send comp" id="btnSend" onclick="enviar()">➤</button>
+    </div>
+  </div>
+
+  <!-- ═══════ LÍNEA DEL TIEMPO (aparece con el MATCH; arrastra el reloj = cron) ═══════ -->
+  <div class="tl" id="tl">
+    <div class="tlt">⏱ LÍNEA DEL TIEMPO</div>
+    <div class="cita-lbl" id="tlCita">—</div>
+    <div class="track" id="tlTrack">
+      <div class="fill" id="tlFill" style="height:0%"></div>
+      <div class="handle" id="tlHandle" style="bottom:0%">🕐</div>
+    </div>
+    <div class="now-lbl" id="tlMatch">—</div>
+    <div class="sim-clock" id="tlClock">—</div>
+    <button class="btn-next" onclick="siguienteEvento()">⏩ siguiente evento</button>
+  </div>
+
+  <!-- ═══════ LADO VENDEDOR (se abre al confirmar cita) ═══════ -->
+  <div class="panel vend">
+    <div class="top vsel">
+      <div class="ava v">S</div>
+      <div class="who"><b>Seb · Fyradrive</b><span id="vsub">le escribe al vendedor</span></div>
+      <button class="btn-x" onclick="cerrarVendedor()">✕ Cerrar</button>
+    </div>
+    <div class="adbar"><label id="vrol">Tú eres el vendedor</label></div>
+    <div id="vchat" class="chatbox"></div>
+    <div class="foot vsel">
+      <input id="vtxt" placeholder="Contesta como vendedor…" autocomplete="off">
+      <button class="send vsel" id="vbtn" onclick="enviarVend()">➤</button>
+    </div>
+  </div>
+
+<script>
+const API = 'https://fyrachat.vercel.app/api/seb-sandbox';
+const chat = document.getElementById('chat');
+const txt = document.getElementById('txt');
+const btn = document.getElementById('btnSend');
+const vchat = document.getElementById('vchat');
+const vtxt = document.getElementById('vtxt');
+let ocupado = false;
+
+const hora = () => new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function burbujaEn(box, lado, texto, extraHtml){
+  const row = document.createElement('div'); row.className = 'row ' + lado;
+  const b = document.createElement('div'); b.className = 'b';
+  if (texto) b.appendChild(document.createTextNode(texto));
+  if (extraHtml) { const d = document.createElement('div'); d.innerHTML = extraHtml; b.appendChild(d); }
+  const h = document.createElement('div'); h.className = 'hora'; h.textContent = hora(); b.appendChild(h);
+  row.appendChild(b); box.appendChild(row); box.scrollTop = box.scrollHeight;
+}
+const burbuja = (lado, texto, extra) => burbujaEn(chat, lado, texto, extra);
+function sistemaEn(box, texto, gris, botonHtml){
+  const row = document.createElement('div'); row.className = 'sys' + (gris ? ' gris' : '');
+  const b = document.createElement('div'); b.className = 'b'; b.textContent = texto;
+  if (botonHtml) { const w = document.createElement('div'); w.innerHTML = botonHtml; b.appendChild(w.firstChild); }
+  row.appendChild(b); box.appendChild(row); box.scrollTop = box.scrollHeight;
+  return b;
+}
+const sistema = (texto, gris) => sistemaEn(chat, texto, gris);
+function chipEtapa(t, turnoId){
+  const d = document.createElement('div');
+  d.innerHTML = '<span class="chip">' + t + '</span>' +
+    (turnoId ? '<button class="flagb" title="Marcar para training: esta respuesta está mal" onclick="marcar(' + turnoId + ', this)">🚩</button>' : '');
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+}
+async function marcar(id, btn){
+  if (btn.classList.contains('on')) return;
+  const nota = prompt('🚩 ¿Qué esperabas que contestara? (opcional — puedes dejarlo vacío)');
+  if (nota === null) return;
+  try {
+    await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'flag', turno_id:id, nota: nota || '' }) });
+    btn.classList.add('on'); btn.textContent = '🚩 marcado';
+  } catch(e){ alert('no se pudo marcar: ' + e.message); }
+}
+
+async function cargarAutos(){
+  try {
+    const r = await fetch(API + '?action=autos'); const d = await r.json();
+    const sel = document.getElementById('anuncio');
+    (d.autos || []).forEach(a => {
+      const o = document.createElement('option'); o.value = a.id;
+      o.textContent = a.nombre + ' — $' + Number(a.precio || 0).toLocaleString('es-MX');
+      sel.appendChild(o);
+    });
+  } catch(e){}
+}
+
+// ── CITA: al confirmar, se guarda el mensaje al vendedor y aparece el botón "abrir lado vendedor"
+let citaPendiente = null;
+function ofrecerVendedor(cd){
+  citaPendiente = cd;
+  apagarTimeline();   // nueva cita = nuevo ciclo (mata la línea del tiempo anterior)
+  const b = sistema('📅 CITA CONFIRMADA con el comprador — ' + (cd.cuando || ''), false);
+  if (document.body.classList.contains('dual')) {
+    // el panel del vendedor ya está abierto (reagenda) → le llega la nueva solicitud directo
+    sistemaEn(vchat, '📨 Nueva solicitud de Seb (reagenda):', true);
+    burbujaEn(vchat, 'seb', cd.mensaje);
+    return;
+  }
+  const btnv = document.createElement('button');
+  btnv.className = 'abrir'; btnv.textContent = '🧑‍🔧 Abrir lado vendedor (' + (cd.dueno || 'vendedor') + ')';
+  btnv.onclick = abrirVendedor;
+  b.appendChild(btnv);
+}
+function abrirVendedor(){
+  if (!citaPendiente) return;
+  document.body.classList.add('dual');
+  document.getElementById('vrol').textContent = 'Tú eres: ' + (citaPendiente.dueno || 'Vendedor') + ' · dueño del ' + (citaPendiente.auto || 'auto');
+  vchat.innerHTML = '';
+  sistemaEn(vchat, 'Así se vería tu WhatsApp como vendedor. Seb (Fyradrive) te escribe:', true);
+  setTimeout(() => {
+    burbujaEn(vchat, 'seb', citaPendiente.mensaje);
+    sistemaEn(vchat, 'Contesta como el dueño: confirma, di que no puedes, o propón otra hora — la IA interpreta tu respuesta.', true);
+    vtxt.focus();
+  }, 350);
+}
+function cerrarVendedor(){ document.body.classList.remove('dual'); txt.focus(); }
+
+// ══════════ LADO VENDEDOR: la IA interpreta (afirma | negativo | propone_hora) ══════════
+let vOcupado = false;
+async function enviarVend(){
+  const t = vtxt.value.trim(); if (!t || vOcupado) return;
+  vOcupado = true; document.getElementById('vbtn').disabled = true; vtxt.value = '';
+  burbujaEn(vchat, 'yo', t);
+  const typ = document.createElement('div'); typ.className = 'typing'; typ.textContent = 'Seb está escribiendo…';
+  vchat.appendChild(typ); vchat.scrollTop = vchat.scrollHeight;
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'vendedor_responde', texto: t }) });
+    const d = await r.json();
+    typ.remove();
+    if (!d.ok) { sistemaEn(vchat, '❌ ' + (d.error || 'error'), true); }
+    else {
+      for (const s of (d.vendedor_msgs || [])) { burbujaEn(vchat, 'seb', s); await sleep(260); }
+      if (d.accion === 'afirma') {
+        sistemaEn(vchat, '🤝 MATCH — cita amarrada en ambos lados', false).classList.add('match-banner');
+        sistema('🤝 MATCH — el dueño confirmó. Arrastra el reloj de la línea del tiempo para simular el paso de las horas (cron).', false);
+        iniciarTimeline(d.match);
+      } else if (d.accion === 'negativo') {
+        sistemaEn(vchat, '❌ El dueño NO puede — Seb regresa con el comprador a reacomodar', true);
+        for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
+        apagarTimeline();
+      } else if (d.accion === 'propone_hora') {
+        sistemaEn(vchat, '🔁 Propuso otro horario — Seb se lo lleva al comprador para dejarlo en firme', true);
+        for (const s of (d.comprador_msgs || [])) { burbuja('seb', s); await sleep(200); }
+        sistema('👆 El dueño propuso ' + (d.fecha || '') + ' a las ' + (d.hora || '') + ' — contesta como comprador ("va") para confirmar y re-solicitar al dueño.', true);
+      }
+    }
+  } catch(e){ typ.remove(); sistemaEn(vchat, '❌ red: ' + e.message, true); }
+  vOcupado = false; document.getElementById('vbtn').disabled = false; vtxt.focus();
+}
+
+// ══════════ LA LÍNEA DEL TIEMPO (cron de película: tú adelantas el reloj) ══════════
+let TL = null;   // { match_ts, cita_ts, sim_ts, recordatorios }
+const fmtSim = ts => new Date(ts - 6*3600000).toLocaleString('es-MX', { timeZone:'UTC', weekday:'short', hour:'2-digit', minute:'2-digit' });
+function iniciarTimeline(m){
+  TL = m;
+  document.body.classList.add('timeline');
+  document.getElementById('tlCita').textContent = '📅 ' + (m.fecha || '') + ' ' + (m.hora || '');
+  document.getElementById('tlMatch').textContent = 'match: ' + fmtSim(m.match_ts);
+  pintarTimeline();
+}
+function apagarTimeline(){ TL = null; document.body.classList.remove('timeline'); }
+function pintarTimeline(){
+  if (!TL) return;
+  const track = document.getElementById('tlTrack');
+  // limpiar marcas viejas
+  track.querySelectorAll('.mark').forEach(x => x.remove());
+  const span = Math.max(1, TL.cita_ts - TL.match_ts);
+  const pct = ts => Math.max(0, Math.min(100, (ts - TL.match_ts) / span * 100));
+  const NOM = { vispera:'víspera (noche antes)', dia_comprador:'día de la cita', dia_vendedor:'día · al vendedor', '1h_antes':'1 hora antes', confirmacion_hoy:'confirmación de hoy', ya_casi:'ya casi' };
+  for (const r of (TL.recordatorios || [])) {
+    const mk = document.createElement('div');
+    mk.className = 'mark' + (r.enviado ? ' on' : '');
+    mk.style.bottom = pct(r.ts) + '%';
+    mk.innerHTML = '<div class="dot"></div><span>' + (NOM[r.k] || r.k) + '</span>';
+    track.appendChild(mk);
+  }
+  const p = pct(TL.sim_ts);
+  document.getElementById('tlFill').style.height = p + '%';
+  document.getElementById('tlHandle').style.bottom = p + '%';
+  document.getElementById('tlClock').textContent = '🕐 ' + fmtSim(TL.sim_ts);
+}
+async function avanzarA(simTs){
+  if (!TL) return;
+  simTs = Math.max(TL.sim_ts, Math.min(simTs, TL.cita_ts));   // el cron solo avanza
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'tiempo', sim_ts: simTs }) });
+    const d = await r.json();
+    if (!d.ok) return;
+    TL.sim_ts = d.sim_ts; TL.recordatorios = d.recordatorios;
+    for (const rec of (d.due || [])) {
+      const box = rec.para === 'vendedor' ? vchat : chat;
+      const chip = document.createElement('div');
+      chip.innerHTML = '<span class="rec-chip">🔔 recordatorio · ' + fmtSim(rec.ts) + '</span>';
+      box.appendChild(chip);
+      burbujaEn(box, 'seb', rec.texto);
+      await sleep(220);
+    }
+    pintarTimeline();
+  } catch(e){}
+}
+function siguienteEvento(){
+  if (!TL) return;
+  const next = (TL.recordatorios || []).find(r => !r.enviado);
+  avanzarA(next ? next.ts + 60000 : TL.cita_ts);
+}
+// arrastre del reloj (mouse + touch)
+(function(){
+  const track = document.getElementById('tlTrack');
+  const handle = document.getElementById('tlHandle');
+  let drag = false;
+  const yATs = y => {
+    const r = track.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (r.bottom - y) / r.height));
+    return TL.match_ts + frac * (TL.cita_ts - TL.match_ts);
+  };
+  const move = e => { if (!drag || !TL) return; const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const ts = yATs(y); const span = TL.cita_ts - TL.match_ts;
+    const p = Math.max(0, Math.min(100, (ts - TL.match_ts) / span * 100));
+    handle.style.bottom = p + '%'; document.getElementById('tlFill').style.height = p + '%';
+    document.getElementById('tlClock').textContent = '🕐 ' + fmtSim(ts); handle._ts = ts; };
+  const up = () => { if (!drag) return; drag = false; if (handle._ts) avanzarA(handle._ts); };
+  handle.addEventListener('mousedown', () => drag = true);
+  handle.addEventListener('touchstart', () => drag = true, { passive:true });
+  window.addEventListener('mousemove', move);
+  window.addEventListener('touchmove', move, { passive:true });
+  window.addEventListener('mouseup', up);
+  window.addEventListener('touchend', up);
+  track.addEventListener('click', e => { if (TL) avanzarA(yATs(e.clientY)); });
+})();
+
+async function enviar(){
+  const t = txt.value.trim();
+  if (!t || ocupado) return;
+  ocupado = true; btn.disabled = true; txt.value = '';
+  burbuja('yo', t);
+  const typing = document.createElement('div'); typing.className = 'typing'; typing.textContent = 'Seb está escribiendo…';
+  chat.appendChild(typing); chat.scrollTop = chat.scrollHeight;
+  document.getElementById('estado').textContent = 'escribiendo…';
+  try {
+    const body = { action:'mensaje', texto: t };
+    const ad = document.getElementById('anuncio').value;
+    if (ad) body.auto_ad = Number(ad);
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    typing.remove();
+    if (!d.ok) { sistema('❌ error: ' + (d.error || r.status)); }
+    else {
+      chipEtapa(d.etapa + (d.intencion ? ' · ' + d.intencion : ''), d.turno_id);
+      if (d.escala && d.puente) {
+        for (const s of (d.segmentos || [d.puente])) { burbuja('seb', s); await sleep(260); }
+        sistema('🤝 …y en paralelo ESCALA al owner para: ' + (d.motivo || ''), true);
+      }
+      else if (d.escala) sistema('🔺 AQUÍ SEB ESCALARÍA CONTIGO (sin puente) — motivo: ' + (d.motivo || ''));
+      else if (d.silencio) sistema('😶 AQUÍ SEB SE QUEDARÍA CALLADO — ' + (d.motivo || ''), true);
+      else {
+        for (const s of (d.segmentos || [])) { burbuja('seb', s); await sleep(260); }
+        if (d.fotos && d.fotos.length) burbuja('seb', '', '<div class="fotos">' + d.fotos.map(u => '<img src="' + u + '">').join('') + '</div>');
+        if (d.pin) burbuja('seb', '', '<div class="pin">📍 ' + d.pin.nombre + ' <span style="color:#8696a0">(pin de ubicación)</span></div>');
+        if (d.cita_dueno) ofrecerVendedor(d.cita_dueno);
+      }
+    }
+  } catch(e){ typing.remove(); sistema('❌ red: ' + e.message); }
+  document.getElementById('estado').textContent = 'en línea';
+  ocupado = false; btn.disabled = false; txt.focus();
+}
+
+async function reiniciar(){
+  if (ocupado) return;
+  chat.innerHTML = ''; vchat.innerHTML = '';
+  citaPendiente = null; cerrarVendedor(); apagarTimeline();
+  sistema('↺ Conversación reiniciada — eres un comprador nuevo', true);
+  fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'reset' }) }).catch(()=>{});
+  txt.focus();
+}
+
+txt.addEventListener('keydown', e => { if (e.key === 'Enter') enviar(); });
+vtxt.addEventListener('keydown', e => { if (e.key === 'Enter') enviarVend(); });
+cargarAutos();
+sistema('🧪 Sandbox de Seb — escribe como comprador real. Mismo cerebro que WhatsApp. Al confirmar una cita se abre el lado vendedor.', true);
+txt.focus();
+</script>
+</body>
+</html>

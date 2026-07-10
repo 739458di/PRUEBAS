@@ -36,6 +36,116 @@ async function ensureConv() {
         (await query("SELECT id FROM conversaciones WHERE channel_thread_id=?", [THREAD]))[0].id;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// LADO VENDEDOR + MATCH + LÍNEA DEL TIEMPO (orden owner 2026-07-10):
+// el vendedor contesta la solicitud → IA interpreta (afirma|negativo|propone_hora)
+// → si afirma hay MATCH y se planean los RECORDATORIOS estratégicos (víspera,
+// día D, 1h antes — proporcionales si es el mismo día). El owner adelanta un
+// RELOJ SIMULADO (como cron de película) y los recordatorios van cayendo.
+// ══════════════════════════════════════════════════════════════════════
+const MTY_OFF = 6 * 3600000;                       // Monterrey = UTC-6
+const sh = ts => new Date(ts - MTY_OFF);           // reloj corrido (leer con getUTC*)
+const DIAS_SEM = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+function parseHora(hora) {
+    const m = String(hora || '').toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+    if (!m) return null;
+    let h = Number(m[1]); const min = Number(m[2] || 0); const suf = m[3];
+    if (suf === 'pm' && h < 12) h += 12;
+    else if (suf === 'am' && h === 12) h = 0;
+    else if (!suf && h >= 1 && h <= 6) h += 12;    // "a las 4" = 4pm (heurística de Seb)
+    return { h, min };
+}
+function resolverCitaTs(fecha, hora) {
+    const hm = parseHora(hora); if (!hm) return null;
+    const f = String(fecha || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const now = sh(Date.now());
+    let y = now.getUTCFullYear(), mo = now.getUTCMonth(), d = now.getUTCDate();
+    if (/pasado ?manana/.test(f)) d += 2;
+    else if (/manana/.test(f)) d += 1;
+    else if (/hoy|ahorita/.test(f)) { /* hoy */ }
+    else if (DIAS_SEM[f.replace(/^el /, '')] != null) {
+        const target = DIAS_SEM[f.replace(/^el /, '')];
+        let delta = (target - now.getUTCDay() + 7) % 7; if (delta === 0) delta = 7;
+        d += delta;
+    } else {
+        const mn = f.match(/el (\d{1,2})/);
+        if (mn) { const dd = Number(mn[1]); if (dd >= now.getUTCDate()) d = dd; else { mo += 1; d = dd; } }
+    }
+    return Date.UTC(y, mo, d, hm.h, hm.min) + MTY_OFF;
+}
+// El plan de recordatorios — proporcional (owner: "si es el mismo día, proporcional").
+function planRecordatorios(match_ts, cita_ts, ctx) {
+    const R = [];
+    const add = (k, ts, para, texto) => { if (ts > match_ts + 60000 && ts < cita_ts + 1) R.push({ k, ts, para, texto, enviado: 0 }); };
+    const c = sh(cita_ts), m = sh(match_ts);
+    const mismoDia = c.getUTCFullYear() === m.getUTCFullYear() && c.getUTCMonth() === m.getUTCMonth() && c.getUTCDate() === m.getUTCDate();
+    const gap = cita_ts - match_ts;
+    if (!mismoDia) {
+        add('vispera', Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate() - 1, 20, 0) + MTY_OFF, 'comprador',
+            `Qué tal ${ctx.nombre}, buenas noches. Te recuerdo tu cita de mañana a las ${ctx.hora} para el ${ctx.auto}. Seguimos en pie?`);
+        const diaD = Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate(), 9, 30) + MTY_OFF;
+        if (diaD < cita_ts - 75 * 60000) {
+            add('dia_comprador', diaD, 'comprador', `Buen día ${ctx.nombre}. Hoy nos vemos a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
+            add('dia_vendedor', diaD + 120000, 'vendedor', `Qué tal ${ctx.dueno}, te recuerdo la cita de hoy a las ${ctx.hora} para tu ${ctx.auto}. Me confirmas que todo esté listo porfavor?`);
+        }
+        add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+    } else {
+        if (gap > 2.5 * 3600000) {
+            add('confirmacion_hoy', match_ts + Math.round(gap / 2), 'comprador', `Todo listo para hoy a las ${ctx.hora}, ${ctx.nombre}. Aquí ando pendiente 👍`);
+            add('dia_vendedor', match_ts + Math.round(gap / 2) + 120000, 'vendedor', `Qué tal ${ctx.dueno}, te recuerdo la cita de hoy a las ${ctx.hora} para tu ${ctx.auto}. Me confirmas que todo esté listo porfavor?`);
+        }
+        if (gap > 75 * 60000) add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. Cualquier cosa me avisas, buen camino 👍`);
+        else if (gap > 40 * 60000) add('ya_casi', match_ts + Math.round(gap / 2), 'comprador', `${ctx.nombre}, ya casi nos vemos — a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
+    }
+    return R.sort((a, b) => a.ts - b.ts);
+}
+async function ensureMatchTable() {
+    await run(`CREATE TABLE IF NOT EXISTS sandbox_match (
+        carril TEXT PRIMARY KEY, estado TEXT, auto_id INTEGER, auto_nombre TEXT, dueno TEXT,
+        fecha TEXT, hora TEXT, cita_ts INTEGER, match_ts INTEGER, sim_ts INTEGER,
+        recordatorios TEXT, updated INTEGER)`);
+}
+// IA intérprete de la respuesta del VENDEDOR: afirma | negativo | propone_hora.
+async function clasificarVendedor(texto, cita) {
+    const fb = (() => {   // respaldo por regex si la IA falla
+        const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        if (/(no (puedo|voy|va|estoy|esta|estara|se va a poder)|ya se vendio|no disponible|no lo tengo|imposible|cancel)/.test(t)) return { accion: 'negativo' };
+        if (/(mejor|otro dia|otra hora|puedo (a las|el)|que sea (a las|el)|cambia|se puede (a las|el)|hasta las|despues de)/.test(t) || /a las \d/.test(t)) {
+            const mh = t.match(/a las (\d{1,2}(:\d{2})?\s?(am|pm)?)/);
+            const mf = t.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
+            return { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null };
+        }
+        if (/(^| )(si+|sii+|claro|va|vale|sale|perfecto|de acuerdo|confirmo|disponible|ahi (estare|estara)|esta bien|adelante|por supuesto|listo)/.test(t)) return { accion: 'afirma' };
+        return { accion: 'afirma' };
+    })();
+    const apiKey = process.env.CLAUDE_API_KEY;
+    if (!apiKey) return fb;
+    try {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({
+                model: 'claude-haiku-4-5', max_tokens: 150,
+                system: `Interpretas la respuesta de un VENDEDOR de auto a esta solicitud de cita: "${cita.fecha} a las ${cita.hora}". Clasifica en: "afirma" (está disponible/de acuerdo), "negativo" (no puede / auto no disponible / cancela), "propone_hora" (puede pero en OTRO momento — extrae la fecha y/u hora que propone, ej. "mejor a las 6" → hora "6pm"). Responde SOLO el JSON.`,
+                messages: [{ role: 'user', content: `VENDEDOR: "${texto}"` }],
+                output_config: { format: { type: 'json_schema', schema: {
+                    type: 'object',
+                    properties: {
+                        accion: { type: 'string', description: 'afirma | negativo | propone_hora' },
+                        fecha: { type: ['string', 'null'], description: 'fecha propuesta si propone_hora (hoy/mañana/sábado/el 15) o null' },
+                        hora: { type: ['string', 'null'], description: 'hora propuesta si propone_hora (ej 6pm, 17:00) o null' }
+                    }, required: ['accion', 'fecha', 'hora'], additionalProperties: false } } }
+            })
+        });
+        if (!r.ok) return fb;
+        const data = await r.json();
+        const tb = (data.content || []).find(b => b.type === 'text');
+        const out = JSON.parse(tb.text);
+        if (!['afirma', 'negativo', 'propone_hora'].includes(out.accion)) return fb;
+        return out;
+    } catch (e) { return fb; }
+}
+
 let seq = 0;
 async function guardarMsg(convId, direccion, texto, tipo) {
     const ts = Date.now() + (seq++ % 50);   // ts únicos y en orden dentro del request
@@ -84,6 +194,7 @@ module.exports = async function handler(req, res) {
             await run("DELETE FROM ad_por_telefono WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seguimientos_ghost WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seb_queue WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
+            await run("DELETE FROM sandbox_match WHERE carril=?", [carril || 'owner']).catch(() => {});
             return res.status(200).json({ ok: true, reset: true });
         }
 
@@ -226,6 +337,17 @@ module.exports = async function handler(req, res) {
                         cuando,
                         mensaje: `Qué tal${dn ? ' ' + dn : ''}, tengo cita para ver tu ${autoNom} ${cuando}. Me confirmas que esté disponible porfavor?`
                     };
+                    // Persistir la SOLICITUD para el lado vendedor (match + línea del tiempo).
+                    try {
+                        await ensureMatchTable();
+                        const citaTs = resolverCitaTs(cd.fecha, cd.hora);
+                        await run(`INSERT INTO sandbox_match (carril, estado, auto_id, auto_nombre, dueno, fecha, hora, cita_ts, match_ts, sim_ts, recordatorios, updated)
+                                   VALUES (?,?,?,?,?,?,?,?,NULL,NULL,NULL,?)
+                                   ON CONFLICT(carril) DO UPDATE SET estado='solicitud', auto_id=excluded.auto_id, auto_nombre=excluded.auto_nombre,
+                                     dueno=excluded.dueno, fecha=excluded.fecha, hora=excluded.hora, cita_ts=excluded.cita_ts,
+                                     match_ts=NULL, sim_ts=NULL, recordatorios=NULL, updated=excluded.updated`,
+                            [carril || 'owner', 'solicitud', autoActivo || null, autoNom, dn || 'Vendedor', cd.fecha || '', cd.hora || '', citaTs, Date.now()]);
+                    } catch (e) { console.error('[sandbox] match upsert:', e.message); }
                 }
             }
 
@@ -256,6 +378,85 @@ module.exports = async function handler(req, res) {
                 motivo: (out && out.motivo) || (!out ? 'ningún banco/cerebro aplicó — en WhatsApp Seb se queda callado' : null),
                 ruta, universo, turno_id: turnoId
             });
+        }
+
+        // ══════════════ LADO VENDEDOR: su respuesta a la solicitud ══════════════
+        // IA interpreta → afirma (MATCH) | negativo | propone_hora (rebota al comprador).
+        if (action === 'vendedor_responde' && req.method === 'POST') {
+            const texto = String(req.body.texto || '').trim();
+            if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
+            await ensureMatchTable();
+            const laneKey = carril || 'owner';
+            const rows = await query("SELECT * FROM sandbox_match WHERE carril=?", [laneKey]);
+            if (!rows.length || !rows[0].cita_ts) return res.status(200).json({ ok: false, error: 'no hay solicitud de cita activa' });
+            const M = rows[0];
+            const cls = await clasificarVendedor(texto, { fecha: M.fecha, hora: M.hora });
+            const convId = await ensureConv();
+            const nombreComp = NOMBRE_COMPRADOR;
+
+            if (cls.accion === 'afirma') {
+                const matchTs = Date.now();
+                const ctx = { nombre: nombreComp, dueno: M.dueno, auto: M.auto_nombre, hora: M.hora };
+                const recs = planRecordatorios(matchTs, Number(M.cita_ts), ctx);
+                await run("UPDATE sandbox_match SET estado='match', match_ts=?, sim_ts=?, recordatorios=?, updated=? WHERE carril=?",
+                    [matchTs, matchTs, JSON.stringify(recs), Date.now(), laneKey]);
+                return res.status(200).json({
+                    ok: true, accion: 'afirma',
+                    vendedor_msgs: [`Perfecto, muchas gracias ${M.dueno} 👍`, 'Quedamos en firme, ahí estaremos con el comprador'],
+                    match: { fecha: M.fecha, hora: M.hora, auto: M.auto_nombre, dueno: M.dueno, cita_ts: Number(M.cita_ts), match_ts: matchTs, sim_ts: matchTs, recordatorios: recs }
+                });
+            }
+            if (cls.accion === 'negativo') {
+                await run("UPDATE sandbox_match SET estado='rechazo', updated=? WHERE carril=?", [Date.now(), laneKey]);
+                const compMsgs = [
+                    `Oye ${nombreComp}, una disculpa — me avisa el dueño que se complicó para ${M.fecha} a las ${M.hora}`,
+                    'Te acomodo otro día u horario? Tú dime y lo dejamos en firme'
+                ];
+                for (const s of compMsgs) await guardarMsg(convId, 'out', s, 'text');
+                return res.status(200).json({ ok: true, accion: 'negativo', vendedor_msgs: ['Entendido, gracias por avisarme 👍'], comprador_msgs: compMsgs });
+            }
+            // propone_hora → rebote al comprador con "te agendo en firme ... va?" (el cerrador
+            // existente toma el "si" del comprador y re-dispara la solicitud al vendedor).
+            const nf = cls.fecha || M.fecha, nh = cls.hora || M.hora;
+            await run("UPDATE sandbox_match SET estado='contrapropuesta', updated=? WHERE carril=?", [Date.now(), laneKey]);
+            const artN = /^(hoy|manana|mañana|pasado)/i.test(String(nf)) ? '' : 'el ';
+            const compMsgs = [
+                `Oye ${nombreComp}, me comenta el dueño que se le acomoda mejor ${artN}${nf} a las ${nh}`,
+                `Te agendo en firme: ${String(nf).charAt(0).toUpperCase()}${String(nf).slice(1)} a las ${nh}, va?`
+            ];
+            for (const s of compMsgs) await guardarMsg(convId, 'out', s, 'text');
+            return res.status(200).json({ ok: true, accion: 'propone_hora', fecha: nf, hora: nh, vendedor_msgs: ['Va, déjame lo checo con el comprador y aquí te confirmo 👍'], comprador_msgs: compMsgs });
+        }
+
+        // ══════════════ RELOJ SIMULADO: el owner adelanta el tiempo (cron de película) ══════════════
+        if (action === 'tiempo' && req.method === 'POST') {
+            await ensureMatchTable();
+            const laneKey = carril || 'owner';
+            const simTs = Number(req.body.sim_ts || 0);
+            const rows = await query("SELECT * FROM sandbox_match WHERE carril=? AND estado='match'", [laneKey]);
+            if (!rows.length) return res.status(200).json({ ok: false, error: 'no hay match activo' });
+            const M = rows[0];
+            const recs = JSON.parse(M.recordatorios || '[]');
+            const due = [];
+            const convId = await ensureConv();
+            for (const r of recs) {
+                if (!r.enviado && r.ts <= simTs) {
+                    r.enviado = 1; due.push(r);
+                    if (r.para === 'comprador') await guardarMsg(convId, 'out', r.texto, 'text');
+                }
+            }
+            const nuevoSim = Math.max(simTs, Number(M.sim_ts || 0));
+            await run("UPDATE sandbox_match SET sim_ts=?, recordatorios=?, updated=? WHERE carril=?", [nuevoSim, JSON.stringify(recs), Date.now(), laneKey]);
+            return res.status(200).json({ ok: true, sim_ts: nuevoSim, due, recordatorios: recs, cita_ts: Number(M.cita_ts) });
+        }
+
+        // ── Estado del match (para re-pintar la línea del tiempo al recargar) ──
+        if (action === 'match_estado') {
+            await ensureMatchTable();
+            const rows = await query("SELECT * FROM sandbox_match WHERE carril=?", [carril || 'owner']);
+            if (!rows.length) return res.status(200).json({ ok: true, match: null });
+            const M = rows[0];
+            return res.status(200).json({ ok: true, match: { ...M, cita_ts: Number(M.cita_ts), match_ts: Number(M.match_ts || 0), sim_ts: Number(M.sim_ts || 0), recordatorios: JSON.parse(M.recordatorios || '[]') } });
         }
 
         // ── 🚩 FLAG: el owner marca un turno como "esto está mal" (con nota opcional) ──
