@@ -74,6 +74,11 @@
   .bub.anim{animation:bubIn .18s ease-out}
   @keyframes bubIn{from{opacity:0;transform:translateY(7px) scale(.98)}to{opacity:1;transform:none}}
   .bub .t{float:right;font-size:10.5px;color:rgba(40,60,95,.42);margin:7px -3px -1px 9px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* 🚩 banderita de training: aparece al pasar el mouse sobre la burbuja */
+  .bub .flagb{position:absolute;top:-8px;right:-6px;background:#fff;border:1px solid #e3e8f2;border-radius:50%;width:22px;height:22px;font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:opacity .15s;box-shadow:0 1px 4px rgba(20,40,80,.15);padding:0}
+  .bub{position:relative}
+  .bub:hover .flagb{opacity:.85}
+  .bub .flagb.on{opacity:1;background:#fff3d6;border-color:#e8b93f;cursor:default}
   .bub .src{font-size:9.5px;color:rgba(40,60,95,.4);margin-right:6px}
   .daysep{align-self:center;background:rgba(255,255,255,.9);color:#9aa3b5;font-size:11.5px;font-weight:600;padding:4px 13px;border-radius:10px;margin:14px 0 6px;letter-spacing:.4px;box-shadow:0 1px 3px rgba(120,150,200,.12)}
   .tick{display:inline-block;vertical-align:-1px}
@@ -251,6 +256,20 @@ const normTs = t => { t = Number(t) || 0; return t > 1e12 ? Math.floor(t / 1000)
 const hashT = s => { let h = 0; s = String(s || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
 // clave única de burbuja: por FOLIO (estable) si viene; si no, cae a contenido+hora.
 const claveMsg = m => m.msg_id ? ('f:' + m.msg_id) : (m.direccion + '|' + normTs(m.timestamp) + '|' + hashT(m.mensaje));
+// 🚩 marcar un mensaje REAL para training ("procesa el training" lo lee de fyrachat_flags)
+async function flagMsg(e, btn){
+  e.stopPropagation(); e.preventDefault();
+  if (btn.classList.contains('on') || !TEL) return;
+  const nota = prompt('🚩 ¿Qué está mal / qué esperabas? (opcional)');
+  if (nota === null) return;
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'flag_msg', telefono: TEL, texto: decodeURIComponent(btn.dataset.txt||''), direccion: btn.dataset.dir||'', nota: nota||'' }) });
+    const d = await r.json();
+    if (d.ok) { btn.classList.add('on'); btn.textContent = '🚩'; btn.title = 'marcado para training'; }
+    else alert('no se pudo marcar: ' + (d.error||''));
+  } catch(err){ alert('red: ' + err.message); }
+}
 const CHECK = '<span class="tick read"><svg viewBox="0 0 18 12"><path d="M1 6.2l3 3.1L8.6 3" fill="none" stroke="#2f6df0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.3L12.6 3" fill="none" stroke="#2f6df0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 function burbujaHTML(m, prevDir){
   const lado = m.direccion==='in'?'in':'out';
@@ -272,7 +291,8 @@ function burbujaHTML(m, prevDir){
   } else {
     cont = esc(m.mensaje);
   }
-  return '<div class="'+cls+media+'" data-k="'+claveMsg(m)+'" data-d="'+lado+'"'+sel+'>'+cont+
+  const flagBtn = '<button class="flagb" title="🚩 marcar para training" data-dir="'+lado+'" data-txt="'+encodeURIComponent(m.mensaje||'')+'" onclick="flagMsg(event,this)">🚩</button>';
+  return '<div class="'+cls+media+'" data-k="'+claveMsg(m)+'" data-d="'+lado+'"'+sel+'>'+flagBtn+cont+
          '<span class="t">'+src+hora(m.timestamp)+(lado==='out'?' '+CHECK:'')+'</span></div>';
 }
 // Etiqueta de día para los separadores

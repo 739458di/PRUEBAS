@@ -97,6 +97,42 @@ module.exports = async function handler(req, res) {
     try {
         const action = (req.query && req.query.action) || (req.body && req.body.action) || '';
 
+        // ══════════ 🚩 BANDERITAS EN FYRACHAT (training sobre mensajes REALES) ══════════
+        // El owner marca cualquier burbuja → queda en fyrachat_flags con el contexto de la
+        // conversación; "procesa el training" las lee junto con las del sandbox y la retro.
+        if (action === 'flag_msg' && req.method === 'POST') {
+            const tel = String(req.body.telefono || '').trim();
+            const texto = String(req.body.texto || '').slice(0, 1500);
+            if (!tel || !texto) return res.status(400).json({ ok: false, error: 'telefono y texto requeridos' });
+            await run(`CREATE TABLE IF NOT EXISTS fyrachat_flags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, telefono TEXT, nombre TEXT,
+                direccion TEXT, texto TEXT, nota TEXT, contexto TEXT, procesado INTEGER DEFAULT 0)`);
+            let nombre = null, ctx = [];
+            try {
+                const cRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + tel]);
+                if (cRow.length) {
+                    nombre = cRow[0].nombre || null;
+                    const ms = await query("SELECT direccion, texto FROM mensajes WHERE conversacion_id=? ORDER BY ts DESC, id DESC LIMIT 12", [cRow[0].id]);
+                    ctx = ms.reverse().map(m => ({ d: m.direccion, t: String(m.texto || '').slice(0, 200) }));
+                }
+            } catch (e) { }
+            const ins = await run("INSERT INTO fyrachat_flags (ts, telefono, nombre, direccion, texto, nota, contexto) VALUES (?,?,?,?,?,?,?)",
+                [Date.now(), tel, nombre, String(req.body.direccion || ''), texto, String(req.body.nota || '').slice(0, 500), JSON.stringify(ctx)]);
+            return res.status(200).json({ ok: true, id: Number(ins.lastInsertRowid) || null });
+        }
+        if (action === 'flags_msgs') {
+            await run(`CREATE TABLE IF NOT EXISTS fyrachat_flags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, telefono TEXT, nombre TEXT,
+                direccion TEXT, texto TEXT, nota TEXT, contexto TEXT, procesado INTEGER DEFAULT 0)`).catch(() => {});
+            const fl = await query("SELECT * FROM fyrachat_flags WHERE procesado=0 ORDER BY id ASC").catch(() => []);
+            return res.status(200).json({ ok: true, flags: fl });
+        }
+        if (action === 'flags_msgs_done' && req.method === 'POST') {
+            const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map(Number).filter(n => n > 0);
+            if (ids.length) await run("UPDATE fyrachat_flags SET procesado=1 WHERE id IN (" + ids.join(',') + ")");
+            return res.status(200).json({ ok: true, n: ids.length });
+        }
+
         // ============ LISTA DE CHATS (solo compradores) ============
         // FASE 3 — lee de la LIBRETA NUEVA (conversaciones), ordenada por la HORA REAL
         // del último mensaje (ult_msg_ts). Orden correcto y sin duplicados.
