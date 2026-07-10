@@ -520,6 +520,22 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
+        // ══════════════ ⇄ HABLAR COMO SEB EN EL PANEL DEL VENDEDOR ══════════════
+        // Se persiste en avisos_vendedor (repinta al reabrir el panel), sin correr la IA.
+        if (action === 'vendedor_out' && req.method === 'POST') {
+            const texto = String(req.body.texto || '').trim();
+            if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
+            await ensureMatchTable();
+            const laneKey = carril || 'owner';
+            const rows = await query("SELECT avisos_vendedor FROM sandbox_match WHERE carril=?", [laneKey]);
+            if (rows.length) {
+                const arr = (() => { try { return JSON.parse(rows[0].avisos_vendedor || '[]'); } catch (e) { return []; } })();
+                arr.push(texto);
+                await run("UPDATE sandbox_match SET avisos_vendedor=?, updated=? WHERE carril=?", [JSON.stringify(arr), Date.now(), laneKey]);
+            }
+            return res.status(200).json({ ok: true });
+        }
+
         // ══════════════ LADO VENDEDOR: su respuesta a la solicitud ══════════════
         // IA interpreta → afirma (MATCH) | negativo | propone_hora (rebota al comprador).
         if (action === 'vendedor_responde' && req.method === 'POST') {

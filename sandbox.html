@@ -137,6 +137,7 @@
     <div class="top vsel">
       <div class="ava v">S</div>
       <div class="who"><b>Seb · Fyradrive</b><span id="vsub">le escribe al vendedor</span></div>
+      <button class="btn-rol" id="btnRolV" onclick="toggleRolV()" title="cambiar quién escribe (human-in-the-loop)">⇄ escribes: VENDEDOR</button>
       <button class="btn-x" onclick="cerrarVendedor()">✕ Cerrar</button>
     </div>
     <div class="adbar"><label id="vrol">Tú eres el vendedor</label></div>
@@ -270,10 +271,26 @@ function abrirVendedor(){
 }
 function cerrarVendedor(){ document.body.classList.remove('dual'); txt.focus(); }
 
+// ══════════ ⇄ HABLAR COMO SEB en el panel del vendedor ══════════
+let ROL_V = 'vendedor';
+function toggleRolV(){
+  ROL_V = ROL_V === 'vendedor' ? 'seb' : 'vendedor';
+  const b = document.getElementById('btnRolV');
+  b.textContent = '⇄ escribes: ' + (ROL_V === 'seb' ? 'SEB (tú)' : 'VENDEDOR');
+  b.classList.toggle('seb', ROL_V === 'seb');
+  vtxt.placeholder = ROL_V === 'seb' ? 'Escribe como SEB al vendedor (manual, sin IA)…' : 'Contesta como vendedor…';
+  vtxt.focus();
+}
 // ══════════ LADO VENDEDOR: la IA interpreta (afirma | negativo | propone_hora) ══════════
 let vOcupado = false;
 async function enviarVend(){
   const t = vtxt.value.trim(); if (!t || vOcupado) return;
+  if (ROL_V === 'seb') {
+    vtxt.value = '';
+    burbujaEn(vchat, 'seb', t);
+    fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'vendedor_out', texto: t }) }).catch(()=>{});
+    vtxt.focus(); return;
+  }
   vOcupado = true; document.getElementById('vbtn').disabled = true; vtxt.value = '';
   burbujaEn(vchat, 'yo', t);
   const typ = document.createElement('div'); typ.className = 'typing'; typ.textContent = 'Seb está escribiendo…';
