@@ -18,6 +18,9 @@ const { pensar } = require('../lib/seb/loop.js');
 const { responder: responderOpener, necesitaCerebro, nombreReal, saludoHora } = require('../lib/seb/opener.js');
 const { responderCont } = require('../lib/seb/continuacion.js');
 const { responderEtapa3 } = require('../lib/seb/etapa3.js');
+// ══ PARIDAD (orden owner): el cerebro de citas/match/recordatorios es UNO SOLO —
+// lib/seb/citas-vivas.js — compartido tal cual entre este sandbox y WhatsApp REAL.
+const { parseHora, resolverCitaTs, mismaHora, mismaFecha, planRecordatorios, clasificarVendedor, clasificarCancelacion } = require('../lib/seb/citas-vivas.js');
 
 // CARRILES: el panel del owner usa …000; las verificaciones automáticas de Claude
 // usan …001 (carril 'pruebas') para JAMÁS pisar/resetear la conversación del owner.
@@ -46,69 +49,6 @@ async function ensureConv() {
 const MTY_OFF = 6 * 3600000;                       // Monterrey = UTC-6
 const sh = ts => new Date(ts - MTY_OFF);           // reloj corrido (leer con getUTC*)
 const DIAS_SEM = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
-function parseHora(hora) {
-    const m = String(hora || '').toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
-    if (!m) return null;
-    let h = Number(m[1]); const min = Number(m[2] || 0); const suf = m[3];
-    if (suf === 'pm' && h < 12) h += 12;
-    else if (suf === 'am' && h === 12) h = 0;
-    else if (!suf && h >= 1 && h <= 6) h += 12;    // "a las 4" = 4pm (heurística de Seb)
-    return { h, min };
-}
-function resolverCitaTs(fecha, hora) {
-    const hm = parseHora(hora); if (!hm) return null;
-    const f = String(fecha || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const now = sh(Date.now());
-    let y = now.getUTCFullYear(), mo = now.getUTCMonth(), d = now.getUTCDate();
-    if (/pasado ?manana/.test(f)) d += 2;
-    else if (/manana/.test(f)) d += 1;
-    else if (/hoy|ahorita/.test(f)) { /* hoy */ }
-    else if (DIAS_SEM[f.replace(/^el /, '')] != null) {
-        const target = DIAS_SEM[f.replace(/^el /, '')];
-        let delta = (target - now.getUTCDay() + 7) % 7; if (delta === 0) delta = 7;
-        d += delta;
-    } else {
-        const mn = f.match(/el (\d{1,2})/);
-        if (mn) { const dd = Number(mn[1]); if (dd >= now.getUTCDate()) d = dd; else { mo += 1; d = dd; } }
-    }
-    return Date.UTC(y, mo, d, hm.h, hm.min) + MTY_OFF;
-}
-// El plan de recordatorios — proporcional (owner: "si es el mismo día, proporcional").
-function planRecordatorios(match_ts, cita_ts, ctx) {
-    const R = [];
-    const add = (k, ts, para, texto) => { if (ts > match_ts + 60000 && ts < cita_ts + 1) R.push({ k, ts, para, texto, enviado: 0 }); };
-    const c = sh(cita_ts), m = sh(match_ts);
-    const mismoDia = c.getUTCFullYear() === m.getUTCFullYear() && c.getUTCMonth() === m.getUTCMonth() && c.getUTCDate() === m.getUTCDate();
-    const gap = cita_ts - match_ts;
-    // 📝 retro owner (2026-07-10): al VENDEDOR CERO mensajes de timing (esos los maneja
-    // él por ahora) — solo la solicitud inicial y esperar. Recordatorios = SOLO comprador.
-    if (!mismoDia) {
-        add('vispera', Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate() - 1, 20, 0) + MTY_OFF, 'comprador',
-            `Qué tal ${ctx.nombre}, buenas noches. Te recuerdo tu cita de mañana a las ${ctx.hora} para el ${ctx.auto}. Seguimos en pie?`);
-        const diaD = Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate(), 9, 30) + MTY_OFF;
-        if (diaD < cita_ts - 75 * 60000) {
-            add('dia_comprador', diaD, 'comprador', `Buen día ${ctx.nombre}. Hoy nos vemos a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
-            // 📝#12: al VENDEDOR el día de la cita — que NO haga movimiento hasta que el
-            // comprador nos ACREDITE que ya va en camino (anti-plantada).
-            add('dia_vendedor_espera', diaD + 120000, 'vendedor', `Qué tal ${ctx.dueno}, hoy es la cita de tu ${ctx.auto} a las ${ctx.hora}. De favor no hagas movimiento todavía — yo te aviso en cuanto el comprador me acredite que ya va en camino 👍`);
-        }
-        add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. De favor, me avisas en cuanto vayas en camino? Así ya te estamos esperando listos 👍`);
-        // 📝#6 (owner: "un recordatorio más, estratégico"): AVISO DE SALIDA a los 30 min
-        // — el anti-no-show del playbook de Cita Segura ("pide aviso de salida").
-        add('en_camino', cita_ts - 1800000, 'comprador', `${ctx.nombre}, ya casi es la hora — vienes en camino? Aquí te esperamos 👍`);
-    } else {
-        if (gap > 2.5 * 3600000) {
-            add('confirmacion_hoy', match_ts + Math.round(gap / 2), 'comprador', `Todo listo para hoy a las ${ctx.hora}, ${ctx.nombre}. Aquí ando pendiente 👍`);
-            add('dia_vendedor_espera', match_ts + Math.round(gap / 2) + 120000, 'vendedor', `Qué tal ${ctx.dueno}, hoy es la cita de tu ${ctx.auto} a las ${ctx.hora}. De favor no hagas movimiento todavía — yo te aviso en cuanto el comprador me acredite que ya va en camino 👍`);
-        }
-        if (gap > 75 * 60000) {
-            add('1h_antes', cita_ts - 3600000, 'comprador', `${ctx.nombre}, te esperamos en una hora para ver el ${ctx.auto}. De favor, me avisas en cuanto vayas en camino? Así ya te estamos esperando listos 👍`);
-            add('en_camino', cita_ts - 1800000, 'comprador', `${ctx.nombre}, ya casi es la hora — vienes en camino? Aquí te esperamos 👍`);
-        }
-        else if (gap > 40 * 60000) add('ya_casi', match_ts + Math.round(gap / 2), 'comprador', `${ctx.nombre}, ya casi nos vemos — a las ${ctx.hora} para el ${ctx.auto}. Aquí ando pendiente 👍`);
-    }
-    return R.sort((a, b) => a.ts - b.ts);
-}
 async function ensureMatchTable() {
     await run(`CREATE TABLE IF NOT EXISTS sandbox_match (
         carril TEXT PRIMARY KEY, estado TEXT, auto_id INTEGER, auto_nombre TEXT, dueno TEXT,
@@ -118,94 +58,6 @@ async function ensureMatchTable() {
     await run("ALTER TABLE sandbox_match ADD COLUMN prop_hora TEXT").catch(() => {});
     await run("ALTER TABLE sandbox_match ADD COLUMN avisos_vendedor TEXT").catch(() => {});
 }
-// ¿Misma hora/fecha? (para el MATCH DIRECTO: el comprador aceptó lo que el dueño propuso)
-function mismaHora(a, b) {
-    const pa = parseHora(a), pb = parseHora(b);
-    return !!(pa && pb && pa.h === pb.h && pa.min === pb.min);
-}
-function mismaFecha(a, b) {
-    const n = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^el /, '').trim();
-    return n(a) === n(b) && n(a) !== '';
-}
-// IA intérprete de la respuesta del VENDEDOR:
-//   afirma | negativo (auto NO disponible/se vendió/cancela) |
-//   propone_hora (da alternativa CONCRETA) | no_puede_hora (no puede a esa hora
-//   pero NO propone otra → Seb le PIDE el horario ahí mismo — mecánica del owner).
-async function clasificarVendedor(texto, cita) {
-    const fb = (() => {   // respaldo por regex si la IA falla
-        const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        const mh = t.match(/a las (\d{1,2}(:\d{2})?\s?(am|pm)?)/);
-        const mf = t.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
-        if (/(ya se vendio|se vendio|no disponible|ya no (esta|lo tengo)|no lo tengo|lo aparte|cancel|ya no quiero)/.test(t)) return { accion: 'negativo', fecha: null, hora: null };
-        if (/(mejor|otro dia|otra hora|puedo (a las|el)|que sea (a las|el)|cambia|se puede (a las|el)|hasta las|despues de)/.test(t) && (mh || mf)) {
-            return { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null };
-        }
-        if (/(no (puedo|voy|va|estoy|estare|alcanzo|me queda|se va a poder)|imposible|complicado|dificil)/.test(t)) {
-            return (mh || mf) ? { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null } : { accion: 'no_puede_hora', fecha: null, hora: null };
-        }
-        if (mh || mf) return { accion: 'propone_hora', fecha: mf ? mf[1] : null, hora: mh ? mh[1] : null };
-        return { accion: 'afirma', fecha: null, hora: null };
-    })();
-    const apiKey = process.env.CLAUDE_API_KEY;
-    if (!apiKey) return fb;
-    try {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5', max_tokens: 150,
-                system: `Interpretas la respuesta de un VENDEDOR de auto a esta solicitud de cita: "${cita.fecha} a las ${cita.hora}". Clasifica en:
-- "afirma": está disponible / de acuerdo con esa cita.
-- "negativo": el AUTO ya no está disponible (se vendió, lo apartó, cancela todo).
-- "propone_hora": puede pero en OTRO momento y da la alternativa CONCRETA (extrae fecha y/u hora, ej. "mejor a las 6" → hora "6pm").
-- "no_puede_hora": NO puede a esa hora/día pero NO dice cuál sí le queda (ej. "a esa hora no puedo").
-Responde SOLO el JSON.`,
-                messages: [{ role: 'user', content: `VENDEDOR: "${texto}"` }],
-                output_config: { format: { type: 'json_schema', schema: {
-                    type: 'object',
-                    properties: {
-                        accion: { type: 'string', description: 'afirma | negativo | propone_hora | no_puede_hora' },
-                        fecha: { type: ['string', 'null'], description: 'fecha propuesta si propone_hora (hoy/mañana/sábado/el 15) o null' },
-                        hora: { type: ['string', 'null'], description: 'hora propuesta si propone_hora (ej 6pm, 17:00) o null' }
-                    }, required: ['accion', 'fecha', 'hora'], additionalProperties: false } } }
-            })
-        });
-        if (!r.ok) return fb;
-        const data = await r.json();
-        const tb = (data.content || []).find(b => b.type === 'text');
-        const out = JSON.parse(tb.text);
-        if (!['afirma', 'negativo', 'propone_hora', 'no_puede_hora'].includes(out.accion)) return fb;
-        return out;
-    } catch (e) { return fb; }
-}
-
-// 📝#7: ¿el COMPRADOR está CANCELANDO / avisando que no asiste? (solo con match activo).
-// IA interpreta; respaldo por regex. Si propone OTRA hora clara, NO es cancelación
-// (eso lo toma el cerrador y se re-coordina).
-async function clasificarCancelacion(texto, cita) {
-    const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const proponeOtra = /(mejor (a las|el)|puedo (a las|el)|que sea (a las|el)|cambiamos? a|a las \d{1,2}\b)/.test(t);
-    const fb = !proponeOtra && /(no (voy a |vamos a )?(poder|podre|podremos)|no (llego|logro llegar|alcanzo|alcanzare)|no (voy|ire|asistire|vamos)\b|cancel(a|o|ar|amos|emos|ada)|ya no (voy|quiero|puedo|podre|me interesa)|se me complico|me surgio (algo|un|una)|no me va a dar tiempo|imposible (llegar|ir)|no va a poderse|no se va a poder)/.test(t);
-    const apiKey = process.env.CLAUDE_API_KEY;
-    if (!apiKey) return { cancela: fb };
-    try {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5', max_tokens: 60,
-                system: `El COMPRADOR tiene una cita CONFIRMADA (${cita.fecha} a las ${cita.hora}) para ver un auto. Interpreta su mensaje: cancela=true SOLO si está cancelando o avisando que NO asistirá (sin proponer una nueva hora concreta). Si propone otra hora/día concreto, o es cualquier otra cosa (pregunta, confirmación, "ya voy"), cancela=false. Responde SOLO el JSON.`,
-                messages: [{ role: 'user', content: `COMPRADOR: "${texto}"` }],
-                output_config: { format: { type: 'json_schema', schema: { type: 'object', properties: { cancela: { type: 'boolean' } }, required: ['cancela'], additionalProperties: false } } }
-            })
-        });
-        if (!r.ok) return { cancela: fb };
-        const data = await r.json();
-        const tb = (data.content || []).find(b => b.type === 'text');
-        return { cancela: JSON.parse(tb.text).cancela === true };
-    } catch (e) { return { cancela: fb }; }
-}
-
 let seq = 0;
 async function guardarMsg(convId, direccion, texto, tipo) {
     const ts = Date.now() + (seq++ % 50);   // ts únicos y en orden dentro del request

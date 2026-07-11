@@ -13,6 +13,10 @@ const { entender } = require('../lib/seb/clasificador.js');
 const { pensar } = require('../lib/seb/loop.js');
 const { responder: responderOpener, SENTINEL, necesitaCerebro } = require('../lib/seb/opener.js');
 const { responderCont } = require('../lib/seb/continuacion.js');
+// ══ CITAS VIVAS (WhatsApp REAL) — el MISMO cerebro del sandbox (lib/seb/citas-vivas.js):
+// dueño responde → IA interpreta → match/contrapropuesta; comprador en match →
+// cancelación/en-camino; señal manual del owner; recordatorios via cron.
+const citasVivas = require('../lib/seb/citas-vivas.js');
 
 // Similitud simple por tokens (1 = idéntico, 0 = nada en común)
 function similitud(a, b) {
@@ -293,7 +297,23 @@ module.exports = async function handler(req, res) {
             if (!tel) return res.status(400).json({ ok: false, error: 'telefono requerido' });
             // Dueño/vendedor por teléfono → nunca autopilot.
             const duenos = await telefonosDueno();
-            if (duenos.has(tel.replace(/\D/g, '').slice(-10))) return res.status(200).json({ ok: false, motivo: 'dueno' });
+            if (duenos.has(tel.replace(/\D/g, '').slice(-10))) {
+                // ══ LADO VENDEDOR REAL: si este dueño tiene una SOLICITUD DE CITA viva,
+                // su respuesta entra a la máquina del match (idéntica al sandbox).
+                try {
+                    const convD = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+                    let ultimoD = '';
+                    if (convD.length) {
+                        const mD = await query("SELECT texto FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY ts DESC, id DESC LIMIT 1", [convD[0].id]);
+                        ultimoD = mD.length ? String(mD[0].texto || '') : '';
+                    }
+                    if (ultimoD) {
+                        const segsD = await citasVivas.manejarMensajeDueno(tel, ultimoD);
+                        if (segsD && segsD.length) return res.status(200).json({ ok: true, modo: 'vendedor_match', tipo: 'cita_vendedor', segmentos: segsD });
+                    }
+                } catch (e) { console.error('[citas-vivas] dueno:', e.message); }
+                return res.status(200).json({ ok: false, motivo: 'dueno' });
+            }
 
             const convRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
             const convId = convRow.length ? convRow[0].id : null;
@@ -311,6 +331,14 @@ module.exports = async function handler(req, res) {
             }
             const entrantes = mensajes.filter(m => m.direccion === 'in');
             if (!entrantes.length) return res.status(200).json({ ok: false, motivo: 'sin_entrantes' });
+            // ══ COMPRADOR CON MATCH VIVO (WhatsApp real): cancelación / "ya voy en camino"
+            // se interpretan ANTES del pipeline (idéntico al sandbox).
+            try {
+                const ultimoIn = entrantes[entrantes.length - 1].mensaje || '';
+                const segsM = await citasVivas.manejarMensajeComprador(tel, ultimoIn);
+                if (segsM && segsM.length) return res.status(200).json({ ok: true, modo: 'cita_match', tipo: 'cita_comprador', segmentos: segsM });
+            } catch (e) { console.error('[citas-vivas] comprador:', e.message); }
+
             // 🚩fyrachat#2: si en la ventana reciente hay un MENSAJE NO DESCIFRADO (Baileys),
             // el bot NO sabe qué no vio → JAMÁS el fallback genérico: escala al owner.
             const ventanaIn = entrantes.slice(-4).map(m => m.mensaje).join(' ');
@@ -367,6 +395,11 @@ module.exports = async function handler(req, res) {
                 }
                 if (e3 && e3.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
                 if (e3 && e3.segmentos && e3.segmentos.length) {
+                    // MATCH DIRECTO real: si esta confirmación empata con la CONTRAPROPUESTA
+                    // viva del dueño → match sin re-preguntarle (se le avisa "confirmó ✅").
+                    if (e3.cita_confirmada && e3.cita_datos) {
+                        try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora); } catch (e) { }
+                    }
                     return res.status(200).json({ ok: true, modo: 'etapa3', tipo: 'e3_' + (e3.universo || ''), segmentos: e3.segmentos, ubicacion_auto_id: e3.ubicacion_auto_id || null, pin_primero: !!e3.pin_primero, pin_after_index: (e3.pin_after_index != null ? e3.pin_after_index : (e3.ubicacion_auto_id ? 0 : null)), fotos: e3.fotos || null, fotos_after_index: (e3.fotos_after_index != null ? e3.fotos_after_index : 0) });
                 }
                 // responderEtapa3 = null → LONG-TAIL / no es claro → ESCALA al owner (jamás Sonnet suelto).
@@ -752,6 +785,10 @@ module.exports = async function handler(req, res) {
         if (action === 'manual_directo' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             const texto = String(req.body.texto || '').trim();
+            // ══ SEÑAL MANUAL (human-in-the-loop real): el owner escribe "cita confirmada"
+            // (le confirmaron por teléfono) o "cita cancelada" en el chat del DUEÑO →
+            // ejecuta el match/cancelación de verdad (confianza al comprador, recordatorios).
+            try { citasVivas.senalManual(tel, texto).catch(() => {}); } catch (e) { }
             // consume_qid: en una SECUENCIA del banco, el PRIMER mensaje "consume" la
             // sugerencia encolada (marca enviado + avanza estado), sin re-enviar nada.
             const consumeQid = Number(req.body.consume_qid || 0) || null;
