@@ -503,7 +503,17 @@ async function checkVersion(){
     const r = await fetch('/sandbox.html', { method:'HEAD', cache:'no-store' });
     const e = r.headers.get('etag');
     if (!ETAG0) { ETAG0 = e; return; }
-    if (e && e !== ETAG0) { sistema('🔄 Hay una versión NUEVA del sandbox — recarga con ⌘R para traértela', false); ETAG0 = e; }
+    if (e && e !== ETAG0) {
+      ETAG0 = e;
+      // barra FIJA imposible de ignorar (una pestaña con JS viejo = señales que no pintan)
+      if (!document.getElementById('verBar')) {
+        const bar = document.createElement('div');
+        bar.id = 'verBar';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99;background:#b45309;color:#fff;font-weight:800;font-size:14px;padding:10px 14px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 2px 12px rgba(0,0,0,.5)';
+        bar.innerHTML = '🔄 Hay una versión NUEVA del sandbox — esta pestaña corre código viejo <button onclick="location.reload()" style="background:#fff;color:#b45309;border:none;border-radius:8px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer">Recargar ahora</button>';
+        document.body.appendChild(bar);
+      }
+    }
   } catch(e){}
 }
 setInterval(checkVersion, 4*60*1000); checkVersion();
