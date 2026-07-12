@@ -17,6 +17,15 @@ const { responderCont } = require('../lib/seb/continuacion.js');
 // dueño responde → IA interpreta → match/contrapropuesta; comprador en match →
 // cancelación/en-camino; señal manual del owner; recordatorios via cron.
 const citasVivas = require('../lib/seb/citas-vivas.js');
+// 🚩fyrachat#7: al confirmarse una cita, la fecha/hora del CERRADOR quedan como
+// CANÓNICAS (deterministas, sin IA) — el cita-extractor las usa tal cual.
+async function regCanonica(tel, r) {
+    try {
+        if (r && r.cita_confirmada && r.cita_datos) {
+            await citasVivas.registrarCitaCanonica({ telefono: tel, fecha: r.cita_datos.fecha, hora: r.cita_datos.hora, lugar: r.cita_datos.lugar || null });
+        }
+    } catch (e) { console.error('[canonica]', e.message); }
+}
 
 // Similitud simple por tokens (1 = idéntico, 0 = nada en común)
 function similitud(a, b) {
@@ -369,6 +378,10 @@ module.exports = async function handler(req, res) {
                 }
                 if (cont && cont.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
                 if (cont && cont.segmentos && cont.segmentos.length) {
+                    if (cont.cita_confirmada && cont.cita_datos) {
+                        await regCanonica(tel, cont);
+                        try { await citasVivas.intentarMatchDirecto(tel, cont.cita_datos.fecha, cont.cita_datos.hora); } catch (e) { }
+                    }
                     return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero, pin_after_index: (cont.pin_after_index != null ? cont.pin_after_index : null), fotos: cont.fotos || null, fotos_after_index: (cont.fotos_after_index != null ? cont.fotos_after_index : null) });
                 }
                 // Nada aplicó → fuera de la lista blanca → lo ves tú (antes: silencio mudo).
@@ -398,6 +411,7 @@ module.exports = async function handler(req, res) {
                     // MATCH DIRECTO real: si esta confirmación empata con la CONTRAPROPUESTA
                     // viva del dueño → match sin re-preguntarle (se le avisa "confirmó ✅").
                     if (e3.cita_confirmada && e3.cita_datos) {
+                        await regCanonica(tel, e3);
                         try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora); } catch (e) { }
                     }
                     return res.status(200).json({ ok: true, modo: 'etapa3', tipo: 'e3_' + (e3.universo || ''), segmentos: e3.segmentos, ubicacion_auto_id: e3.ubicacion_auto_id || null, pin_primero: !!e3.pin_primero, pin_after_index: (e3.pin_after_index != null ? e3.pin_after_index : (e3.ubicacion_auto_id ? 0 : null)), fotos: e3.fotos || null, fotos_after_index: (e3.fotos_after_index != null ? e3.fotos_after_index : 0) });
@@ -584,6 +598,7 @@ module.exports = async function handler(req, res) {
                     const followup = conv.mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || lastMsg;
                     const { responderEtapa3 } = require('../lib/seb/etapa3.js');
                     const e3 = await responderEtapa3({ texto: followup, auto_id: clasif.auto_id || estado.auto_id_activo || null, conv_id: convId, clasif });
+                    if (e3 && e3.cita_confirmada && e3.cita_datos) await regCanonica(tel, e3);
                     if (e3 && e3.escalar) {
                         // ESCALA CON PUENTE: se PROPONE el puente como borrador (el comprador no
                         // se queda colgado) y se avisa que además escala al owner para lo que sigue.
@@ -619,6 +634,7 @@ module.exports = async function handler(req, res) {
                     if (bursts3 >= 2) {
                         const { responderEtapa3 } = require('../lib/seb/etapa3.js');
                         const e3 = await responderEtapa3({ texto: objMsg.mensaje, auto_id: clasif.auto_id || estado.auto_id_activo || null, conv_id: convId, clasif });
+                    if (e3 && e3.cita_confirmada && e3.cita_datos) await regCanonica(tel, e3);
                         if (e3 && e3.escalar) {
                             return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'etapa 3: ' + e3.motivo });
                         }
