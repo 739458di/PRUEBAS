@@ -333,8 +333,8 @@ module.exports = async function handler(req, res) {
             const resetTsOA = Number(resetsOA[tel] || 0);
             let mensajes = [];
             if (convId) {
-                const mr = await query("SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
-                let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts) }));
+                const mr = await query("SELECT direccion, texto, ts, ai_generated FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0 }));
                 if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
                 mensajes = rows;
             }
@@ -347,6 +347,26 @@ module.exports = async function handler(req, res) {
                 const segsM = await citasVivas.manejarMensajeComprador(tel, ultimoIn);
                 if (segsM && segsM.length) return res.status(200).json({ ok: true, modo: 'cita_match', tipo: 'cita_comprador', segmentos: segsM });
             } catch (e) { console.error('[citas-vivas] comprador:', e.message); }
+
+            // ══ CANDADO STANDBY (🚩fyrachat#8, caso Gustavo 2026-07-12): si TU último mensaje
+            // MANUAL (ai_generated=0, escrito por ti desde el teléfono o FyraChat) es un
+            // "espera/te confirmo", el bot NO toca este chat — ni propone horas ni cierra
+            // citas — hasta que TÚ vuelvas a escribir a mano. Acusa recibo UNA sola vez;
+            // todo lo que llegue del comprador mientras tanto se te escala.
+            try {
+                const { esStandby, ACUSE_STANDBY } = require('../lib/seb/doctrina.js');
+                const manualesSb = mensajes.filter(m => m.direccion === 'out' && !m.ai);
+                const ultManualSb = manualesSb.length ? manualesSb[manualesSb.length - 1] : null;
+                if (ultManualSb && esStandby(ultManualSb.mensaje) && (Date.now() - Number(ultManualSb.ts)) < 7 * 86400000) {
+                    const idxSb = mensajes.lastIndexOf(ultManualSb);
+                    const acuseYa = mensajes.slice(idxSb + 1).some(m => m.direccion === 'out' && m.ai);
+                    const nomSb = (convRow.length && convRow[0].nombre) || null;
+                    const motivoSb = 'STANDBY 🔒 — tú quedaste de confirmar ("' + String(ultManualSb.mensaje).slice(0, 50) + '"): el bot no toca este chat hasta que escribas tú';
+                    const ultInSb = entrantes[entrantes.length - 1].mensaje;
+                    if (!acuseYa) return res.status(200).json({ ok: true, modo: 'standby', tipo: 'standby', segmentos: [ACUSE_STANDBY], escalar_owner: true, escala_motivo: motivoSb, escala_nombre: nomSb, escala_ultimo: ultInSb });
+                    return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: motivoSb, escala_nombre: nomSb, escala_ultimo: ultInSb });
+                }
+            } catch (e) { console.error('[standby]', e.message); }
 
             // 🚩fyrachat#2: si en la ventana reciente hay un MENSAJE NO DESCIFRADO (Baileys),
             // el bot NO sabe qué no vio → JAMÁS el fallback genérico: escala al owner.

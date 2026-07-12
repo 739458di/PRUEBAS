@@ -59,12 +59,12 @@ async function ensureMatchTable() {
     await run("ALTER TABLE sandbox_match ADD COLUMN avisos_vendedor TEXT").catch(() => {});
 }
 let seq = 0;
-async function guardarMsg(convId, direccion, texto, tipo) {
+async function guardarMsg(convId, direccion, texto, tipo, manual) {
     const ts = Date.now() + (seq++ % 50);   // ts únicos y en orden dentro del request
     await run(
         "INSERT INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         [convId, 'sbx_' + ts + '_' + Math.random().toString(36).slice(2, 6), ts, direccion,
-         direccion === 'out' ? 'SRS010904' : NOMBRE_COMPRADOR, texto, tipo || 'text', direccion === 'out' ? 1 : 0, ts]);
+         direccion === 'out' ? 'SRS010904' : NOMBRE_COMPRADOR, texto, tipo || 'text', direccion === 'out' ? (manual ? 0 : 1) : 0, ts]);
     await run("UPDATE conversaciones SET ult_texto=?, ult_dir=?, ult_msg_ts=? WHERE id=?",
         [String(texto).slice(0, 120), direccion, ts, convId]);
     // FIDELIDAD: el cerebro (Sonnet/expediente) lee el historial de wa_messages —
@@ -176,8 +176,8 @@ module.exports = async function handler(req, res) {
             } catch (e) { console.error('[sandbox] cancelacion:', e.message); }
 
             // Estado de la conversación (idéntico a opener_auto)
-            const mr = await query("SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
-            const mensajes = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts) }));
+            const mr = await query("SELECT direccion, texto, ts, ai_generated FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+            const mensajes = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0 }));
             let bursts = 0, prevDir = null, lastOutIdx = -1;
             mensajes.forEach((m, i) => { if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });
             const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
@@ -196,7 +196,26 @@ module.exports = async function handler(req, res) {
                 : mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in' && m.ts > corteEscala).map(m => m.mensaje).join(' ');
             const mensajeCerebro = adCtx ? '[DESC: ' + adCtx + ']\n' + textoFamilia : textoFamilia;
 
-            const clasif = await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
+            // ══ CANDADO STANDBY (🚩fyrachat#8, caso Gustavo — IDÉNTICO a producción): si el
+            // último mensaje que el owner escribió COMO SEB (⇄, ai=0) es un "espera/te
+            // confirmo", el bot se congela: acusa recibo una vez y escala todo lo demás.
+            let outStandby = null;
+            try {
+                const { esStandby, ACUSE_STANDBY } = require('../lib/seb/doctrina.js');
+                const manualesSb = mensajes.filter(m => m.direccion === 'out' && !m.ai);
+                const ultManualSb = manualesSb.length ? manualesSb[manualesSb.length - 1] : null;
+                if (ultManualSb && esStandby(ultManualSb.mensaje)) {
+                    const idxSb = mensajes.lastIndexOf(ultManualSb);
+                    const acuseYa = mensajes.slice(idxSb + 1).some(m => m.direccion === 'out' && m.ai);
+                    outStandby = {
+                        escala: true,
+                        motivo: 'STANDBY 🔒 — tú quedaste de confirmar ("' + String(ultManualSb.mensaje).slice(0, 50) + '"): el bot no toca este chat hasta que escribas tú',
+                        puente: acuseYa ? null : ACUSE_STANDBY
+                    };
+                }
+            } catch (e) { console.error('[sandbox standby]', e.message); }
+
+            const clasif = outStandby ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
 
             // AUTO ACTIVO con memoria (fidelidad con producción): si este mensaje no
             // menciona el auto, se usa el último resuelto (wa_conversations.auto_id_activo).
@@ -211,7 +230,11 @@ module.exports = async function handler(req, res) {
 
             let out = null; let etapa = ''; let ruta = ''; let universo = '';
 
-            if (bursts === 0) {
+            if (outStandby) {
+                etapa = 'STANDBY';
+                out = outStandby;
+                ruta = out.puente ? 'escala_puente' : 'escala';
+            } else if (bursts === 0) {
                 etapa = 'OPENER';
                 if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
                     try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
@@ -368,7 +391,7 @@ module.exports = async function handler(req, res) {
             const texto = String(req.body.texto || '').trim();
             if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
             const convId = await ensureConv();
-            await guardarMsg(convId, 'out', texto, 'text');
+            await guardarMsg(convId, 'out', texto, 'text', true);
             return res.status(200).json({ ok: true });
         }
 
