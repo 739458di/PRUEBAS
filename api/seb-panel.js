@@ -383,16 +383,16 @@ module.exports = async function handler(req, res) {
             try { const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]); if (adRow[0]) adCtx = adRow[0].ad_context; } catch (e) { /* sin anuncio */ }
             const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
 
-            // ══ POSESIÓN POR ACTIVIDAD (orden owner 2026-07-13 — casos Gustavo 7:44pm y
-            // David Castillo): UN mensaje manual tuyo (ai=0) = el chat es TUYO por 24h.
-            // El bot baja a MODO HERRAMIENTA: solo cotizar / fotos / ubicación+horarios /
-            // ficha — tal cual, sin maquillaje y sin gancho (herramientaPura). Todo lo
-            // demás: SILENCIO TOTAL (el chat vive en tu WhatsApp — ya lo estás viendo).
+            // ══ POSESIÓN = CONTROL TUYO EN ETAPA 3 (human in the loop, 2026-07-13):
+            // el bot es piloto normal en opener/continuación/etapa 3 HASTA que tú tomas
+            // CONTROL (pregunta/promesa tuya, entrada sin nada que rescatar, o ping-pong).
+            // Un RESCATE (dato pelón a una escalada) NO toma posesión. En control el bot
+            // es puro DADOR: cotizar/fotos/ubicación+horarios/ficha secos, sin gancho;
+            // el CIERRE es tuyo ("cita confirmada + día + hora + auto + precio" — el cron
+            // lo interpreta determinista y ejecuta la máquina); lo demás = SILENCIO.
             try {
-                const { herramientaPura } = require('../lib/seb/doctrina.js');
-                const manualesPos = mensajes.filter(m => m.direccion === 'out' && !m.ai);
-                const ultManualPos = manualesPos.length ? manualesPos[manualesPos.length - 1] : null;
-                if (ultManualPos && (Date.now() - Number(ultManualPos.ts)) < 24 * 3600000) {
+                const { herramientaPura, posesionOwner } = require('../lib/seb/doctrina.js');
+                if (bursts >= 2 && posesionOwner(mensajes)) {
                     const followupP = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || entrantes[entrantes.length - 1].mensaje;
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + followupP : followupP;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });

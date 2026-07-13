@@ -219,10 +219,9 @@ module.exports = async function handler(req, res) {
             // hace <24h → el bot baja a MODO HERRAMIENTA (cotizar/fotos/ubicación/ficha,
             // sin gancho); lo demás = silencio.
             let posesionSb = false;
-            if (!outStandby) {
-                const manualesPos = mensajes.filter(m => m.direccion === 'out' && !m.ai);
-                const ultManualPos = manualesPos.length ? manualesPos[manualesPos.length - 1] : null;
-                posesionSb = !!(ultManualPos && (Date.now() - Number(ultManualPos.ts)) < 24 * 3600000);
+            if (!outStandby && bursts >= 2) {
+                const { posesionOwner } = require('../lib/seb/doctrina.js');
+                posesionSb = !!posesionOwner(mensajes);
             }
 
             const clasif = outStandby ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
@@ -409,6 +408,36 @@ module.exports = async function handler(req, res) {
             if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
             const convId = await ensureConv();
             await guardarMsg(convId, 'out', texto, 'text', true);
+            // ══ CIERRE DEL OWNER (human in the loop): "cita confirmada + día + hora" escrito
+            // POR TI como Seb → se interpreta determinista y se simula la máquina (solicitud
+            // al dueño + match pendiente), idéntico al cierre del bot.
+            try {
+                const { parseCierreOwner } = require('../lib/seb/citas-vivas.js');
+                const cierre = parseCierreOwner(texto);
+                if (cierre) {
+                    let autoActivoMO = null;
+                    try { const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [SANDBOX_TEL]); if (wc[0] && wc[0].auto_id_activo) autoActivoMO = Number(wc[0].auto_id_activo); } catch (e) { }
+                    let autoNom = 'tu auto', duenoNom = '';
+                    if (autoActivoMO) {
+                        const a = await query("SELECT marca, modelo, anio, dueno_nombre FROM inventario_autos WHERE id=?", [autoActivoMO]).catch(() => []);
+                        if (a.length) { autoNom = [a[0].marca, a[0].modelo, a[0].anio].filter(Boolean).join(' '); duenoNom = a[0].dueno_nombre || ''; }
+                    }
+                    const dn = String(duenoNom || '').replace(/\s*-\s*$/, '').trim();
+                    const art = /^(hoy|manana|mañana|pasado)/i.test(cierre.fecha || '') ? '' : 'el ';
+                    const cuando = [art + cierre.fecha, 'a las ' + cierre.hora].join(' ').trim();
+                    await ensureMatchTable();
+                    const laneKey = carril || 'owner';
+                    await run("DELETE FROM sandbox_match WHERE carril=?", [laneKey]).catch(() => { });
+                    await run(`INSERT INTO sandbox_match (carril, estado, auto_id, auto_nombre, dueno, fecha, hora, cita_ts, match_ts, sim_ts, recordatorios, updated)
+                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+                        [laneKey, 'solicitud', autoActivoMO, autoNom, dn || 'Vendedor', cierre.fecha, cierre.hora, cierre.cita_ts, null, Date.now(), null, Date.now()]);
+                    return res.status(200).json({
+                        ok: true,
+                        cita_owner: true,
+                        citaDueno: { auto: autoNom, dueno: dn || 'Vendedor', cuando, lugar: null, mensaje: `Qué tal${dn ? ' ' + dn : ''}, tengo cita para ver tu ${autoNom} ${cuando}. Me confirmas que esté disponible porfavor?` }
+                    });
+                }
+            } catch (e) { console.error('[sandbox cierre owner]', e.message); }
             return res.status(200).json({ ok: true });
         }
 
