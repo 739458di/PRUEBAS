@@ -19,6 +19,15 @@ const { responderCont } = require('../lib/seb/continuacion.js');
 const citasVivas = require('../lib/seb/citas-vivas.js');
 // 🚩fyrachat#7: al confirmarse una cita, la fecha/hora del CERRADOR quedan como
 // CANÓNICAS (deterministas, sin IA) — el cita-extractor las usa tal cual.
+// ══ BITÁCORA DE ESCALADAS (opción A del owner, 2026-07-13): las escaladas de
+// CRITERIO abren la puerta a que su primer manual tome posesión (ver doctrina).
+async function logEscala(tel, motivo) {
+    try {
+        await run("CREATE TABLE IF NOT EXISTS escalas_log (id INTEGER PRIMARY KEY AUTOINCREMENT, telefono TEXT, motivo TEXT, ts INTEGER)");
+        await run("INSERT INTO escalas_log (telefono, motivo, ts) VALUES (?,?,?)", [String(tel), String(motivo || ''), Date.now()]);
+    } catch (e) { }
+}
+
 async function regCanonica(tel, r) {
     try {
         if (r && r.cita_confirmada && r.cita_datos) {
@@ -395,7 +404,9 @@ module.exports = async function handler(req, res) {
             // lo interpreta determinista y ejecuta la máquina); lo demás = SILENCIO.
             try {
                 const { herramientaPura, posesionOwner } = require('../lib/seb/doctrina.js');
-                if (bursts >= 2 && posesionOwner(mensajes)) {
+                let escalasPos = [];
+                try { escalasPos = (await query("SELECT motivo, ts FROM escalas_log WHERE telefono=? AND ts > ?", [tel, Date.now() - 24 * 3600000])).map(e => ({ motivo: e.motivo, ts: Number(e.ts) })); } catch (e) { }
+                if (bursts >= 2 && posesionOwner(mensajes, escalasPos)) {
                     const followupP = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || entrantes[entrantes.length - 1].mensaje;
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + followupP : followupP;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
@@ -419,6 +430,7 @@ module.exports = async function handler(req, res) {
                 const escNomC = require('../lib/seb/opener.js').nombreReal(nombreChat) || nombreChat || null;
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
                 if (cont && cont.escalar) {
+                    await logEscala(tel, cont.motivo);
                     if (cont.puente) return res.status(200).json({ ok: true, modo: 'continuacion', segmentos: [cont.puente], escalar_owner: true, escala_motivo: cont.motivo, escala_nombre: escNomC, escala_ultimo: followup });
                     return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: cont.motivo, escala_nombre: escNomC, escala_ultimo: followup });
                 }
@@ -447,6 +459,7 @@ module.exports = async function handler(req, res) {
                 const e3 = await responderEtapa3({ texto: followupE, auto_id: autoE, conv_id: convId, clasif: clasifE });
                 const escNom = nombreReal(nombreChat) || nombreChat || null;
                 if (e3 && e3.escalar) {
+                    await logEscala(tel, e3.motivo);
                     // Escala: si hay PUENTE, se lo mandamos al comprador (no queda colgado) y te avisamos;
                     // si no hay puente, solo te avisamos (tú contestas).
                     if (e3.puente) return res.status(200).json({ ok: true, modo: 'etapa3', segmentos: [e3.puente], escalar_owner: true, escala_motivo: e3.motivo, escala_nombre: escNom, escala_ultimo: followupE });

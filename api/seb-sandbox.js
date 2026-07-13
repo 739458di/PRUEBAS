@@ -221,7 +221,10 @@ module.exports = async function handler(req, res) {
             let posesionSb = false;
             if (!outStandby && bursts >= 2) {
                 const { posesionOwner } = require('../lib/seb/doctrina.js');
-                posesionSb = !!posesionOwner(mensajes);
+                // opción A: las escaladas del sandbox viven en sandbox_turnos (ruta escala%)
+                let escalasSb = [];
+                try { escalasSb = (await query("SELECT motivo, ts FROM sandbox_turnos WHERE carril=? AND ruta LIKE 'escala%' AND ts > ?", [carril || 'owner', Date.now() - 24 * 3600000])).map(e => ({ motivo: e.motivo, ts: Number(e.ts) })); } catch (e) { }
+                posesionSb = !!posesionOwner(mensajes, escalasSb);
             }
 
             const clasif = outStandby ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
