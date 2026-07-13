@@ -435,8 +435,9 @@ module.exports = async function handler(req, res) {
                     if (hP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (hP.universo || ''), segmentos: hP.segmentos, ubicacion_auto_id: hP.ubicacion_auto_id || null, pin_primero: !!hP.pin_primero, pin_after_index: (hP.pin_after_index != null ? hP.pin_after_index : (hP.ubicacion_auto_id ? 0 : null)), fotos: hP.fotos || null, fotos_after_index: (hP.fotos_after_index != null ? hP.fotos_after_index : 0) });
                     // la herramienta QUISO servir pero le falta un dato (ej. punto de venta
                     // sin configurar) → eso SÍ se te escala con la causa, no silencio mudo.
-                    const { UNIV_HERRAMIENTA } = require('../lib/seb/doctrina.js');
-                    if (eP && eP.escalar && UNIV_HERRAMIENTA.indexOf(String(eP.universo || '')) !== -1) {
+                    // (el wrapper poda el universo en escaladas → se detecta por MOTIVO)
+                    const RE_HERR_SIN_DATOS = /(punto de venta configurado|no se pudo cotizar|arma t[uú] la cotizaci[oó]n|hey no lo financia)/i;
+                    if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) {
                         const nomPos = (convRow.length && convRow[0].nombre) || null;
                         return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '🔧 herramienta sin datos: ' + (eP.motivo || ''), escala_nombre: nomPos, escala_ultimo: followupP });
                     }

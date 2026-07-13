@@ -255,16 +255,19 @@ module.exports = async function handler(req, res) {
                 const ultTsP = insP.length ? Number(insP[insP.length - 1].ts) : 0;
                 const ultimoSolo = insP.length ? String(insP[insP.length - 1].mensaje || '') : textoFamilia;
                 const rafagaP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || ultimoSolo;
-                let eP = await responderEtapa3({ texto: ultimoSolo, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
+                // la clasificación TAMBIÉN sobre el último mensaje (la del backlog envenena el ruteo)
+                const clasifP = await entender({ mensaje: ultimoSolo, historial: histCorto, estado: {} });
+                let eP = await responderEtapa3({ texto: ultimoSolo, auto_id: autoActivo || clasifP.auto_id, conv_id: convId, clasif: clasifP });
                 let hP = herramientaPura(eP);
                 if (!hP && rafagaP !== ultimoSolo) {
-                    const eP2 = await responderEtapa3({ texto: rafagaP, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
+                    const eP2 = await responderEtapa3({ texto: rafagaP, auto_id: autoActivo || clasifP.auto_id, conv_id: convId, clasif: clasifP });
                     const hP2 = herramientaPura(eP2);
                     if (hP2) { eP = eP2; hP = hP2; }
                     else if ((!eP || !eP.escalar) && eP2 && eP2.escalar) eP = eP2;
                 }
+                const RE_HERR_SIN_DATOS = /(punto de venta configurado|no se pudo cotizar|arma t[uú] la cotizaci[oó]n|hey no lo financia)/i;
                 if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
-                else if (eP && eP.escalar && UNIV_HERRAMIENTA.indexOf(String(eP.universo || '')) !== -1) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
+                else if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
                 else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
             } else if (bursts === 0) {
                 etapa = 'OPENER';
