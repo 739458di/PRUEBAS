@@ -480,6 +480,21 @@ module.exports = async function handler(req, res) {
             // Su gemela: "cita cancelada" → mata el flujo y reacomoda con el comprador.
             const tS = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
             if (M && /confirmad/.test(tS) && !/no |cancel/.test(tS) && ['solicitud', 'contrapropuesta', 'esperando_horario'].includes(M.estado) && M.cita_ts) {
+                // ══ LA SEÑAL TRAE LA VERDAD (idéntico a producción): si tu señal menciona
+                // OTRA fecha/hora, ESA es la buena — el match, el aviso al comprador y los
+                // recordatorios se arman con la nueva.
+                try {
+                    const { parseFechaHoraTexto, resolverCitaTs: rTs } = require('../lib/seb/citas-vivas.js');
+                    const fh = parseFechaHoraTexto(texto);
+                    if (fh && (fh.fecha || fh.hora)) {
+                        const nf = fh.fecha || M.fecha, nh = fh.hora || M.hora;
+                        const nts = rTs(nf, nh);
+                        if (nts && Math.abs(nts - Number(M.cita_ts)) > 60000) {
+                            M.fecha = nf; M.hora = nh; M.cita_ts = nts;
+                            await run("UPDATE sandbox_match SET fecha=?, hora=?, cita_ts=?, updated=? WHERE carril=?", [nf, nh, nts, Date.now(), laneKey]);
+                        }
+                    }
+                } catch (e) { console.error('[sandbox senal hora]', e.message); }
                 const matchTs = Date.now();
                 const ctx = { nombre: NOMBRE_COMPRADOR, dueno: M.dueno, auto: M.auto_nombre, hora: M.hora };
                 const recs = planRecordatorios(matchTs, Number(M.cita_ts), ctx);
