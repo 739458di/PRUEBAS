@@ -841,6 +841,25 @@ module.exports = async function handler(req, res) {
         }
 
         // ============ MANUAL DIRECTO (escribes sin borrador pendiente) ============
+        // ══ CONFIRMAR MATCH A MANO (botón en CALENDAR, 2026-07-13): el dueño confirmó
+        // por teléfono / la solicitud no le llegó (caso tel mal capturado de Julio Torres)
+        // → el owner aprieta el botón y se EJECUTA el match real: confianza al comprador
+        // + plan de recordatorios. Misma máquina que la señal manual.
+        if (action === 'confirmar_match' && req.method === 'POST') {
+            const mid = Number(req.body.match_id || 0);
+            if (!mid) return res.status(400).json({ ok: false, error: 'match_id requerido' });
+            await citasVivas.ensureCitasMatch();
+            const rows = await query("SELECT * FROM citas_match WHERE id = ?", [mid]);
+            if (!rows.length) return res.status(404).json({ ok: false, error: 'match no encontrado' });
+            const M = rows[0];
+            if (!['solicitud', 'contrapropuesta', 'esperando_horario'].includes(String(M.estado))) {
+                return res.status(200).json({ ok: false, error: 'estado ' + M.estado + ' — solo se confirma una solicitud viva' });
+            }
+            if (!M.cita_ts) return res.status(200).json({ ok: false, error: 'sin fecha/hora amarrada' });
+            await citasVivas.ejecutarMatch(M);
+            return res.status(200).json({ ok: true, match_id: mid, estado: 'match' });
+        }
+
         if (action === 'manual_directo' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             const texto = String(req.body.texto || '').trim();
