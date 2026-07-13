@@ -412,14 +412,26 @@ module.exports = async function handler(req, res) {
                     // (bug sandbox: "agendar cita" viejo ahogaba al "cotizar" nuevo).
                     const insP = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in');
                     const ultTsP = insP.length ? Number(insP[insP.length - 1].ts) : 0;
-                    const followupP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || entrantes[entrantes.length - 1].mensaje;
-                    const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + followupP : followupP;
+                    // CASCADA: 1º el ÚLTIMO mensaje solo (cada pregunta vale por sí misma);
+                    // 2º la ráfaga de 2 min (burbujas partidas "me mandas"+"fotos"). Sin esto,
+                    // un "agendar cita" viejo del backlog ahogaba al "cotízame" nuevo.
+                    const ultimoSolo = insP.length ? String(insP[insP.length - 1].mensaje || '') : (entrantes[entrantes.length - 1].mensaje || '');
+                    const rafagaP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || ultimoSolo;
+                    let followupP = ultimoSolo;
+                    const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + ultimoSolo : ultimoSolo;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
                     let autoP = clasifP.auto_id;
                     if (!autoP) { try { const wcP = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wcP[0] && wcP[0].auto_id_activo) autoP = Number(wcP[0].auto_id_activo); } catch (e) { } }
                     const { responderEtapa3 } = require('../lib/seb/etapa3.js');
-                    const eP = await responderEtapa3({ texto: followupP, auto_id: autoP, conv_id: convId, clasif: clasifP });
-                    const hP = herramientaPura(eP);
+                    let eP = await responderEtapa3({ texto: ultimoSolo, auto_id: autoP, conv_id: convId, clasif: clasifP });
+                    let hP = herramientaPura(eP);
+                    if (!hP && rafagaP !== ultimoSolo) {
+                        followupP = rafagaP;
+                        const eP2 = await responderEtapa3({ texto: rafagaP, auto_id: autoP, conv_id: convId, clasif: clasifP });
+                        const hP2 = herramientaPura(eP2);
+                        if (hP2) { eP = eP2; hP = hP2; }
+                        else if (!eP || !eP.escalar) eP = eP2 && eP2.escalar ? eP2 : eP;
+                    }
                     if (hP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (hP.universo || ''), segmentos: hP.segmentos, ubicacion_auto_id: hP.ubicacion_auto_id || null, pin_primero: !!hP.pin_primero, pin_after_index: (hP.pin_after_index != null ? hP.pin_after_index : (hP.ubicacion_auto_id ? 0 : null)), fotos: hP.fotos || null, fotos_after_index: (hP.fotos_after_index != null ? hP.fotos_after_index : 0) });
                     // la herramienta QUISO servir pero le falta un dato (ej. punto de venta
                     // sin configurar) → eso SÍ se te escala con la causa, no silencio mudo.

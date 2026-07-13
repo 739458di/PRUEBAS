@@ -249,12 +249,20 @@ module.exports = async function handler(req, res) {
             } else if (posesionSb) {
                 etapa = 'POSESIÓN · HERRAMIENTA';
                 const { herramientaPura, UNIV_HERRAMIENTA } = require('../lib/seb/doctrina.js');
-                // última ráfaga (2 min), no el backlog acumulado por los silencios de posesión
+                // CASCADA (idéntica a producción): 1º el ÚLTIMO mensaje solo; 2º la ráfaga
+                // de 2 min — el backlog de silencios de posesión no ahoga preguntas nuevas.
                 const insP = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in');
                 const ultTsP = insP.length ? Number(insP[insP.length - 1].ts) : 0;
-                const textoHerr = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || textoFamilia;
-                const eP = await responderEtapa3({ texto: textoHerr, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
-                const hP = herramientaPura(eP);
+                const ultimoSolo = insP.length ? String(insP[insP.length - 1].mensaje || '') : textoFamilia;
+                const rafagaP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || ultimoSolo;
+                let eP = await responderEtapa3({ texto: ultimoSolo, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
+                let hP = herramientaPura(eP);
+                if (!hP && rafagaP !== ultimoSolo) {
+                    const eP2 = await responderEtapa3({ texto: rafagaP, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
+                    const hP2 = herramientaPura(eP2);
+                    if (hP2) { eP = eP2; hP = hP2; }
+                    else if ((!eP || !eP.escalar) && eP2 && eP2.escalar) eP = eP2;
+                }
                 if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
                 else if (eP && eP.escalar && UNIV_HERRAMIENTA.indexOf(String(eP.universo || '')) !== -1) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
                 else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
