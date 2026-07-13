@@ -248,10 +248,15 @@ module.exports = async function handler(req, res) {
                 ruta = out.puente ? 'escala_puente' : 'escala';
             } else if (posesionSb) {
                 etapa = 'POSESIÓN · HERRAMIENTA';
-                const { herramientaPura } = require('../lib/seb/doctrina.js');
-                const eP = await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
+                const { herramientaPura, UNIV_HERRAMIENTA } = require('../lib/seb/doctrina.js');
+                // última ráfaga (2 min), no el backlog acumulado por los silencios de posesión
+                const insP = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in');
+                const ultTsP = insP.length ? Number(insP[insP.length - 1].ts) : 0;
+                const textoHerr = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || textoFamilia;
+                const eP = await responderEtapa3({ texto: textoHerr, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
                 const hP = herramientaPura(eP);
                 if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
+                else if (eP && eP.escalar && UNIV_HERRAMIENTA.indexOf(String(eP.universo || '')) !== -1) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
                 else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
             } else if (bursts === 0) {
                 etapa = 'OPENER';
