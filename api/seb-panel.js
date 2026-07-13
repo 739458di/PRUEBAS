@@ -343,8 +343,11 @@ module.exports = async function handler(req, res) {
             // ══ COMPRADOR CON MATCH VIVO (WhatsApp real): cancelación / "ya voy en camino"
             // se interpretan ANTES del pipeline (idéntico al sandbox).
             try {
-                const ultimoIn = entrantes[entrantes.length - 1].mensaje || '';
-                const segsM = await citasVivas.manejarMensajeComprador(tel, ultimoIn);
+                // 🚩 caso Mazda 2026-07-13 ("llano estoi interesado" + "Grsias"): la cancelación
+                // llega en RÁFAGA — se evalúa la ráfaga entrante COMPLETA, no solo la última burbuja.
+                let lastOutIdxC = -1; mensajes.forEach((m, i) => { if (m.direccion === 'out') lastOutIdxC = i; });
+                const rafagaIn = (lastOutIdxC >= 0 ? mensajes.slice(lastOutIdxC + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes[entrantes.length - 1].mensaje || '');
+                const segsM = await citasVivas.manejarMensajeComprador(tel, rafagaIn);
                 if (segsM && segsM.length) return res.status(200).json({ ok: true, modo: 'cita_match', tipo: 'cita_comprador', segmentos: segsM });
             } catch (e) { console.error('[citas-vivas] comprador:', e.message); }
 
