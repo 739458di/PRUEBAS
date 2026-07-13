@@ -407,7 +407,12 @@ module.exports = async function handler(req, res) {
                 let escalasPos = [];
                 try { escalasPos = (await query("SELECT motivo, ts FROM escalas_log WHERE telefono=? AND ts > ?", [tel, Date.now() - 24 * 3600000])).map(e => ({ motivo: e.motivo, ts: Number(e.ts) })); } catch (e) { }
                 if (bursts >= 2 && posesionOwner(mensajes, escalasPos)) {
-                    const followupP = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || entrantes[entrantes.length - 1].mensaje;
+                    // en posesión el silencio es NORMAL → el backlog de entrantes crece; la
+                    // herramienta se evalúa sobre la ÚLTIMA ráfaga (2 min), no el acumulado
+                    // (bug sandbox: "agendar cita" viejo ahogaba al "cotizar" nuevo).
+                    const insP = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in');
+                    const ultTsP = insP.length ? Number(insP[insP.length - 1].ts) : 0;
+                    const followupP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || entrantes[entrantes.length - 1].mensaje;
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + followupP : followupP;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
                     let autoP = clasifP.auto_id;
@@ -416,6 +421,13 @@ module.exports = async function handler(req, res) {
                     const eP = await responderEtapa3({ texto: followupP, auto_id: autoP, conv_id: convId, clasif: clasifP });
                     const hP = herramientaPura(eP);
                     if (hP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (hP.universo || ''), segmentos: hP.segmentos, ubicacion_auto_id: hP.ubicacion_auto_id || null, pin_primero: !!hP.pin_primero, pin_after_index: (hP.pin_after_index != null ? hP.pin_after_index : (hP.ubicacion_auto_id ? 0 : null)), fotos: hP.fotos || null, fotos_after_index: (hP.fotos_after_index != null ? hP.fotos_after_index : 0) });
+                    // la herramienta QUISO servir pero le falta un dato (ej. punto de venta
+                    // sin configurar) → eso SÍ se te escala con la causa, no silencio mudo.
+                    const { UNIV_HERRAMIENTA } = require('../lib/seb/doctrina.js');
+                    if (eP && eP.escalar && UNIV_HERRAMIENTA.indexOf(String(eP.universo || '')) !== -1) {
+                        const nomPos = (convRow.length && convRow[0].nombre) || null;
+                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '🔧 herramienta sin datos: ' + (eP.motivo || ''), escala_nombre: nomPos, escala_ultimo: followupP });
+                    }
                     return res.status(200).json({ ok: false, motivo: 'posesion_owner — chat en tus manos; no es herramienta → silencio' });
                 }
             } catch (e) { console.error('[posesion]', e.message); }
