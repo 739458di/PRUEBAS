@@ -215,6 +215,16 @@ module.exports = async function handler(req, res) {
                 }
             } catch (e) { console.error('[sandbox standby]', e.message); }
 
+            // ══ POSESIÓN (idéntico a producción): el owner escribió como Seb (⇄, ai=0)
+            // hace <24h → el bot baja a MODO HERRAMIENTA (cotizar/fotos/ubicación/ficha,
+            // sin gancho); lo demás = silencio.
+            let posesionSb = false;
+            if (!outStandby) {
+                const manualesPos = mensajes.filter(m => m.direccion === 'out' && !m.ai);
+                const ultManualPos = manualesPos.length ? manualesPos[manualesPos.length - 1] : null;
+                posesionSb = !!(ultManualPos && (Date.now() - Number(ultManualPos.ts)) < 24 * 3600000);
+            }
+
             const clasif = outStandby ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
 
             // AUTO ACTIVO con memoria (fidelidad con producción): si este mensaje no
@@ -234,6 +244,13 @@ module.exports = async function handler(req, res) {
                 etapa = 'STANDBY';
                 out = outStandby;
                 ruta = out.puente ? 'escala_puente' : 'escala';
+            } else if (posesionSb) {
+                etapa = 'POSESIÓN · HERRAMIENTA';
+                const { herramientaPura } = require('../lib/seb/doctrina.js');
+                const eP = await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo || clasif.auto_id, conv_id: convId, clasif });
+                const hP = herramientaPura(eP);
+                if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
+                else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
             } else if (bursts === 0) {
                 etapa = 'OPENER';
                 if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {

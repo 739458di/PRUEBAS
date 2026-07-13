@@ -383,6 +383,29 @@ module.exports = async function handler(req, res) {
             try { const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]); if (adRow[0]) adCtx = adRow[0].ad_context; } catch (e) { /* sin anuncio */ }
             const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
 
+            // ══ POSESIÓN POR ACTIVIDAD (orden owner 2026-07-13 — casos Gustavo 7:44pm y
+            // David Castillo): UN mensaje manual tuyo (ai=0) = el chat es TUYO por 24h.
+            // El bot baja a MODO HERRAMIENTA: solo cotizar / fotos / ubicación+horarios /
+            // ficha — tal cual, sin maquillaje y sin gancho (herramientaPura). Todo lo
+            // demás: SILENCIO TOTAL (el chat vive en tu WhatsApp — ya lo estás viendo).
+            try {
+                const { herramientaPura } = require('../lib/seb/doctrina.js');
+                const manualesPos = mensajes.filter(m => m.direccion === 'out' && !m.ai);
+                const ultManualPos = manualesPos.length ? manualesPos[manualesPos.length - 1] : null;
+                if (ultManualPos && (Date.now() - Number(ultManualPos.ts)) < 24 * 3600000) {
+                    const followupP = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || entrantes[entrantes.length - 1].mensaje;
+                    const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + followupP : followupP;
+                    const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
+                    let autoP = clasifP.auto_id;
+                    if (!autoP) { try { const wcP = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wcP[0] && wcP[0].auto_id_activo) autoP = Number(wcP[0].auto_id_activo); } catch (e) { } }
+                    const { responderEtapa3 } = require('../lib/seb/etapa3.js');
+                    const eP = await responderEtapa3({ texto: followupP, auto_id: autoP, conv_id: convId, clasif: clasifP });
+                    const hP = herramientaPura(eP);
+                    if (hP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (hP.universo || ''), segmentos: hP.segmentos, ubicacion_auto_id: hP.ubicacion_auto_id || null, pin_primero: !!hP.pin_primero, pin_after_index: (hP.pin_after_index != null ? hP.pin_after_index : (hP.ubicacion_auto_id ? 0 : null)), fotos: hP.fotos || null, fotos_after_index: (hP.fotos_after_index != null ? hP.fotos_after_index : 0) });
+                    return res.status(200).json({ ok: false, motivo: 'posesion_owner — chat en tus manos; no es herramienta → silencio' });
+                }
+            } catch (e) { console.error('[posesion]', e.message); }
+
             // ===== EN_CURSO: PRIMERA respuesta del comprador al opener (1 ráfaga nuestra + último=entrante) =====
             // Solo financiamiento / ubicación (sus manuales). Lo demás → silencio (lo ve el owner).
             if (bursts === 1 && lastDir === 'in') {
