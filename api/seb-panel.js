@@ -901,6 +901,17 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, match_id: mid, estado: 'match' });
         }
 
+        // ══ CARGA DE LOTE (2026-07-13): el puente del VPS entrega cada pieza (texto o
+        // foto ya subida a Blob) que el owner manda desde SU número. Ver carga-lote.js.
+        if (action === 'carga_pieza' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
+                return res.status(401).json({ ok: false, error: 'key inválida' });
+            }
+            const { pieza } = require('../lib/seb/carga-lote.js');
+            const rp = await pieza({ remitente: req.body.remitente, tipo: req.body.tipo, texto: req.body.texto, url: req.body.url });
+            return res.status(200).json(rp || { ok: false });
+        }
+
         if (action === 'manual_directo' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             const texto = String(req.body.texto || '').trim();
