@@ -21,6 +21,9 @@ const { responderEtapa3 } = require('../lib/seb/etapa3.js');
 // ══ PARIDAD (orden owner): el cerebro de citas/match/recordatorios es UNO SOLO —
 // lib/seb/citas-vivas.js — compartido tal cual entre este sandbox y WhatsApp REAL.
 const { parseHora, resolverCitaTs, mismaHora, mismaFecha, planRecordatorios, clasificarVendedor, clasificarCancelacion } = require('../lib/seb/citas-vivas.js');
+// ══ IGNACIO RECEPCIÓN (paridad): el cerebro del agente para vendedores es UNO SOLO —
+// lib/seb/recepcion.js — compartido tal cual entre este sandbox y el WhatsApp real.
+const recepcion = require('../lib/seb/recepcion.js');
 
 // CARRILES: el panel del owner usa …000; las verificaciones automáticas de Claude
 // usan …001 (carril 'pruebas') para JAMÁS pisar/resetear la conversación del owner.
@@ -107,7 +110,40 @@ module.exports = async function handler(req, res) {
             await run("DELETE FROM seguimientos_ghost WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seb_queue WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM sandbox_match WHERE carril=?", [carril || 'owner']).catch(() => {});
+            await recepcion.resetSesion(SANDBOX_TEL).catch(() => {});
             return res.status(200).json({ ok: true, reset: true });
+        }
+
+        // ══ IGNACIO RECEPCIÓN (agente vendedor) — MISMO cerebro que usará WhatsApp real ══
+        // POST {action:'ignacio', texto} → workflow completo con traza
+        if (action === 'ignacio' && req.method === 'POST') {
+            const texto = String(req.body.texto || '').trim();
+            if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
+            const convId = await ensureConv();
+            await guardarMsg(convId, 'in', texto, 'text');
+            const r = await recepcion.procesarMensaje({ telefono: SANDBOX_TEL, texto });
+            for (const sx of (r.segmentos || [])) await guardarMsg(convId, 'out', sx, 'text');
+            return res.status(200).json({
+                ok: true, etapa: 'RECEPCIÓN', agente: 'ignacio',
+                despierta: r.despierta, activo: r.activo, segmentos: r.segmentos,
+                traza: r.traza, aviso_owner: r.avisoOwner, escala: r.escala,
+                nacimiento: r.nacimiento, checklist: r.checklist
+            });
+        }
+
+        // POST {action:'ignacio_fotos', n} → simula n fotos entrando por el puente (pool FIFO)
+        if (action === 'ignacio_fotos' && req.method === 'POST') {
+            const n = Math.max(1, Math.min(20, Number(req.body.n || 3)));
+            const convId = await ensureConv();
+            await guardarMsg(convId, 'in', `📸 [${n} foto${n === 1 ? '' : 's'}]`, 'text');
+            const urls = Array.from({ length: n }, (_, i) => `sandbox://foto-${Date.now()}-${i + 1}`);
+            const r = await recepcion.agregarFotos({ telefono: SANDBOX_TEL, urls });
+            for (const sx of (r.segmentos || [])) await guardarMsg(convId, 'out', sx, 'text');
+            return res.status(200).json({
+                ok: true, etapa: 'RECEPCIÓN', agente: 'ignacio',
+                activo: r.activo, segmentos: r.segmentos, traza: r.traza,
+                aviso_owner: r.avisoOwner, nacimiento: r.nacimiento, checklist: r.checklist
+            });
         }
 
         // ── MENSAJE del comprador → EL MISMO PIPELINE que WhatsApp ──

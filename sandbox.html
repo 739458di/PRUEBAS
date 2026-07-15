@@ -102,15 +102,20 @@
   <!-- ═══════ LADO COMPRADOR ═══════ -->
   <div class="panel comp">
     <div class="top comp">
-      <div class="ava s">S</div>
-      <div class="who"><b>Seb · Comprador</b><span id="estado">en línea</span></div>
+      <div class="ava s" id="avaAgente">S</div>
+      <div class="who"><b id="tituloAgente">Seb · Comprador</b><span id="estado">en línea</span></div>
+      <button class="btn-rol" id="btnAgente" onclick="toggleAgente()" title="cambiar de agente: Seb (comprador) o Ignacio (recepción de vendedores)" style="background:#128c7e;color:#fff;">🤖 SEB</button>
       <button class="btn-rol" id="btnRol" onclick="toggleRol()" title="cambiar quién escribe (human-in-the-loop)">⇄ escribes: COMPRADOR</button>
       <button class="btn-retro" onclick="abrirRetro()">📝 Retro</button>
       <button class="btn-reset" onclick="reiniciar()">↺ Reiniciar</button>
     </div>
-    <div class="adbar">
+    <div class="adbar" id="adbarSeb">
       <label>📢 Vengo del anuncio de:</label>
       <select id="anuncio"><option value="">(sin anuncio)</option></select>
+    </div>
+    <div class="adbar" id="adbarIgnacio" style="display:none;">
+      <label>🟢 Recepción de vendedores — escribe como alguien que quiere VENDER su auto</label>
+      <button class="btn-rol" onclick="mandarFotosIgnacio()" style="background:#128c7e;color:#fff;">📸 mandar fotos</button>
     </div>
     <div id="chat" class="chatbox"></div>
     <div class="foot comp">
@@ -419,9 +424,76 @@ function siguienteEvento(){
   track.addEventListener('click', e => { if (TL) avanzarA(yATs(e.clientY)); });
 })();
 
+// ══════════ 🤖 SWITCH DE AGENTE: SEB (comprador) ⇄ IGNACIO (recepción vendedores) ══════════
+// PARIDAD: Ignacio en este sandbox usa lib/seb/recepcion.js — EL MISMO cerebro
+// que se enchufará al WhatsApp real. Lo que calibres aquí ES el agente real.
+let AGENTE = 'seb';
+function toggleAgente(){
+  AGENTE = AGENTE === 'seb' ? 'ignacio' : 'seb';
+  const ig = AGENTE === 'ignacio';
+  document.getElementById('btnAgente').textContent = ig ? '🤖 IGNACIO' : '🤖 SEB';
+  document.getElementById('tituloAgente').textContent = ig ? 'Ignacio · Recepción' : 'Seb · Comprador';
+  document.getElementById('avaAgente').textContent = ig ? 'I' : 'S';
+  document.getElementById('adbarSeb').style.display = ig ? 'none' : '';
+  document.getElementById('adbarIgnacio').style.display = ig ? '' : 'none';
+  txt.placeholder = ig ? 'Escribe como alguien que quiere VENDER su auto…' : 'Escribe como comprador…';
+  sistema(ig ? '🟢 Cambiaste a IGNACIO (recepción de vendedores). Tip: ↺ Reiniciar para un caso limpio.' : '🔵 Cambiaste a SEB (comprador). Tip: ↺ Reiniciar para un caso limpio.', true);
+  txt.focus();
+}
+function pintarTraza(traza){
+  if (!traza || !traza.length) return;
+  sistema('🔍 ' + traza.join('  →  '), true);
+}
+function pintarIgnacio(d){
+  pintarTraza(d.traza);
+  if (d.aviso_owner) sistema('📲 AVISO AL OWNER: ' + d.aviso_owner, false);
+  if (d.escala) sistema('🔺 ESCALA — ' + (d.escala.motivo || ''), false);
+  if (d.nacimiento) sistema('🍼 AUTO EN REVISIÓN — con tu "PUBLÍCALO" nacería publicado en fyradrive.com (plantilla + UID + Sales Brain)', false);
+}
+async function enviarIgnacio(t){
+  ocupado = true; btn.disabled = true; txt.value = '';
+  burbuja('yo', t);
+  const typing = document.createElement('div'); typing.className = 'typing'; typing.textContent = 'Ignacio está escribiendo…';
+  chat.appendChild(typing); chat.scrollTop = chat.scrollHeight;
+  document.getElementById('estado').textContent = 'escribiendo…';
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ignacio', texto: t }) });
+    const d = await r.json();
+    typing.remove();
+    if (!d.ok) sistema('❌ error: ' + (d.error || r.status));
+    else if (!d.activo) { pintarTraza(d.traza); sistema('😴 Ignacio NO despertó — este mensaje seguiría el flujo normal de Seb (comprador)', true); }
+    else {
+      chipEtapa('RECEPCIÓN' + (d.despierta ? ' · despertó 🟢' : ''));
+      for (const s of (d.segmentos || [])) { burbuja('seb', s); await sleep(260); }
+      pintarIgnacio(d);
+    }
+  } catch(e){ typing.remove(); sistema('❌ red: ' + e.message); }
+  document.getElementById('estado').textContent = 'en línea';
+  ocupado = false; btn.disabled = false; txt.focus();
+}
+async function mandarFotosIgnacio(){
+  if (ocupado) return;
+  const n = Math.max(1, Math.min(20, Number(prompt('¿Cuántas fotos "mandas"? (simuladas)', '5') || 0)));
+  if (!n) return;
+  ocupado = true;
+  burbuja('yo', '📸 [' + n + ' foto' + (n===1?'':'s') + ']');
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ignacio_fotos', n }) });
+    const d = await r.json();
+    if (!d.ok) sistema('❌ error: ' + (d.error || r.status));
+    else if (!d.activo) { pintarTraza(d.traza); sistema('😴 Sin sesión de recepción — las fotos seguirían el flujo normal', true); }
+    else {
+      for (const s of (d.segmentos || [])) { burbuja('seb', s); await sleep(260); }
+      pintarIgnacio(d);
+    }
+  } catch(e){ sistema('❌ red: ' + e.message); }
+  ocupado = false; txt.focus();
+}
+
 async function enviar(){
   const t = txt.value.trim();
   if (!t || ocupado) return;
+  if (AGENTE === 'ignacio' && ROL !== 'seb') { await enviarIgnacio(t); return; }
   if (ROL === 'seb') { txt.value=''; await enviarComoSeb(t); txt.focus(); return; }
   ocupado = true; btn.disabled = true; txt.value = '';
   burbuja('yo', t);
