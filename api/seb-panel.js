@@ -391,6 +391,28 @@ module.exports = async function handler(req, res) {
             let bursts = 0, prevDir = null, lastOutIdx = -1;
             mensajes.forEach((m, i) => { if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });
             const lastDir = mensajes[mensajes.length - 1].direccion;
+
+            // ══ IGNACIO RECEPCIÓN EN VIVO (orden owner 2026-07-16): agente para VENDEDORES
+            // ("quiero vender mi auto"). Despierta SOLO en primer contacto claro (bursts 0 +
+            // regex + doble candado IA) o si el chat YA tiene sesión de recepción abierta.
+            // El trade-in a media compra NO despierta (sigue escalando como siempre).
+            // Interruptor global: IGNACIO_RECEPCION=0. Cerebro: lib/seb/recepcion.js (paridad sandbox).
+            try {
+                if (process.env.IGNACIO_RECEPCION !== '0') {
+                    const recepcion = require('../lib/seb/recepcion.js');
+                    const ultimoInR = entrantes[entrantes.length - 1].mensaje || '';
+                    const sesR = await recepcion.sesionActiva(tel);
+                    if (sesR || (bursts === 0 && recepcion.esVendedorTexto(ultimoInR))) {
+                        const rIg = await recepcion.procesarMensaje({ telefono: tel, texto: ultimoInR });
+                        if (rIg.activo) {
+                            if (rIg.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rIg.avisoOwner); } catch (e) { } }
+                            return res.status(200).json({ ok: true, modo: 'recepcion', tipo: 'ignacio_recepcion', segmentos: rIg.segmentos || [] });
+                        }
+                        // el doble candado dijo NO (era comprador) → sigue el pipeline normal
+                    }
+                }
+            } catch (e) { console.error('[recepcion]', e.message); }
+
             let adCtx = null;
             try { const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]); if (adRow[0]) adCtx = adRow[0].ad_context; } catch (e) { /* sin anuncio */ }
             // ══ AD-ESPÍA (caso Patricio 2026-07-15): clic de CAMPAÑA (carrusel) llega sin
@@ -961,6 +983,34 @@ module.exports = async function handler(req, res) {
 
         // ══ CARGA DE LOTE (2026-07-13): el puente del VPS entrega cada pieza (texto o
         // foto ya subida a Blob) que el owner manda desde SU número. Ver carga-lote.js.
+        // ═══ IGNACIO RECEPCIÓN — soporte del puente ═══
+        // ¿Este teléfono tiene sesión de recepción abierta? (el puente pregunta antes
+        // de descargar/subir una foto — así las fotos de compradores no se tocan)
+        if (action === 'recepcion_activa') {
+            const tR = String((req.query && req.query.telefono) || (req.body && req.body.telefono) || '').replace(/\D/g, '');
+            if (!tR) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            const recepcion = require('../lib/seb/recepcion.js');
+            const sR = await recepcion.sesionActiva(tR).catch(() => null);
+            return res.status(200).json({ ok: true, activa: !!(sR && sR.estado === 'recepcion') });
+        }
+        // Foto del VENDEDOR (ya subida al Blob por el puente) → pool de su sesión.
+        // Silencio por foto (no spamear); solo al COMPLETAR el checklist se contesta.
+        if (action === 'recepcion_foto' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
+                return res.status(401).json({ ok: false, error: 'key' });
+            }
+            const tF = String(req.body.telefono || '').replace(/\D/g, '');
+            const urlF = String(req.body.url || '');
+            if (!tF || !urlF) return res.status(400).json({ ok: false, error: 'telefono y url requeridos' });
+            const recepcion = require('../lib/seb/recepcion.js');
+            const rF = await recepcion.agregarFotos({ telefono: tF, urls: [urlF] });
+            if (rF.nacimiento) {
+                for (const sx of (rF.segmentos || [])) { try { await citasVivas.enviarWA(tF, sx); } catch (e) { } }
+                if (rF.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rF.avisoOwner); } catch (e) { } }
+            }
+            return res.status(200).json({ ok: true, activo: rF.activo, fotos: rF.checklist ? rF.checklist.fotos : null, nacimiento: !!rF.nacimiento });
+        }
+
         if (action === 'carga_pieza' && req.method === 'POST') {
             if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
                 return res.status(401).json({ ok: false, error: 'key inválida' });
