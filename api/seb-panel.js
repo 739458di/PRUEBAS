@@ -306,6 +306,21 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, ...r });
         }
 
+        // ============ CIERRE TIMBRE (lógica del timbre, orden owner 2026-07-16) ============
+        // El puente VPS toca aquí EN EL INSTANTE en que el owner manda "cita confirmada ✅"
+        // a un comprador. Misma puerta que el barredor del cron (ejecutarCierre es
+        // idempotente): el timbre da la velocidad, el cron la garantía.
+        if (action === 'cierre_timbre' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
+                return res.status(401).json({ ok: false, error: 'key invalida' });
+            }
+            const telT = String(req.body.telefono || '');
+            const textoT = String(req.body.texto || '');
+            if (!telT || !textoT) return res.status(400).json({ ok: false, error: 'telefono y texto requeridos' });
+            const rT = await citasVivas.ejecutarCierre({ tel: telT, texto: textoT, ts: Number(req.body.ts) || Date.now(), origen: 'timbre' });
+            return res.status(200).json(rT);
+        }
+
         // ============ OPENER AUTO (autopilot del PRIMER mensaje) ============
         // El bridge llama aquí cuando llega un primer contacto. Decide si aplica
         // (comprador, primer contacto, auto resuelto, no vendedor) y devuelve la
