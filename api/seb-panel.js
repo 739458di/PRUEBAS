@@ -415,30 +415,15 @@ module.exports = async function handler(req, res) {
 
             let adCtx = null;
             try { const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]); if (adRow[0]) adCtx = adRow[0].ad_context; } catch (e) { /* sin anuncio */ }
-            // ══ AD-ESPÍA (caso Patricio 2026-07-15): clic de CAMPAÑA (carrusel) llega sin
-            // auto en el ad_context, pero el link fb.me redirige a la publicación PÚBLICA
-            // y su og:description dice el auto EXACTO de la tarjeta clickeada. Se penetra
-            // UNA vez (cache por URL), se amarra al ad_context y se persiste — todas las
-            // etapas (opener/continuación/etapa3) lo heredan vía [DESC: …].
+            // ══ AD-ESPÍA + SANEAMIENTO (Patricio 2026-07-15, Daniel/Cavalier 2026-07-16):
+            // el contexto de un clic de CARRUSEL trae la tarjeta de PORTADA, no la clickeada.
+            // sanearContexto (cerebro único en lib/seb/ad-espia.js): espía la publicación y
+            // la tarjeta clickeada MANDA; sin confirmación, la portada se PODA y el opener
+            // pregunta el auto en vez de afirmar uno equivocado. Persiste; todas las etapas
+            // (opener/continuación/etapa3) lo heredan vía [DESC: …].
             try {
-                if (adCtx && !/\[AD-ESPIA:/.test(adCtx)) {
-                    const { espiar, linkDe } = require('../lib/seb/ad-espia.js');
-                    const urlAd = linkDe(adCtx) || linkDe(mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
-                    if (urlAd) {
-                        const { resolverAutoDeterminista } = require('../lib/seb/clasificador.js');
-                        const autosAct = await query("SELECT id, marca, modelo, version, anio, precio, codigo_corto FROM inventario_autos WHERE estado='activo'");
-                        const listaAE = autosAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), anio: a.anio, precio: a.precio, codigo_corto: a.codigo_corto || null }));
-                        const yaResuelve = resolverAutoDeterminista('[DESC: ' + adCtx + ']', listaAE);
-                        if (!yaResuelve) {
-                            const tEspia = await espiar(urlAd);
-                            if (tEspia) {
-                                adCtx = String(adCtx + ' | [AD-ESPIA: ' + tEspia + ']').slice(0, 1200);
-                                await run("UPDATE ad_por_telefono SET ad_context=?, updated_at=? WHERE telefono=?", [adCtx, Date.now(), tel]).catch(() => {});
-                                console.log('[ad-espia] ' + tel.slice(-10) + ' → ' + tEspia.slice(0, 80));
-                            }
-                        }
-                    }
-                }
+                const { sanearContexto } = require('../lib/seb/ad-espia.js');
+                adCtx = await sanearContexto(tel, adCtx, mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
             } catch (e) { console.error('[ad-espia]', e.message); }
             const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
 
@@ -701,7 +686,15 @@ module.exports = async function handler(req, res) {
             let mensajeCerebro = lastMsg;
             try {
                 const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]);
-                if (adRow[0] && adRow[0].ad_context) mensajeCerebro = '[DESC: ' + adRow[0].ad_context + ']\n' + lastMsg;
+                if (adRow[0] && adRow[0].ad_context) {
+                    // mismo saneamiento que opener_auto (portada de carrusel NO afirma el auto)
+                    let ctxOk = adRow[0].ad_context;
+                    try {
+                        const { sanearContexto } = require('../lib/seb/ad-espia.js');
+                        ctxOk = await sanearContexto(tel, ctxOk, conv.mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
+                    } catch (eSan) { console.error('[ad-espia sugerir]', eSan.message); }
+                    if (ctxOk) mensajeCerebro = '[DESC: ' + ctxOk + ']\n' + lastMsg;
+                }
             } catch (e) { /* tabla aún no existe → sin anuncio */ }
 
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado });
