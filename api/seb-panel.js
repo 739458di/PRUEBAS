@@ -393,6 +393,31 @@ module.exports = async function handler(req, res) {
             const lastDir = mensajes[mensajes.length - 1].direccion;
             let adCtx = null;
             try { const adRow = await query("SELECT ad_context FROM ad_por_telefono WHERE telefono=?", [tel]); if (adRow[0]) adCtx = adRow[0].ad_context; } catch (e) { /* sin anuncio */ }
+            // ══ AD-ESPÍA (caso Patricio 2026-07-15): clic de CAMPAÑA (carrusel) llega sin
+            // auto en el ad_context, pero el link fb.me redirige a la publicación PÚBLICA
+            // y su og:description dice el auto EXACTO de la tarjeta clickeada. Se penetra
+            // UNA vez (cache por URL), se amarra al ad_context y se persiste — todas las
+            // etapas (opener/continuación/etapa3) lo heredan vía [DESC: …].
+            try {
+                if (adCtx && !/\[AD-ESPIA:/.test(adCtx)) {
+                    const { espiar, linkDe } = require('../lib/seb/ad-espia.js');
+                    const urlAd = linkDe(adCtx) || linkDe(mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
+                    if (urlAd) {
+                        const { resolverAutoDeterminista } = require('../lib/seb/clasificador.js');
+                        const autosAct = await query("SELECT id, marca, modelo, version, anio, precio, codigo_corto FROM inventario_autos WHERE estado='activo'");
+                        const listaAE = autosAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), anio: a.anio, precio: a.precio, codigo_corto: a.codigo_corto || null }));
+                        const yaResuelve = resolverAutoDeterminista('[DESC: ' + adCtx + ']', listaAE);
+                        if (!yaResuelve) {
+                            const tEspia = await espiar(urlAd);
+                            if (tEspia) {
+                                adCtx = String(adCtx + ' | [AD-ESPIA: ' + tEspia + ']').slice(0, 1200);
+                                await run("UPDATE ad_por_telefono SET ad_context=?, updated_at=? WHERE telefono=?", [adCtx, Date.now(), tel]).catch(() => {});
+                                console.log('[ad-espia] ' + tel.slice(-10) + ' → ' + tEspia.slice(0, 80));
+                            }
+                        }
+                    }
+                }
+            } catch (e) { console.error('[ad-espia]', e.message); }
             const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
 
             // ══ POSESIÓN = CONTROL TUYO EN ETAPA 3 (human in the loop, 2026-07-13):
@@ -467,6 +492,22 @@ module.exports = async function handler(req, res) {
                     }
                     return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero, pin_after_index: (cont.pin_after_index != null ? cont.pin_after_index : null), fotos: cont.fotos || null, fotos_after_index: (cont.fotos_after_index != null ? cont.fotos_after_index : null) });
                 }
+                // DESAMBIGUAR (orden owner 2026-07-15): contestó la pregunta del opener
+                // con una FAMILIA ("el mazda" y hay 2 Mazda) → se le presentan y se
+                // pregunta cuál — esto NO es "fuera de lista blanca", es leer inventario.
+                try {
+                    const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
+                    const aActC = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                    const candC = candidatosDeAuto(followup, aActC.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
+                    if (candC) {
+                        return res.status(200).json({
+                            ok: true, modo: 'continuacion', tipo: 'cont_desambiguar', segmentos: [
+                                'Claro, de esos tenemos estos disponibles:\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
+                                'Cuál te interesa?'
+                            ]
+                        });
+                    }
+                } catch (e) { console.error('[desambiguar cont]', e.message); }
                 // Nada aplicó → fuera de la lista blanca → lo ves tú (antes: silencio mudo).
                 return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: 'fuera de la lista blanca (continuación, no claro) — lo ves tú', escala_nombre: escNomC, escala_ultimo: followup });
             }
@@ -547,6 +588,23 @@ module.exports = async function handler(req, res) {
                 if (intOk && !clasif.escalar) {
                     const { nombreReal, saludoHora } = require('../lib/seb/opener.js');
                     const nm = nombreReal(nombreChat);
+                    // DESAMBIGUAR (orden owner 2026-07-15): nombró una FAMILIA con varios
+                    // ("el mazda" y hay 2 Mazda) → se le presentan y se pregunta cuál.
+                    try {
+                        const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
+                        const aAct = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                        const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
+                        if (cand) {
+                            return res.status(200).json({
+                                ok: true, tipo: 'opener_desambiguar', segmentos: [
+                                    `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
+                                    'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
+                                    'Claro, de esos tenemos estos disponibles:\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
+                                    'Cuál te interesa?'
+                                ]
+                            });
+                        }
+                    } catch (e) { console.error('[desambiguar]', e.message); }
                     return res.status(200).json({
                         ok: true, tipo: 'opener_sin_auto', segmentos: [
                             `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,

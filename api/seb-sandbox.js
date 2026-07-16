@@ -322,7 +322,14 @@ module.exports = async function handler(req, res) {
                     const intOk = ['info_inicial', 'disponibilidad', 'estado_auto', 'cotizar_credito', 'cita_ubicacion', 'precio_negociacion', 'fotos_videos', 'otro'].includes(clasif.intencion_principal);
                     if (intOk && !clasif.escalar) {
                         const nm = nombreReal(NOMBRE_COMPRADOR);
-                        out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro que sí, de qué auto buscas información? Para poderte ayudar'], tipo: 'opener_sin_auto' };
+                        // DESAMBIGUAR (paridad con producción): familia con varios → ¿cuál?
+                        try {
+                            const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
+                            const aAct = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                            const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
+                            if (cand) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro, de esos tenemos estos disponibles:\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'opener_desambiguar' };
+                        } catch (e) { }
+                        if (!out) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro que sí, de qué auto buscas información? Para poderte ayudar'], tipo: 'opener_sin_auto' };
                     }
                 }
                 ruta = !out ? 'silencio' : out.escala ? 'escala' : out.tipo === 'cerebro' ? 'cerebro' : out.tipo === 'opener_sin_auto' ? 'banco_opener_universal' : 'banco_opener';
@@ -333,7 +340,16 @@ module.exports = async function handler(req, res) {
                 if (cont && cont.escalar) { out = { escala: true, motivo: cont.motivo, puente: cont.puente || null }; ruta = cont.puente ? 'escala_puente' : 'escala'; }
                 else if (cont && cont.silencio) { out = { silencio: true, motivo: 'cortesía — silencio' }; ruta = 'silencio'; }
                 else if (cont && cont.segmentos && cont.segmentos.length) { out = cont; ruta = 'banco_continuacion'; universo = cont.universo || ''; }
-                else { out = { escala: true, motivo: 'fuera de la lista blanca (continuación, no claro) — lo ves tú' }; ruta = 'escala'; }
+                else {
+                    // DESAMBIGUAR (paridad con producción): familia con varios → ¿cuál?
+                    try {
+                        const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
+                        const aActC = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                        const candC = candidatosDeAuto(textoFamilia, aActC.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
+                        if (candC) { out = { segmentos: ['Claro, de esos tenemos estos disponibles:\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'cont_desambiguar' }; ruta = 'banco_continuacion'; universo = 'desambiguar'; }
+                    } catch (e) { }
+                    if (!out) { out = { escala: true, motivo: 'fuera de la lista blanca (continuación, no claro) — lo ves tú' }; ruta = 'escala'; }
+                }
             } else {
                 etapa = 'ETAPA 3';
                 const e3 = await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo, conv_id: convId, clasif });
