@@ -448,7 +448,36 @@ function pintarIgnacio(d){
   pintarTraza(d.traza);
   if (d.aviso_owner) sistema('📲 AVISO AL OWNER: ' + d.aviso_owner, false);
   if (d.escala) sistema('🔺 ESCALA — ' + (d.escala.motivo || ''), false);
-  if (d.nacimiento) sistema('🍼 AUTO EN REVISIÓN — con tu "PUBLÍCALO" nacería publicado en fyradrive.com (plantilla + UID + Sales Brain)', false);
+  if (d.nacimiento) {
+    const bN = sistema('🍼 AUTO EN REVISIÓN — apruébalo como lo harías en el fyradmin:', false);
+    const btnA = document.createElement('button');
+    btnA.textContent = '✅ APROBAR (PUBLÍCALO)';
+    btnA.style.cssText = 'margin-top:8px;padding:8px 14px;border:0;border-radius:8px;background:#16a34a;color:#fff;font-weight:700;cursor:pointer;display:block;';
+    btnA.onclick = () => aprobarIgnacio(btnA);
+    bN.appendChild(btnA);
+  }
+}
+// APROBAR (sandbox): simula tu "PUBLÍCALO"/aprobar del fyradmin — misma esencia
+// que la vida real (sin publicar en la web) y el vendedor recibe el mensaje de
+// agente personal (la MISMA plantilla que WhatsApp real).
+async function aprobarIgnacio(btnA){
+  if (ocupado) return; ocupado = true;
+  if (btnA) { btnA.disabled = true; btnA.textContent = '⏳ aprobando…'; }
+  try {
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ignacio_publicar' }) });
+    const d = await r.json();
+    if (!d.ok) { sistema('❌ ' + (d.error || 'no se pudo aprobar')); if (btnA) { btnA.disabled = false; btnA.textContent = '✅ APROBAR (PUBLÍCALO)'; } }
+    else {
+      if (btnA) btnA.textContent = '✅ APROBADO';
+      sistema('🚀 APROBADO — en la vida real aquí se publica en fyradrive.com (plantilla + UID + Sales Brain) y el vendedor recibe:', false);
+      for (const s of (d.segmentos || [])) { burbuja('seb', s); await sleep(260); }
+      if (d.siguiente) {
+        sistema('🅿️→🟢 Tenía otro auto parqueado — arranca de una vez:', true);
+        for (const s of d.siguiente) { burbuja('seb', s); await sleep(260); }
+      }
+    }
+  } catch(e){ sistema('❌ red: ' + e.message); }
+  ocupado = false;
 }
 async function enviarIgnacio(t){
   ocupado = true; btn.disabled = true; txt.value = '';

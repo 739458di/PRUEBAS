@@ -134,6 +134,23 @@ module.exports = async function handler(req, res) {
             });
         }
 
+        // ══ APROBAR (simula tu "PUBLÍCALO"/aprobar del fyradmin) — MISMA esencia que
+        // la vida real (revisión→publicada + mensaje de agente personal + arranca el
+        // parqueado), sin publicar en la web. Cerebro: recepcion.aprobarSesionSimulada.
+        if (action === 'ignacio_publicar' && req.method === 'POST') {
+            const rAp = await recepcion.aprobarSesionSimulada(SANDBOX_TEL);
+            if (!rAp.ok) return res.status(200).json({ ok: false, error: rAp.error });
+            const convIdAp = await ensureConv();
+            for (const sx of (rAp.segmentos || [])) await guardarMsg(convIdAp, 'out', sx, 'text');
+            let siguienteAp = null;
+            if (rAp.siguiente && rAp.siguiente.segmentos) {
+                for (const sx of rAp.siguiente.segmentos) await guardarMsg(convIdAp, 'out', sx, 'text');
+                siguienteAp = rAp.siguiente.segmentos;
+            }
+            const aAp = (rAp.sesion && rAp.sesion.datos) || {};
+            return res.status(200).json({ ok: true, etapa: 'RECEPCIÓN', agente: 'ignacio', segmentos: rAp.segmentos, siguiente: siguienteAp, auto: [aAp.marca, aAp.modelo, aAp.anio].filter(Boolean).join(' ') });
+        }
+
         // POST {action:'ignacio_fotos', n} → simula n fotos entrando por el puente (pool FIFO)
         if (action === 'ignacio_fotos' && req.method === 'POST') {
             const n = Math.max(1, Math.min(20, Number(req.body.n || 3)));
