@@ -385,13 +385,20 @@ module.exports = async function handler(req, res) {
                 const manualesSb = mensajes.filter(m => m.direccion === 'out' && !m.ai);
                 const ultManualSb = manualesSb.length ? manualesSb[manualesSb.length - 1] : null;
                 if (ultManualSb && esStandby(ultManualSb.mensaje) && (Date.now() - Number(ultManualSb.ts)) < 7 * 86400000) {
-                    const idxSb = mensajes.lastIndexOf(ultManualSb);
-                    const acuseYa = mensajes.slice(idxSb + 1).some(m => m.direccion === 'out' && m.ai);
-                    const nomSb = (convRow.length && convRow[0].nombre) || null;
-                    const motivoSb = 'STANDBY 🔒 — tú quedaste de confirmar ("' + String(ultManualSb.mensaje).slice(0, 50) + '"): el bot no toca este chat hasta que escribas tú';
-                    const ultInSb = entrantes[entrantes.length - 1].mensaje;
-                    if (!acuseYa) return res.status(200).json({ ok: true, modo: 'standby', tipo: 'standby', segmentos: [ACUSE_STANDBY], escalar_owner: true, escala_motivo: motivoSb, escala_nombre: nomSb, escala_ultimo: ultInSb });
-                    return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: motivoSb, escala_nombre: nomSb, escala_ultimo: ultInSb });
+                    // ── EXCEPCIÓN RECEPCIÓN (orden owner 2026-07-16): en un chat de VENDEDOR
+                    // (sesión de recepción activa) la palabra del owner NO pausa ni da posesión —
+                    // Ignacio sigue juntando la ficha para que el auto nazca.
+                    let enRecepcionSb = false;
+                    try { enRecepcionSb = !!(await require('../lib/seb/recepcion.js').sesionActiva(tel)); } catch (e) { }
+                    if (!enRecepcionSb) {
+                        const idxSb = mensajes.lastIndexOf(ultManualSb);
+                        const acuseYa = mensajes.slice(idxSb + 1).some(m => m.direccion === 'out' && m.ai);
+                        const nomSb = (convRow.length && convRow[0].nombre) || null;
+                        const motivoSb = 'STANDBY 🔒 — tú quedaste de confirmar ("' + String(ultManualSb.mensaje).slice(0, 50) + '"): el bot no toca este chat hasta que escribas tú';
+                        const ultInSb = entrantes[entrantes.length - 1].mensaje;
+                        if (!acuseYa) return res.status(200).json({ ok: true, modo: 'standby', tipo: 'standby', segmentos: [ACUSE_STANDBY], escalar_owner: true, escala_motivo: motivoSb, escala_nombre: nomSb, escala_ultimo: ultInSb });
+                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: motivoSb, escala_nombre: nomSb, escala_ultimo: ultInSb });
+                    }
                 }
             } catch (e) { console.error('[standby]', e.message); }
 
