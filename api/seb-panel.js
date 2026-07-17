@@ -422,10 +422,17 @@ module.exports = async function handler(req, res) {
             try {
                 if (process.env.IGNACIO_RECEPCION !== '0') {
                     const recepcion = require('../lib/seb/recepcion.js');
-                    const ultimoInR = entrantes[entrantes.length - 1].mensaje || '';
+                    // ESCALERA SELLADA: se procesa la RÁFAGA completa (dos intenciones
+                    // conpegadas ya no dejan una muda) + historial y último manual tuyo
+                    // (para el juez y el reanudador).
+                    const insRcp = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in');
+                    const rafagaRcp = insRcp.map(m => m.mensaje).join('\n') || (entrantes[entrantes.length - 1].mensaje || '');
+                    const manualesRcp = mensajes.filter(m => m.direccion === 'out' && !m.ai);
+                    const ultimoManualTsRcp = manualesRcp.length ? Number(manualesRcp[manualesRcp.length - 1].ts) : null;
+                    const historialRcp = mensajes.slice(-8).map(h => (h.direccion === 'in' ? 'VENDEDOR: ' : 'NOSOTROS: ') + String(h.mensaje || '').slice(0, 150)).join('\n');
                     const sesR = await recepcion.sesionActiva(tel);
-                    if (sesR || (bursts === 0 && recepcion.esVendedorTexto(ultimoInR))) {
-                        const rIg = await recepcion.procesarMensaje({ telefono: tel, texto: ultimoInR });
+                    if (sesR || (bursts === 0 && recepcion.esVendedorTexto(rafagaRcp))) {
+                        const rIg = await recepcion.procesarMensaje({ telefono: tel, texto: rafagaRcp, historial: historialRcp, ultimoManualTs: ultimoManualTsRcp });
                         if (rIg.activo) {
                             if (rIg.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rIg.avisoOwner); } catch (e) { } }
                             return res.status(200).json({ ok: true, modo: 'recepcion', tipo: 'ignacio_recepcion', segmentos: rIg.segmentos || [] });
