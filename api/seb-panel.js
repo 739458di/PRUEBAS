@@ -422,23 +422,15 @@ module.exports = async function handler(req, res) {
             try {
                 if (process.env.IGNACIO_RECEPCION !== '0') {
                     const recepcion = require('../lib/seb/recepcion.js');
-                    // ESCALERA SELLADA: se procesa la RÁFAGA completa (dos intenciones
-                    // conpegadas ya no dejan una muda) + historial y último manual tuyo
-                    // (para el juez y el reanudador).
-                    const insRcp = (lastOutIdx >= 0 ? mensajes.slice(lastOutIdx + 1) : mensajes).filter(m => m.direccion === 'in');
-                    const rafagaRcp = insRcp.map(m => m.mensaje).join('\n') || (entrantes[entrantes.length - 1].mensaje || '');
-                    const manualesRcp = mensajes.filter(m => m.direccion === 'out' && !m.ai);
-                    const ultimoManualTsRcp = manualesRcp.length ? Number(manualesRcp[manualesRcp.length - 1].ts) : null;
-                    const historialRcp = mensajes.slice(-8).map(h => (h.direccion === 'in' ? 'VENDEDOR: ' : 'NOSOTROS: ') + String(h.mensaje || '').slice(0, 150)).join('\n');
-                    const sesR = await recepcion.sesionActiva(tel);
-                    if (sesR || (bursts === 0 && recepcion.esVendedorTexto(rafagaRcp))) {
-                        const rIg = await recepcion.procesarMensaje({ telefono: tel, texto: rafagaRcp, historial: historialRcp, ultimoManualTs: ultimoManualTsRcp });
-                        if (rIg.activo) {
-                            if (rIg.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rIg.avisoOwner); } catch (e) { } }
-                            return res.status(200).json({ ok: true, modo: 'recepcion', tipo: 'ignacio_recepcion', segmentos: rIg.segmentos || [] });
-                        }
-                        // el doble candado dijo NO (era comprador) → sigue el pipeline normal
+                    // ══ FUENTE ÚNICA (orden owner 2026-07-16): el turno COMPLETO de Ignacio
+                    // (ráfaga, historial, último manual, compuerta de despertar) vive en
+                    // turnoIgnacio (lib/seb/recepcion.js) — el sandbox llama LA MISMA función.
+                    const rIg = await recepcion.turnoIgnacio({ telefono: tel, convId, desdeTs: resetTsOA });
+                    if (rIg.activo) {
+                        if (rIg.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rIg.avisoOwner); } catch (e) { } }
+                        return res.status(200).json({ ok: true, modo: 'recepcion', tipo: 'ignacio_recepcion', segmentos: rIg.segmentos || [] });
                     }
+                    // no despertó / doble candado dijo NO (era comprador) → sigue el pipeline normal
                 }
             } catch (e) { console.error('[recepcion]', e.message); }
 
