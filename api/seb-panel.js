@@ -1005,7 +1005,21 @@ module.exports = async function handler(req, res) {
             if (!tR) return res.status(400).json({ ok: false, error: 'telefono requerido' });
             const recepcion = require('../lib/seb/recepcion.js');
             const sR = await recepcion.sesionActiva(tR).catch(() => null);
-            return res.status(200).json({ ok: true, activa: !!(sR && sR.estado === 'recepcion') });
+            let activa = !!(sR && sR.estado === 'recepcion');
+            // ══ FOTOS COMO INICIADOR (orden owner 2026-07-16): en PRIMER contacto
+            // (sin salientes nuestras) las fotos también pasan — agregarFotos
+            // despierta a Ignacio a confirmar; si era comprador, el ESCAPE lo regresa.
+            if (!activa) {
+                try {
+                    const cvR = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + tR]);
+                    if (!cvR.length) activa = true;
+                    else {
+                        const oR = await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='out'", [cvR[0].id]);
+                        activa = Number(oR[0].n) === 0;
+                    }
+                } catch (e) { }
+            }
+            return res.status(200).json({ ok: true, activa });
         }
         // Foto del VENDEDOR (ya subida al Blob por el puente) → pool de su sesión.
         // Silencio por foto (no spamear); solo al COMPLETAR el checklist se contesta.
