@@ -121,7 +121,19 @@ module.exports = async function handler(req, res) {
             if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
             const convId = await ensureConv();
             await guardarMsg(convId, 'in', texto, 'text');
-            const r = await recepcion.procesarMensaje({ telefono: SANDBOX_TEL, texto });
+            // ══ PARIDAD LITERAL con seb-panel (escalera sellada 2026-07-16): MISMAS
+            // fórmulas para ráfaga, historial y último manual del owner — así el juez
+            // ve lo mismo y el REANUDADOR también funciona aquí (contesta manual con
+            // el rol "yo" → el siguiente mensaje del vendedor recibe el gancho).
+            const mrIg = await query("SELECT direccion, texto, ts, ai_generated FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+            const mensajesIg = mrIg.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0 }));
+            let lastOutIdxIg = -1; mensajesIg.forEach((m, i) => { if (m.direccion === 'out') lastOutIdxIg = i; });
+            const insIg = (lastOutIdxIg >= 0 ? mensajesIg.slice(lastOutIdxIg + 1) : mensajesIg).filter(m => m.direccion === 'in');
+            const rafagaIg = insIg.map(m => m.mensaje).join('\n') || texto;
+            const manualesIg = mensajesIg.filter(m => m.direccion === 'out' && !m.ai);
+            const ultimoManualTsIg = manualesIg.length ? Number(manualesIg[manualesIg.length - 1].ts) : null;
+            const historialIg = mensajesIg.slice(-8).map(h => (h.direccion === 'in' ? 'VENDEDOR: ' : 'NOSOTROS: ') + String(h.mensaje || '').slice(0, 150)).join('\n');
+            const r = await recepcion.procesarMensaje({ telefono: SANDBOX_TEL, texto: rafagaIg, historial: historialIg, ultimoManualTs: ultimoManualTsIg });
             for (const sx of (r.segmentos || [])) await guardarMsg(convId, 'out', sx, 'text');
             return res.status(200).json({
                 ok: true, etapa: 'RECEPCIÓN', agente: 'ignacio',
