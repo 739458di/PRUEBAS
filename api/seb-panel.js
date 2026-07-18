@@ -321,6 +321,23 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(rT);
         }
 
+        // ============ CANCELAR MATCH MANUAL (orden owner 2026-07-18) ============
+        // El botón ✕ del Calendar entra por LA MISMA máquina que la cancelación por
+        // WhatsApp del comprador (ejecutarCancelacion): marca la fila y le avisa al
+        // DUEÑO con el mismo texto. Distinto timbre, mismo funcionamiento.
+        if (action === 'cancelar_match_manual' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
+                return res.status(401).json({ ok: false, error: 'key invalida' });
+            }
+            const telCM = String(req.body.telefono || '').replace(/\D/g, '').slice(-10);
+            if (!telCM) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            const filas = await query("SELECT * FROM citas_match WHERE estado IN ('solicitud','contrapropuesta','esperando_horario','match') ORDER BY updated DESC");
+            const MCM = filas.find(r => String(r.comprador_tel || '').replace(/\D/g, '').slice(-10) === telCM);
+            if (!MCM) return res.status(200).json({ ok: true, avisado: false, motivo: 'sin fila activa de match' });
+            await citasVivas.ejecutarCancelacion(MCM);
+            return res.status(200).json({ ok: true, avisado: true, match_id: MCM.id });
+        }
+
         // ============ OPENER AUTO (autopilot del PRIMER mensaje) ============
         // El bridge llama aquí cuando llega un primer contacto. Decide si aplica
         // (comprador, primer contacto, auto resuelto, no vendedor) y devuelve la
