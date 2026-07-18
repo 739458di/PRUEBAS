@@ -389,7 +389,12 @@ module.exports = async function handler(req, res) {
                     // (sesión de recepción activa) la palabra del owner NO pausa ni da posesión —
                     // Ignacio sigue juntando la ficha para que el auto nazca.
                     let enRecepcionSb = false;
-                    try { enRecepcionSb = !!(await require('../lib/seb/recepcion.js').sesionActiva(tel)); } catch (e) { }
+                    // auditoría #13: también exime al DUEÑO CONOCIDO que vuelve por otro
+                    // auto (aún sin sesión) — tu standby no congela la recepción.
+                    try {
+                        const recSb = require('../lib/seb/recepcion.js');
+                        enRecepcionSb = !!(await recSb.sesionActiva(tel)) || !!(await recSb.duenoConocido(tel));
+                    } catch (e) { }
                     if (!enRecepcionSb) {
                         const idxSb = mensajes.lastIndexOf(ultManualSb);
                         const acuseYa = mensajes.slice(idxSb + 1).some(m => m.direccion === 'out' && m.ai);
@@ -1037,10 +1042,11 @@ module.exports = async function handler(req, res) {
             if (!tF || !urlF) return res.status(400).json({ ok: false, error: 'telefono y url requeridos' });
             const recepcion = require('../lib/seb/recepcion.js');
             const rF = await recepcion.agregarFotos({ telefono: tF, urls: [urlF] });
-            if (rF.nacimiento) {
-                for (const sx of (rF.segmentos || [])) { try { await citasVivas.enviarWA(tF, sx); } catch (e) { } }
-                if (rF.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rF.avisoOwner); } catch (e) { } }
-            }
+            // auditoría #10: mandar SIEMPRE lo que el cerebro diga (el saludo del
+            // fotos-iniciador se quedaba mudo en real — solo salía con nacimiento).
+            // A media captura el cerebro regresa segmentos [] (silencio anti-spam).
+            for (const sx of (rF.segmentos || [])) { try { await citasVivas.enviarWA(tF, sx); } catch (e) { } }
+            if (rF.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rF.avisoOwner); } catch (e) { } }
             return res.status(200).json({ ok: true, activo: rF.activo, fotos: rF.checklist ? rF.checklist.fotos : null, nacimiento: !!rF.nacimiento });
         }
 
