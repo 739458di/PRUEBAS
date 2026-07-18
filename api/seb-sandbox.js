@@ -111,6 +111,7 @@ module.exports = async function handler(req, res) {
             await run("DELETE FROM seb_queue WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM sandbox_match WHERE carril=?", [carril || 'owner']).catch(() => {});
             await recepcion.resetSesion(SANDBOX_TEL).catch(() => {});
+            await recepcion.olvidarDueno(SANDBOX_TEL).catch(() => {});
             return res.status(200).json({ ok: true, reset: true });
         }
 

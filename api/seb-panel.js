@@ -1009,13 +1009,18 @@ module.exports = async function handler(req, res) {
             // ══ FOTOS COMO INICIADOR (orden owner 2026-07-16): en PRIMER contacto
             // (sin salientes nuestras) las fotos también pasan — agregarFotos
             // despierta a Ignacio a confirmar; si era comprador, el ESCAPE lo regresa.
+            // Y un DUEÑO CONOCIDO (2026-07-17) pasa SIEMPRE: sus fotos son otro auto.
             if (!activa) {
                 try {
-                    const cvR = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + tR]);
-                    if (!cvR.length) activa = true;
+                    const dcR = await recepcion.duenoConocido(tR);
+                    if (dcR) activa = true;
                     else {
-                        const oR = await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='out'", [cvR[0].id]);
-                        activa = Number(oR[0].n) === 0;
+                        const cvR = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + tR]);
+                        if (!cvR.length) activa = true;
+                        else {
+                            const oR = await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='out'", [cvR[0].id]);
+                            activa = Number(oR[0].n) === 0;
+                        }
                     }
                 } catch (e) { }
             }
