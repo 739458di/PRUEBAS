@@ -111,7 +111,7 @@
     </div>
     <div class="adbar" id="adbarSeb">
       <label>📢 Vengo del anuncio de:</label>
-      <select id="anuncio"><option value="">(sin anuncio)</option></select>
+      <select id="anuncio"><option value="">(sin anuncio)</option><option value="carrusel">🎡 CARRUSEL — clic genérico (prueba el aparador)</option></select>
     </div>
     <div class="adbar" id="adbarIgnacio" style="display:none;">
       <label>🟢 Recepción de vendedores — escribe como alguien que quiere VENDER su auto</label>
@@ -532,7 +532,7 @@ async function enviar(){
   try {
     const body = { action:'mensaje', texto: t };
     const ad = document.getElementById('anuncio').value;
-    if (ad) body.auto_ad = Number(ad);
+    if (ad) body.auto_ad = (ad === 'carrusel') ? 'carrusel' : Number(ad);
     const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const d = await r.json();
     typing.remove();

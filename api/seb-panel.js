@@ -21,79 +21,9 @@ const citasVivas = require('../lib/seb/citas-vivas.js');
 // CANÓNICAS (deterministas, sin IA) — el cita-extractor las usa tal cual.
 // ══ BITÁCORA DE ESCALADAS (opción A del owner, 2026-07-13): las escaladas de
 // CRITERIO abren la puerta a que su primer manual tome posesión (ver doctrina).
-// ══ APARADOR DE CARRUSEL (orden owner 2026-07-20) — estado del arranque:
-// el aparador mostrado + dudas previas viven en wa_conversations.estado_json.
-async function guardarEstadoAparador(tel, aparador, duda) {
-    try {
-        const cur = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [tel]);
-        let ej = {}; try { ej = JSON.parse((cur[0] && cur[0].estado_json) || '{}'); } catch (e) { }
-        if (aparador) ej.aparador = aparador;
-        if (duda) ej.dudas_pendientes = (ej.dudas_pendientes || []).concat([duda]).slice(-3);
-        if (cur.length) await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), Date.now(), tel]);
-        else await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) VALUES (?,?,?,?)", [tel, 'aparador', JSON.stringify(ej), Date.now()]);
-    } catch (e) { console.error('[estado aparador]', e.message); }
-}
-
-// ══ LA ELECCIÓN DEL APARADOR — el FOCO solo se ancla con un HECHO DURO (número /
-// nombre / color contra LO MOSTRADO). Anclado → se confirma EN VOZ ALTA, se
-// contesta la duda guardada (con el auto ya en la mano) y el flujo normal sigue
-// con auto_id_activo. Regresa null si este turno no es una elección.
-async function intentarEleccionAparador(tel, texto, convId) {
-    try {
-        const ap = require('../lib/seb/aparador.js');
-        const cur = await query("SELECT estado_json, auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]);
-        if (!cur.length) return null;
-        let ej = {}; try { ej = JSON.parse(cur[0].estado_json || '{}'); } catch (e) { }
-        if (!Array.isArray(ej.aparador) || !ej.aparador.length || cur[0].auto_id_activo) return null;
-        // "¿tienes algo más?" ANTES de elegir → segunda tanda del aparador (sin repetir)
-        if (ap.RE_RELACIONADOS.test(texto)) {
-            const autosA = await ap.inventarioActivo();
-            const vistos = new Set(ej.aparador.map(x => x.id));
-            const resto = autosA.filter(a => !vistos.has(a.id));
-            const apr2 = await ap.armarAparador({ ancla: null, lista: resto, intro: 'Claro, también tenemos estas 🚗' });
-            if (apr2) {
-                ej.aparador = ej.aparador.concat(apr2.aparador.map((x, i) => ({ ...x, n: ej.aparador.length + i + 1 })));
-                apr2.segmentos[1] = ej.aparador.slice(-apr2.aparador.length).map(x => `${x.n}) ${x.nombre}`).join('\n');
-                await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), Date.now(), tel]);
-                return { tipo: 'aparador_mas', segmentos: apr2.segmentos, fotos: apr2.fotos, fotos_after_index: apr2.fotos_after_index };
-            }
-            return null;
-        }
-        const el = ap.resolverEleccion(texto, ej.aparador);
-        if (!el) return null;
-        if (el.pregunta) {
-            return { tipo: 'aparador_pregunta', segmentos: ['¿Cuál de estos? ' + el.pregunta.map(x => x.nombre).join(' o ') + ' 🤔'] };
-        }
-        // ══ FOCO ANCLADO con hecho duro → confirmación en voz alta + duda guardada
-        const auto = el.auto;
-        const autosA = await ap.inventarioActivo();
-        const row = autosA.find(a => a.id === auto.id);
-        const dudas = (ej.dudas_pendientes || []);
-        ej.foco = { id: auto.id, nombre: auto.nombre, via: el.via, ts: Date.now() };
-        ej.interes = (ej.interes || []).filter(x => x !== auto.id).concat([auto.id]);
-        delete ej.aparador; delete ej.dudas_pendientes;
-        await run("UPDATE wa_conversations SET estado_json=?, auto_id_activo=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), auto.id, Date.now(), tel]);
-        let segmentos = [`¡El ${auto.nombre}! 👍`];
-        if (row) segmentos.push(ap.fichaBreve(row));
-        let extra = {};
-        if (dudas.length) {
-            // la duda guardada se contesta AHORA, ya con el auto en la mano (misma maquinaria)
-            try {
-                const { responderEtapa3 } = require('../lib/seb/etapa3.js');
-                const e3d = await responderEtapa3({ texto: dudas[0], auto_id: auto.id, conv_id: convId, clasif: null });
-                if (e3d && e3d.segmentos && e3d.segmentos.length && !e3d.escalar) {
-                    segmentos.push('Y sobre lo que preguntabas:');
-                    segmentos = segmentos.concat(e3d.segmentos);
-                    if (e3d.fotos) extra = { fotos: e3d.fotos, fotos_after_index: segmentos.length - e3d.segmentos.length + (e3d.fotos_after_index || 0) };
-                } else if (e3d && e3d.escalar) {
-                    extra = { escalar_owner: true, escala_motivo: 'duda previa del aparador: ' + (e3d.motivo || dudas[0].slice(0, 80)), escala_ultimo: dudas[0] };
-                }
-            } catch (e) { }
-        }
-        if (!extra.fotos) segmentos.push('¿Te mando las fotos y la ficha completa, o te la cotizo de una vez?');
-        return { tipo: 'aparador_foco', segmentos, ...extra };
-    } catch (e) { console.error('[eleccion aparador]', e.message); return null; }
-}
+// ══ APARADOR DE CARRUSEL (orden owner 2026-07-20) — la lógica vive en la FUENTE
+// ÚNICA lib/seb/aparador.js (el sandbox usa LA MISMA): aquí solo se importa.
+const { intentarEleccionAparador, arranqueCarrusel } = require('../lib/seb/aparador.js');
 
 async function logEscala(tel, motivo) {
     try {
@@ -692,31 +622,10 @@ module.exports = async function handler(req, res) {
             // con "¿Te refieres a este?" — HIPÓTESIS, jamás afirmado (lección Daniel:
             // la tarjeta puede ser la portada). Si el comprador NOMBRA el auto él
             // mismo, eso es Puerta 1 y sigue el flujo normal de abajo.
-            const { esClickGenerico } = require('../lib/seb/clasificador.js');
-            if (esClickGenerico(textoFamilia)) {
-                try {
-                    const ap = require('../lib/seb/aparador.js');
-                    const autosAp = await ap.inventarioActivo();
-                    let ancla = null;
-                    {
-                        const { linkDe } = require('../lib/seb/ad-espia.js');
-                        const urlAd = linkDe(adCtx || '') || linkDe(entrantes.slice(0, 3).map(m => m.mensaje).join(' '));
-                        if (urlAd) ancla = (await ap.identificarAncla(urlAd, autosAp)).ancla;
-                    }
-                    const { nombreReal: nrA, saludoHora: shA } = require('../lib/seb/opener.js');
-                    const nmA = nrA(nombreChat);
-                    const apr = await ap.armarAparador({
-                        ancla, lista: autosAp, saludoNombre: nmA,
-                        intro: ancla
-                            ? `Qué tal${nmA ? ' ' + nmA : ''} ${shA()}! ¿Te refieres a este? 👇 Y de una vez te enseño otras buenas:`
-                            : `Qué tal${nmA ? ' ' + nmA : ''} ${shA()}! Mira, estos son los que más están jalando ahorita 🚗`
-                    });
-                    if (apr) {
-                        await guardarEstadoAparador(tel, apr.aparador, null);
-                        return res.status(200).json({ ok: true, tipo: 'opener_aparador', segmentos: apr.segmentos, fotos: apr.fotos, fotos_after_index: apr.fotos_after_index });
-                    }
-                } catch (e) { console.error('[aparador clic]', e.message); }
-            }
+            try {
+                const arrC = await arranqueCarrusel({ tel, textoRaw: textoFamilia, textoFamilia, adCtx, textosIn: entrantes.slice(0, 3).map(m => m.mensaje).join(' '), nombre: nombreChat, esClick: true });
+                if (arrC) return res.status(200).json({ ok: true, ...arrC });
+            } catch (e) { console.error('[aparador clic]', e.message); }
 
             // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la
             // voz del owner (nucleo), en vez de deflectar a "info" genérico.
@@ -768,34 +677,13 @@ module.exports = async function handler(req, res) {
                             });
                         }
                     } catch (e) { console.error('[desambiguar]', e.message); }
-                    // ══ PUERTAS 2 y 3 — ARRANQUE DE CARRUSEL (orden owner 2026-07-20):
-                    // en vez de la pregunta genérica: 3) trae CRITERIO → buscar_inventario;
-                    // 2) clic de carrusel → EL OJO (espía texto+visión) identifica el ancla
-                    // desde el link y se abre el APARADOR (2 portadas + resto texto).
+                    // ══ PUERTAS 2 y 3 — ARRANQUE DE CARRUSEL (fuente única aparador.js):
+                    // criterio → buscar_inventario; link de anuncio → ancla-hipótesis;
+                    // sin nada → null y cae a la pregunta clásica del owner.
                     try {
-                        const ap = require('../lib/seb/aparador.js');
-                        const autosAp = await ap.inventarioActivo();
-                        let lista = autosAp, ancla = null, intro = null;
-                        const crit = await ap.parsearCriterio(textoFamilia);
-                        if (crit) {
-                            const filtradas = ap.buscarInventario(crit, autosAp);
-                            if (filtradas.length) { lista = filtradas; intro = `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}! Con eso que me dices, estas te van 🚗`; }
-                            else intro = `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}! De eso exacto ahorita no tengo, pero mira estas oportunidades 🚗`;
-                        } else {
-                            const { linkDe } = require('../lib/seb/ad-espia.js');
-                            const urlAd = linkDe(adCtx || '') || linkDe(entrantes.slice(0, 3).map(m => m.mensaje).join(' '));
-                            if (urlAd) {
-                                const idr = await ap.identificarAncla(urlAd, autosAp);
-                                ancla = idr.ancla;
-                                if (ancla) intro = `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}! ¿Te refieres a este? 👇 Y de una vez te enseño otras buenas:`;
-                            }
-                        }
-                        const apr = await ap.armarAparador({ ancla, lista, saludoNombre: nm, intro });
-                        if (apr) {
-                            const esDuda = ['cotizar_credito', 'cita_ubicacion', 'fotos_videos', 'estado_auto', 'precio_negociacion'].includes(clasif.intencion_principal);
-                            await guardarEstadoAparador(tel, apr.aparador, esDuda ? String(textoFamilia).slice(0, 200) : null);
-                            return res.status(200).json({ ok: true, tipo: 'opener_aparador', segmentos: apr.segmentos, fotos: apr.fotos, fotos_after_index: apr.fotos_after_index });
-                        }
+                        const esDuda = ['cotizar_credito', 'cita_ubicacion', 'fotos_videos', 'estado_auto', 'precio_negociacion'].includes(clasif.intencion_principal);
+                        const arrF = await arranqueCarrusel({ tel, textoRaw: textoFamilia, textoFamilia, adCtx, textosIn: entrantes.slice(0, 3).map(m => m.mensaje).join(' '), nombre: nombreChat, esClick: false, duda: esDuda ? String(textoFamilia).slice(0, 200) : null });
+                        if (arrF) return res.status(200).json({ ok: true, ...arrF });
                     } catch (e) { console.error('[aparador]', e.message); }
                     // red de seguridad: la pregunta clásica del owner
                     return res.status(200).json({

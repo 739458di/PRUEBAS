@@ -169,14 +169,23 @@ module.exports = async function handler(req, res) {
 
         // ── MENSAJE del comprador → EL MISMO PIPELINE que WhatsApp ──
         if (action === 'mensaje' && req.method === 'POST') {
-            const texto = String(req.body.texto || '').trim();
+            let texto = String(req.body.texto || '').trim();
             if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
-            const autoAd = Number(req.body.auto_ad || 0) || null;
+            // ══ MODO CARRUSEL (orden owner 2026-07-20): en vez de un auto concreto, el
+            // clic genérico REAL — mismo contexto y mismo link que la vida real (el ojo
+            // espía-visión trabaja igual; cacheado). El texto se viste de clic real.
+            const esCarruselAd = String(req.body.auto_ad || '') === 'carrusel';
+            const autoAd = esCarruselAd ? null : (Number(req.body.auto_ad || 0) || null);
             const convId = await ensureConv();
 
             // Simular el contexto de anuncio (como cuando el comprador da click al ad)
             let adCtx = null;
-            if (autoAd) {
+            if (esCarruselAd) {
+                adCtx = '🚙 Seminuevos verificados en Monterrey 🚙\nAutos particulares únicos dueños y facturas de agencia. Desliza y agenda prueba de manejo por el tuyo — te respondemos al instante. | https://fb.me/6paTJncjy';
+                await run("INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at",
+                    [SANDBOX_TEL, adCtx, Date.now()]).catch(() => {});
+                if (!/https?:\/\//i.test(texto)) texto = '🔗 https://fb.me/6paTJncjy\n' + texto;
+            } else if (autoAd) {
                 const a = await query("SELECT marca, modelo, anio, precio FROM inventario_autos WHERE id=?", [autoAd]);
                 if (a.length) {
                     adCtx = `Fyradrive | 🚘 ${String(a[0].marca || '').toUpperCase()} ${String(a[0].modelo || '').toUpperCase()} ${a[0].anio}\n💵 $${Number(a[0].precio || 0).toLocaleString('en-US')}`;
@@ -284,7 +293,18 @@ module.exports = async function handler(req, res) {
                 posesionSb = !!posesionOwner(mensajes, escalasSb);
             }
 
-            const clasif = outStandby ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
+            // ══ ELECCIÓN DEL APARADOR (fuente única aparador.js — MISMA que el panel y en
+            // el MISMO orden: ANTES de entender(), para que el clasificador no alcance a
+            // escribir auto_id_activo y ahogue la elección).
+            let elAparador = null;
+            if (!outStandby) {
+                try {
+                    const apSx = require('../lib/seb/aparador.js');
+                    elAparador = await apSx.intentarEleccionAparador(SANDBOX_TEL, textoFamilia, convId);
+                } catch (e) { }
+            }
+
+            const clasif = (outStandby || elAparador) ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
 
             // AUTO ACTIVO con memoria (fidelidad con producción): si este mensaje no
             // menciona el auto, se usa el último resuelto (wa_conversations.auto_id_activo).
@@ -303,6 +323,11 @@ module.exports = async function handler(req, res) {
                 etapa = 'STANDBY';
                 out = outStandby;
                 ruta = out.puente ? 'escala_puente' : 'escala';
+            } else if (elAparador) {
+                etapa = 'APARADOR';
+                out = { segmentos: elAparador.segmentos, tipo: elAparador.tipo, fotos: elAparador.fotos || null, fotos_after_index: (elAparador.fotos_after_index != null ? elAparador.fotos_after_index : null) };
+                if (elAparador.escalar_owner) { out.escala = true; out.motivo = elAparador.escala_motivo; }
+                ruta = elAparador.tipo;
             } else if (posesionSb) {
                 etapa = 'POSESIÓN · HERRAMIENTA';
                 const { herramientaPura, UNIV_HERRAMIENTA } = require('../lib/seb/doctrina.js');
@@ -328,7 +353,14 @@ module.exports = async function handler(req, res) {
                 else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
             } else if (bursts === 0) {
                 etapa = 'OPENER';
-                if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
+                // ══ PUERTA 2 — clic genérico de carrusel → APARADOR (fuente única, misma
+                // función que el panel real; el ancla del ojo entra como hipótesis)
+                try {
+                    const apSb = require('../lib/seb/aparador.js');
+                    const arrSb = await apSb.arranqueCarrusel({ tel: SANDBOX_TEL, textoRaw: texto, textoFamilia, adCtx, textosIn: textoFamilia, nombre: NOMBRE_COMPRADOR, esClick: true });
+                    if (arrSb) out = { segmentos: arrSb.segmentos, tipo: arrSb.tipo, fotos: arrSb.fotos || null, fotos_after_index: (arrSb.fotos_after_index != null ? arrSb.fotos_after_index : null) };
+                } catch (e) { }
+                if (!out && clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
                     try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
                 }
                 if (!out) {
@@ -350,6 +382,15 @@ module.exports = async function handler(req, res) {
                             const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                             if (cand) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro, de esos tenemos estos disponibles:\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'opener_desambiguar' };
                         } catch (e) { }
+                        // ══ PUERTA 3 — criterio / link (fuente única, misma que el panel)
+                        if (!out) {
+                            try {
+                                const apSb3 = require('../lib/seb/aparador.js');
+                                const esDudaSb = ['cotizar_credito', 'cita_ubicacion', 'fotos_videos', 'estado_auto', 'precio_negociacion'].includes(clasif.intencion_principal);
+                                const arrSb3 = await apSb3.arranqueCarrusel({ tel: SANDBOX_TEL, textoRaw: textoFamilia, textoFamilia, adCtx, textosIn: textoFamilia, nombre: NOMBRE_COMPRADOR, esClick: false, duda: esDudaSb ? String(textoFamilia).slice(0, 200) : null });
+                                if (arrSb3) out = { segmentos: arrSb3.segmentos, tipo: arrSb3.tipo, fotos: arrSb3.fotos || null, fotos_after_index: (arrSb3.fotos_after_index != null ? arrSb3.fotos_after_index : null) };
+                            } catch (e) { }
+                        }
                         if (!out) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro que sí, de qué auto buscas información? Para poderte ayudar'], tipo: 'opener_sin_auto' };
                     }
                 }
