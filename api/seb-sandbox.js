@@ -314,6 +314,27 @@ module.exports = async function handler(req, res) {
             }
 
             const clasif = (outStandby || elAparador || opFlujo) ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
+            // red team r2 #2: el auto resuelto viene NEGADO ("NO me interesa el Mustang…")
+            // → no es interés: se anula para que jamás se pitchee ni se siente
+            let outGemelos = null;
+            if (clasif.auto_id) {
+                try {
+                    const apNeg = require('../lib/seb/aparador.js');
+                    const rowsNeg = await query("SELECT id, marca, modelo, version, anio FROM inventario_autos WHERE id=?", [Number(clasif.auto_id)]);
+                    if (rowsNeg.length && apNeg.esNegado(textoFamilia, [rowsNeg[0].marca, rowsNeg[0].modelo, rowsNeg[0].version, rowsNeg[0].anio].filter(Boolean).join(' '))) clasif.auto_id = null;
+                    // GEMELOS también en el opener (red team r2 #4)
+                    if (clasif.auto_id) {
+                        const autosG = await apNeg.inventarioActivo();
+                        const rowG = autosG.find(a => a.id === Number(clasif.auto_id));
+                        const gemG = rowG ? apNeg.gemelosDe(rowG, autosG) : [];
+                        if (gemG.length) {
+                            const listaG = [rowG].concat(gemG);
+                            outGemelos = { segmentos: ['Tenemos dos así, nada más cambia el precio:\n' + listaG.map((x, i) => `${i + 1}) ${apNeg.fichaBreve(x)}`).join('\n'), '¿Cuál de los dos te interesa?'], tipo: 'mesa_gemelos' };
+                            clasif.auto_id = null;
+                        }
+                    }
+                } catch (e) { }
+            }
 
             // AUTO ACTIVO con memoria (fidelidad con producción): si este mensaje no
             // menciona el auto, se usa el último resuelto (wa_conversations.auto_id_activo).
@@ -332,6 +353,10 @@ module.exports = async function handler(req, res) {
                 etapa = 'STANDBY';
                 out = outStandby;
                 ruta = out.puente ? 'escala_puente' : 'escala';
+            } else if (outGemelos) {
+                etapa = 'MESA';
+                out = outGemelos;
+                ruta = 'mesa_gemelos';
             } else if (elAparador) {
                 etapa = 'APARADOR';
                 out = { segmentos: elAparador.segmentos, tipo: elAparador.tipo, fotos: elAparador.fotos || null, fotos_after_index: (elAparador.fotos_after_index != null ? elAparador.fotos_after_index : null) };

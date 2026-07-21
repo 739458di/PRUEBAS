@@ -657,6 +657,26 @@ module.exports = async function handler(req, res) {
             const historial = histCorto;
             const mensajeCerebro = adCtx ? '[DESC: ' + adCtx + ']\n' + lastMsg : lastMsg;
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
+            // red team r2 #2: el auto resuelto viene NEGADO ("NO me interesa el Mustang…")
+            // → no es interés: se anula para que jamás se pitchee ni se siente
+            if (clasif.auto_id) {
+                try {
+                    const apNeg = require('../lib/seb/aparador.js');
+                    const rowsNeg = await query("SELECT marca, modelo, version, anio FROM inventario_autos WHERE id=?", [Number(clasif.auto_id)]);
+                    if (rowsNeg.length && apNeg.esNegado(textoFamilia, [rowsNeg[0].marca, rowsNeg[0].modelo, rowsNeg[0].version, rowsNeg[0].anio].filter(Boolean).join(' '))) clasif.auto_id = null;
+                    // GEMELOS también en el opener (red team r2 #4): dos altas casi
+                    // idénticas → jamás elegir una en silencio, se pregunta con precios
+                    if (clasif.auto_id) {
+                        const autosG = await apNeg.inventarioActivo();
+                        const rowG = autosG.find(a => a.id === Number(clasif.auto_id));
+                        const gemG = rowG ? apNeg.gemelosDe(rowG, autosG) : [];
+                        if (gemG.length) {
+                            const listaG = [rowG].concat(gemG);
+                            return res.status(200).json({ ok: true, modo: 'mesa', tipo: 'mesa_gemelos', segmentos: ['Tenemos dos así, nada más cambia el precio:\n' + listaG.map((x, i) => `${i + 1}) ${apNeg.fichaBreve(x)}`).join('\n'), '¿Cuál de los dos te interesa?'] });
+                        }
+                    }
+                } catch (e) { }
+            }
 
             // ══ PUERTA 2 — CLIC GENÉRICO DE CARRUSEL (orden owner 2026-07-20): el clic
             // pelón ("Me interesa un auto" + link) SIEMPRE abre el APARADOR. Si el ojo
