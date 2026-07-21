@@ -368,12 +368,12 @@ module.exports = async function handler(req, res) {
                 ruta = 'mesa_gemelos';
             } else if (elAparador) {
                 etapa = 'APARADOR';
-                out = { segmentos: elAparador.segmentos, tipo: elAparador.tipo, fotos: elAparador.fotos || null, fotos_after_index: (elAparador.fotos_after_index != null ? elAparador.fotos_after_index : null) };
+                out = { segmentos: elAparador.segmentos, tipo: elAparador.tipo, fotos: elAparador.fotos || null, fotos_after_index: (elAparador.fotos_after_index != null ? elAparador.fotos_after_index : null), ubicacion_auto_id: elAparador.ubicacion_auto_id || null };
                 if (elAparador.escalar_owner) { out.escala = true; out.motivo = elAparador.escala_motivo; }
                 ruta = elAparador.tipo;
             } else if (opFlujo) {
                 etapa = 'APARADOR';
-                out = { segmentos: opFlujo.segmentos, tipo: opFlujo.tipo, fotos: opFlujo.fotos || null, fotos_after_index: (opFlujo.fotos_after_index != null ? opFlujo.fotos_after_index : null) };
+                out = { segmentos: opFlujo.segmentos, tipo: opFlujo.tipo, fotos: opFlujo.fotos || null, fotos_after_index: (opFlujo.fotos_after_index != null ? opFlujo.fotos_after_index : null), ubicacion_auto_id: opFlujo.ubicacion_auto_id || null };
                 if (opFlujo.escalar_owner) { out.escala = true; out.motivo = opFlujo.escala_motivo; }
                 ruta = opFlujo.tipo;
             } else if (posesionSb) {
@@ -467,7 +467,7 @@ module.exports = async function handler(req, res) {
                 let mesaSb = null;
                 try { mesaSb = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
                 if (mesaSb && mesaSb.segmentos) {
-                    out = { segmentos: mesaSb.segmentos, tipo: mesaSb.tipo, fotos: mesaSb.fotos || null, fotos_after_index: (mesaSb.fotos_after_index != null ? mesaSb.fotos_after_index : null) };
+                    out = { segmentos: mesaSb.segmentos, tipo: mesaSb.tipo, fotos: mesaSb.fotos || null, fotos_after_index: (mesaSb.fotos_after_index != null ? mesaSb.fotos_after_index : null), ubicacion_auto_id: mesaSb.ubicacion_auto_id || null };
                     etapa = 'MESA'; ruta = mesaSb.tipo;
                 }
                 if (mesaSb && mesaSb.auto_id) { clasif.auto_id = mesaSb.auto_id; autoActivo = mesaSb.auto_id; }
@@ -505,7 +505,7 @@ module.exports = async function handler(req, res) {
                 let mesaSb3 = null;
                 try { mesaSb3 = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
                 if (mesaSb3 && mesaSb3.segmentos) {
-                    out = { segmentos: mesaSb3.segmentos, tipo: mesaSb3.tipo, fotos: mesaSb3.fotos || null, fotos_after_index: (mesaSb3.fotos_after_index != null ? mesaSb3.fotos_after_index : null) };
+                    out = { segmentos: mesaSb3.segmentos, tipo: mesaSb3.tipo, fotos: mesaSb3.fotos || null, fotos_after_index: (mesaSb3.fotos_after_index != null ? mesaSb3.fotos_after_index : null), ubicacion_auto_id: mesaSb3.ubicacion_auto_id || null };
                     etapa = 'MESA'; ruta = mesaSb3.tipo;
                 }
                 if (mesaSb3 && mesaSb3.auto_id) { clasif.auto_id = mesaSb3.auto_id; autoActivo = mesaSb3.auto_id; }

@@ -545,7 +545,7 @@ module.exports = async function handler(req, res) {
                 // ══ ELECCIÓN DEL APARADOR (carrusel 2026-07-20): si mostramos aparador y
                 // aún no hay foco, este mensaje puede ser la elección (hecho duro) o "más opciones"
                 const elA = await intentarEleccionAparador(tel, followup, convId);
-                if (elA) return res.status(200).json({ ok: true, modo: 'aparador', ...elA });
+                if (elA) return res.status(200).json({ ok: true, modo: 'aparador', ...elA, pin_after_index: (elA.pin_after_index != null ? elA.pin_after_index : null) });
                 // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
                 const opF = await opcionesEnFlujo({ tel, texto: followup });
                 if (opF) {
@@ -559,7 +559,7 @@ module.exports = async function handler(req, res) {
                 // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
                 // con 2-3 en mesa lo general se contesta para todos, lo de uno en ese.
                 const mesaC = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasifC, convId });
-                if (mesaC && mesaC.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaC.tipo, segmentos: mesaC.segmentos, fotos: mesaC.fotos || null, fotos_after_index: (mesaC.fotos_after_index != null ? mesaC.fotos_after_index : null) });
+                if (mesaC && mesaC.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaC.tipo, segmentos: mesaC.segmentos, fotos: mesaC.fotos || null, fotos_after_index: (mesaC.fotos_after_index != null ? mesaC.fotos_after_index : null), ubicacion_auto_id: mesaC.ubicacion_auto_id || null, pin_after_index: (mesaC.pin_after_index != null ? mesaC.pin_after_index : null) });
                 if (mesaC && mesaC.auto_id) clasifC.auto_id = mesaC.auto_id;
                 // ══ EL PERRO (owner 2026-07-21): Haiku elige herramientas (combinadas o
                 // no), el código ejecuta con machotes — mata el parche-por-parche.
@@ -614,7 +614,7 @@ module.exports = async function handler(req, res) {
                 const followupE = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes.length ? entrantes[entrantes.length - 1].mensaje : '');
                 // elección tardía del aparador (preguntó algo en medio y luego eligió)
                 const elA2 = await intentarEleccionAparador(tel, followupE, convId);
-                if (elA2) return res.status(200).json({ ok: true, modo: 'aparador', ...elA2 });
+                if (elA2) return res.status(200).json({ ok: true, modo: 'aparador', ...elA2, pin_after_index: (elA2.pin_after_index != null ? elA2.pin_after_index : null) });
                 // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
                 const opF2 = await opcionesEnFlujo({ tel, texto: followupE });
                 if (opF2) {
@@ -627,7 +627,7 @@ module.exports = async function handler(req, res) {
                 clasifE.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followupE, clasif: clasifE });
                 // ══ LA MESA (owner 2026-07-21) — misma capa que en continuación
                 const mesaE = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followupE, clasif: clasifE, convId });
-                if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null) });
+                if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null), ubicacion_auto_id: mesaE.ubicacion_auto_id || null, pin_after_index: (mesaE.pin_after_index != null ? mesaE.pin_after_index : null) });
                 if (mesaE && mesaE.auto_id) clasifE.auto_id = mesaE.auto_id;
                 // ══ EL PERRO (owner 2026-07-21) — misma capa que en continuación
                 {
@@ -723,7 +723,7 @@ module.exports = async function handler(req, res) {
             // mesa desde el saludo (ficha + portada + punto de cada uno → a la cita)
             try {
                 const emP = await require('../lib/seb/mesa.js').entradaMultiple({ tel, texto: textoFamilia, nombre: nombreChat });
-                if (emP) return res.status(200).json({ ok: true, modo: 'mesa', tipo: emP.tipo, segmentos: emP.segmentos, fotos: emP.fotos || null, fotos_after_index: (emP.fotos_after_index != null ? emP.fotos_after_index : null) });
+                if (emP) return res.status(200).json({ ok: true, modo: 'mesa', tipo: emP.tipo, segmentos: emP.segmentos, fotos: emP.fotos || null, fotos_after_index: (emP.fotos_after_index != null ? emP.fotos_after_index : null), ubicacion_auto_id: emP.ubicacion_auto_id || null, pin_after_index: (emP.pin_after_index != null ? emP.pin_after_index : null) });
             } catch (e) { console.error('[mesa multi opener]', e.message); }
 
             // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la
