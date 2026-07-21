@@ -414,7 +414,16 @@ module.exports = async function handler(req, res) {
                 ruta = !out ? 'silencio' : out.escala ? 'escala' : out.tipo === 'cerebro' ? 'cerebro' : out.tipo === 'opener_sin_auto' ? 'banco_opener_universal' : 'banco_opener';
             } else if (bursts === 1) {
                 etapa = 'CONTINUACIÓN';
-                const cont = await responderCont({ texto: textoFamilia, nombre: NOMBRE_COMPRADOR, auto_id: autoActivo || clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses, intencion: clasif.intencion_principal, conv_id: convId, clasif });
+                // ══ LA MESA (owner 2026-07-21) — fuente única, mismo orden que el panel
+                let mesaSb = null;
+                try { mesaSb = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
+                if (mesaSb && mesaSb.segmentos) {
+                    out = { segmentos: mesaSb.segmentos, tipo: mesaSb.tipo, fotos: mesaSb.fotos || null, fotos_after_index: (mesaSb.fotos_after_index != null ? mesaSb.fotos_after_index : null) };
+                    etapa = 'MESA'; ruta = mesaSb.tipo;
+                }
+                if (mesaSb && mesaSb.auto_id) { clasif.auto_id = mesaSb.auto_id; autoActivo = mesaSb.auto_id; }
+                const cont = out ? null : await responderCont({ texto: textoFamilia, nombre: NOMBRE_COMPRADOR, auto_id: autoActivo || clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses, intencion: clasif.intencion_principal, conv_id: convId, clasif });
+                if (out) { /* la mesa contestó */ } else
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
                 if (cont && cont.escalar) { out = { escala: true, motivo: cont.motivo, puente: cont.puente || null }; ruta = cont.puente ? 'escala_puente' : 'escala'; }
                 else if (cont && cont.silencio) { out = { silencio: true, motivo: 'cortesía — silencio' }; ruta = 'silencio'; }
@@ -431,9 +440,18 @@ module.exports = async function handler(req, res) {
                 }
             } else {
                 etapa = 'ETAPA 3';
-                const e3 = await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo, conv_id: convId, clasif });
+                // ══ LA MESA (owner 2026-07-21) — fuente única, mismo orden que el panel
+                let mesaSb3 = null;
+                try { mesaSb3 = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
+                if (mesaSb3 && mesaSb3.segmentos) {
+                    out = { segmentos: mesaSb3.segmentos, tipo: mesaSb3.tipo, fotos: mesaSb3.fotos || null, fotos_after_index: (mesaSb3.fotos_after_index != null ? mesaSb3.fotos_after_index : null) };
+                    etapa = 'MESA'; ruta = mesaSb3.tipo;
+                }
+                if (mesaSb3 && mesaSb3.auto_id) { clasif.auto_id = mesaSb3.auto_id; autoActivo = mesaSb3.auto_id; }
+                const e3 = out ? null : await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo, conv_id: convId, clasif });
                 universo = (e3 && e3.universo) || '';
-                if (e3 && e3.escalar) { out = { escala: true, motivo: e3.motivo, puente: e3.puente || null }; ruta = e3.puente ? 'escala_puente' : 'escala'; }
+                if (out) { /* la mesa contestó */ }
+                else if (e3 && e3.escalar) { out = { escala: true, motivo: e3.motivo, puente: e3.puente || null }; ruta = e3.puente ? 'escala_puente' : 'escala'; }
                 else if (e3 && e3.silencio) { out = { silencio: true, motivo: e3.motivo }; ruta = 'silencio'; }
                 else if (e3 && e3.segmentos && e3.segmentos.length) { out = e3; ruta = 'banco_etapa3'; }
                 else {

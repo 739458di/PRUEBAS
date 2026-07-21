@@ -540,6 +540,11 @@ module.exports = async function handler(req, res) {
                 }
                 const mcC = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
                 const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
+                // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
+                // con 2-3 en mesa lo general se contesta para todos, lo de uno en ese.
+                const mesaC = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasifC, convId });
+                if (mesaC && mesaC.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaC.tipo, segmentos: mesaC.segmentos, fotos: mesaC.fotos || null, fotos_after_index: (mesaC.fotos_after_index != null ? mesaC.fotos_after_index : null) });
+                if (mesaC && mesaC.auto_id) clasifC.auto_id = mesaC.auto_id;
                 const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses, intencion: clasifC.intencion_principal, conv_id: convId, clasif: clasifC });
                 const escNomC = require('../lib/seb/opener.js').nombreReal(nombreChat) || nombreChat || null;
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
@@ -591,6 +596,10 @@ module.exports = async function handler(req, res) {
                 }
                 const mcE = adCtx ? '[DESC: ' + adCtx + ']\n' + followupE : followupE;
                 const clasifE = await entender({ mensaje: mcE, historial: histCorto, estado: {} });
+                // ══ LA MESA (owner 2026-07-21) — misma capa que en continuación
+                const mesaE = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followupE, clasif: clasifE, convId });
+                if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null) });
+                if (mesaE && mesaE.auto_id) clasifE.auto_id = mesaE.auto_id;
                 let autoE = clasifE.auto_id;
                 if (!autoE) { try { const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wc[0] && wc[0].auto_id_activo) autoE = Number(wc[0].auto_id_activo); } catch (e) { } }
                 const { responderEtapa3 } = require('../lib/seb/etapa3.js');
@@ -1062,6 +1071,51 @@ module.exports = async function handler(req, res) {
 
         // ══ CARGA DE LOTE (2026-07-13): el puente del VPS entrega cada pieza (texto o
         // foto ya subida a Blob) que el owner manda desde SU número. Ver carga-lote.js.
+        // ═══ FYRADMIN · SOLICITUDES DE RECEPCIÓN (orden owner 2026-07-21) ═══
+        // Las sesiones de Ignacio en REVISIÓN se enseñan en fyradrive.com/admin/pending
+        // y el botón APROBAR ejecuta LA MISMA PUERTA que el "publícalo" de WhatsApp
+        // (publicarSesion + recibo al owner + plantilla al vendedor + arrancar parqueado).
+        if (action === 'recepcion_pendientes') {
+            const rec = require('../lib/seb/recepcion.js');
+            await rec.ensureRecepcion();
+            const rsP = await query("SELECT telefono, datos, fotos, updated FROM recepcion_sesiones WHERE estado='revision' ORDER BY updated DESC");
+            const pendientes = rsP.map(r => {
+                let d = {}, f = [];
+                try { d = JSON.parse(r.datos || '{}'); } catch (e) { }
+                try { f = JSON.parse(r.fotos || '[]'); } catch (e) { }
+                delete d._pendientes;
+                return { telefono: r.telefono, datos: d, fotos: f, updated: Number(r.updated) || null };
+            });
+            return res.status(200).json({ ok: true, pendientes });
+        }
+        if (action === 'recepcion_publicar' && req.method === 'POST') {
+            const telP = String(req.body.telefono || '').replace(/\D/g, '');
+            if (!telP) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            const rec = require('../lib/seb/recepcion.js');
+            const { enviarWA } = require('../lib/seb/citas-vivas.js');
+            const OWNER_WA = '5218120066355';
+            const rP = await rec.publicarSesion(telP);
+            if (!rP.ok) return res.status(200).json({ ok: false, error: rP.error || 'no se pudo publicar' });
+            const aP = rP.auto || {};
+            await enviarWA(OWNER_WA, `✅ Publicado (particular, desde fyradmin): ${aP.marca} ${aP.modelo} ${aP.anio} — $${Number(aP.precio || 0).toLocaleString('en-US')} — ${aP.photos} fotos${aP.template ? ' — diseño ✓' : ' — ⚠️ diseño pendiente'}`).catch(() => { });
+            if (rP.sesion && rP.sesion.telefono) {
+                for (const sgP of rec.plantillaPublicado()) await enviarWA(rP.sesion.telefono, sgP).catch(() => { });
+            }
+            if (rP.siguiente && rP.siguiente.segmentos && rP.sesion && rP.sesion.telefono) {
+                for (const sgS of rP.siguiente.segmentos) await enviarWA(rP.sesion.telefono, sgS).catch(() => { });
+                await enviarWA(OWNER_WA, `🅿️→🟢 Arranqué el siguiente auto parqueado del mismo vendedor`).catch(() => { });
+            }
+            return res.status(200).json({ ok: true, auto: aP });
+        }
+        if (action === 'recepcion_rechazar' && req.method === 'POST') {
+            // rechazo MUDO: la sesión se descarta y nada le llega al vendedor — lo que
+            // quieras decirle es tuyo (doctrina: el bot no da malas noticias solo).
+            const telP = String(req.body.telefono || '').replace(/\D/g, '');
+            if (!telP) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            await run("UPDATE recepcion_sesiones SET estado='descartada', updated=? WHERE telefono=? AND estado='revision'", [Date.now(), telP]);
+            return res.status(200).json({ ok: true });
+        }
+
         // ═══ IGNACIO RECEPCIÓN — soporte del puente ═══
         // ¿Este teléfono tiene sesión de recepción abierta? (el puente pregunta antes
         // de descargar/subir una foto — así las fotos de compradores no se tocan)
