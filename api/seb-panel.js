@@ -669,6 +669,13 @@ module.exports = async function handler(req, res) {
                 if (arrC) return res.status(200).json({ ok: true, ...arrC });
             } catch (e) { console.error('[aparador clic]', e.message); }
 
+            // ══ ENTRADA MÚLTIPLE (red team #3): abre nombrando 2-3 autos → todos a la
+            // mesa desde el saludo (ficha + portada + punto de cada uno → a la cita)
+            try {
+                const emP = await require('../lib/seb/mesa.js').entradaMultiple({ tel, texto: textoFamilia, nombre: nombreChat });
+                if (emP) return res.status(200).json({ ok: true, modo: 'mesa', tipo: emP.tipo, segmentos: emP.segmentos, fotos: emP.fotos || null, fotos_after_index: (emP.fotos_after_index != null ? emP.fotos_after_index : null) });
+            } catch (e) { console.error('[mesa multi opener]', e.message); }
+
             // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la
             // voz del owner (nucleo), en vez de deflectar a "info" genérico.
             if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {

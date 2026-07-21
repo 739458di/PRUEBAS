@@ -374,6 +374,13 @@ module.exports = async function handler(req, res) {
                     const arrSb = await apSb.arranqueCarrusel({ tel: SANDBOX_TEL, textoRaw: texto, textoFamilia, adCtx, textosIn: textoFamilia, nombre: NOMBRE_COMPRADOR, esClick: true });
                     if (arrSb) out = { segmentos: arrSb.segmentos, tipo: arrSb.tipo, fotos: arrSb.fotos || null, fotos_after_index: (arrSb.fotos_after_index != null ? arrSb.fotos_after_index : null) };
                 } catch (e) { }
+                // ══ ENTRADA MÚLTIPLE (red team #3) — fuente única, misma que el panel
+                if (!out) {
+                    try {
+                        const emSb = await require('../lib/seb/mesa.js').entradaMultiple({ tel: SANDBOX_TEL, texto: textoFamilia, nombre: NOMBRE_COMPRADOR });
+                        if (emSb) { out = { segmentos: emSb.segmentos, tipo: emSb.tipo, fotos: emSb.fotos || null, fotos_after_index: (emSb.fotos_after_index != null ? emSb.fotos_after_index : null) }; }
+                    } catch (e) { }
+                }
                 if (!out && clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
                     try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
                 }
