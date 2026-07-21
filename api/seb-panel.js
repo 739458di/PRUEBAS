@@ -545,6 +545,17 @@ module.exports = async function handler(req, res) {
                 const mesaC = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasifC, convId });
                 if (mesaC && mesaC.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaC.tipo, segmentos: mesaC.segmentos, fotos: mesaC.fotos || null, fotos_after_index: (mesaC.fotos_after_index != null ? mesaC.fotos_after_index : null) });
                 if (mesaC && mesaC.auto_id) clasifC.auto_id = mesaC.auto_id;
+                // ══ EL PERRO (owner 2026-07-21): Haiku elige herramientas (combinadas o
+                // no), el código ejecuta con machotes — mata el parche-por-parche.
+                {
+                    const histTxt = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
+                    const perroC = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followup, historial: histTxt, convId });
+                    if (perroC && perroC.escalar_owner) {
+                        await logEscala(tel, perroC.escala_motivo);
+                        return res.status(200).json({ ok: !!(perroC.segmentos && perroC.segmentos.length), modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos || [], escalar_owner: true, escala_motivo: perroC.escala_motivo, escala_ultimo: followup });
+                    }
+                    if (perroC) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos, fotos: perroC.fotos || null, fotos_after_index: (perroC.fotos_after_index != null ? perroC.fotos_after_index : null) });
+                }
                 const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses, intencion: clasifC.intencion_principal, conv_id: convId, clasif: clasifC });
                 const escNomC = require('../lib/seb/opener.js').nombreReal(nombreChat) || nombreChat || null;
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
@@ -600,6 +611,16 @@ module.exports = async function handler(req, res) {
                 const mesaE = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followupE, clasif: clasifE, convId });
                 if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null) });
                 if (mesaE && mesaE.auto_id) clasifE.auto_id = mesaE.auto_id;
+                // ══ EL PERRO (owner 2026-07-21) — misma capa que en continuación
+                {
+                    const histTxtE = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
+                    const perroE = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followupE, historial: histTxtE, convId });
+                    if (perroE && perroE.escalar_owner) {
+                        await logEscala(tel, perroE.escala_motivo);
+                        return res.status(200).json({ ok: !!(perroE.segmentos && perroE.segmentos.length), modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos || [], escalar_owner: true, escala_motivo: perroE.escala_motivo, escala_ultimo: followupE });
+                    }
+                    if (perroE) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos, fotos: perroE.fotos || null, fotos_after_index: (perroE.fotos_after_index != null ? perroE.fotos_after_index : null) });
+                }
                 let autoE = clasifE.auto_id;
                 if (!autoE) { try { const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wc[0] && wc[0].auto_id_activo) autoE = Number(wc[0].auto_id_activo); } catch (e) { } }
                 const { responderEtapa3 } = require('../lib/seb/etapa3.js');

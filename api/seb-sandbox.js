@@ -422,6 +422,18 @@ module.exports = async function handler(req, res) {
                     etapa = 'MESA'; ruta = mesaSb.tipo;
                 }
                 if (mesaSb && mesaSb.auto_id) { clasif.auto_id = mesaSb.auto_id; autoActivo = mesaSb.auto_id; }
+                // ══ EL PERRO (owner 2026-07-21) — fuente única, mismo orden que el panel
+                if (!out) {
+                    try {
+                        const histTxtSb = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
+                        const perroSb = await require('../lib/seb/ruteador.js').rutear({ tel: SANDBOX_TEL, texto: textoFamilia, historial: histTxtSb, convId });
+                        if (perroSb) {
+                            out = { segmentos: perroSb.segmentos || [], tipo: perroSb.tipo, fotos: perroSb.fotos || null, fotos_after_index: (perroSb.fotos_after_index != null ? perroSb.fotos_after_index : null) };
+                            if (perroSb.escalar_owner) { out.escala = true; out.motivo = perroSb.escala_motivo; }
+                            etapa = 'PERRO'; ruta = perroSb.tipo;
+                        }
+                    } catch (e) { }
+                }
                 const cont = out ? null : await responderCont({ texto: textoFamilia, nombre: NOMBRE_COMPRADOR, auto_id: autoActivo || clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses, intencion: clasif.intencion_principal, conv_id: convId, clasif });
                 if (out) { /* la mesa contestó */ } else
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
@@ -448,6 +460,18 @@ module.exports = async function handler(req, res) {
                     etapa = 'MESA'; ruta = mesaSb3.tipo;
                 }
                 if (mesaSb3 && mesaSb3.auto_id) { clasif.auto_id = mesaSb3.auto_id; autoActivo = mesaSb3.auto_id; }
+                // ══ EL PERRO (owner 2026-07-21) — fuente única, mismo orden que el panel
+                if (!out) {
+                    try {
+                        const histTxtSb3 = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
+                        const perroSb3 = await require('../lib/seb/ruteador.js').rutear({ tel: SANDBOX_TEL, texto: textoFamilia, historial: histTxtSb3, convId });
+                        if (perroSb3) {
+                            out = { segmentos: perroSb3.segmentos || [], tipo: perroSb3.tipo, fotos: perroSb3.fotos || null, fotos_after_index: (perroSb3.fotos_after_index != null ? perroSb3.fotos_after_index : null) };
+                            if (perroSb3.escalar_owner) { out.escala = true; out.motivo = perroSb3.escala_motivo; }
+                            etapa = 'PERRO'; ruta = perroSb3.tipo;
+                        }
+                    } catch (e) { }
+                }
                 const e3 = out ? null : await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo, conv_id: convId, clasif });
                 universo = (e3 && e3.universo) || '';
                 if (out) { /* la mesa contestó */ }
