@@ -387,8 +387,8 @@ module.exports = async function handler(req, res) {
                 const rafagaP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || ultimoSolo;
                 // "mándame la información del X" = herramienta DIRECTA (leer ficha) — sin
                 // gancho, y si nombra otro auto ese se abre (orden owner 2026-07-21)
-                const infoP = await require('../lib/seb/mesa.js').infoEnPosesion({ tel: SANDBOX_TEL, texto: ultimoSolo }).catch(() => null);
-                if (infoP) { out = infoP; ruta = 'herramienta'; universo = 'info_auto'; }
+                const infoP = await require('../lib/seb/mesa.js').herramientaEnPosesion({ tel: SANDBOX_TEL, texto: ultimoSolo }).catch(() => null);
+                if (infoP) { out = infoP; ruta = 'herramienta'; universo = infoP.universo || 'info_auto'; }
                 // la clasificación TAMBIÉN sobre el último mensaje (la del backlog envenena el ruteo)
                 const clasifP = out ? { intencion_principal: 'info_inicial', datos: {} } : await entender({ mensaje: ultimoSolo, historial: histCorto, estado: {} });
                 let eP = out ? null : await responderEtapa3({ texto: ultimoSolo, auto_id: autoActivo || clasifP.auto_id, conv_id: convId, clasif: clasifP });
@@ -403,6 +403,9 @@ module.exports = async function handler(req, res) {
                 if (out) { /* la info directa ya salió */ }
                 else if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
                 else if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
+                else if (/(fotos?|im[aá]genes|videos?|ubicaci[oó]n|direcci[oó]n|d[oó]nde|mapa|precio|cu[aá]nto|cotiza|enganche|mensualidad|cita|agenda|disponible|informaci[oó]n|detalles|ficha)/i.test(ultimoSolo)) {
+                    out = { escala: true, motivo: '🔧 te pidió algo (chat en tus manos) y la herramienta no pudo correr — lo ves tú' }; ruta = 'escala';
+                }
                 else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
             } else if (bursts === 0) {
                 etapa = 'OPENER';

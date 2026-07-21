@@ -24,6 +24,8 @@ const citasVivas = require('../lib/seb/citas-vivas.js');
 // ══ APARADOR DE CARRUSEL (orden owner 2026-07-20) — la lógica vive en la FUENTE
 // ÚNICA lib/seb/aparador.js (el sandbox usa LA MISMA): aquí solo se importa.
 const { intentarEleccionAparador, arranqueCarrusel, opcionesEnFlujo } = require('../lib/seb/aparador.js');
+const RE_PETICION_POS = /(fotos?|im[aá]genes|videos?|ubicaci[oó]n|direcci[oó]n|d[oó]nde|mapa|precio|cu[aá]nto|cotiza|enganche|mensualidad|cita|agenda|disponible|informaci[oó]n|detalles|ficha)/i;
+
 
 async function logEscala(tel, motivo) {
     try {
@@ -499,8 +501,8 @@ module.exports = async function handler(req, res) {
                     let followupP = ultimoSolo;
                     // "mándame la información del X" = herramienta DIRECTA (leer ficha) — sin
                     // gancho, y si nombra otro auto ese se abre (orden owner 2026-07-21)
-                    const infoP = await require('../lib/seb/mesa.js').infoEnPosesion({ tel, texto: ultimoSolo }).catch(() => null);
-                    if (infoP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_info_auto', segmentos: infoP.segmentos, fotos: infoP.fotos || null, fotos_after_index: (infoP.fotos_after_index != null ? infoP.fotos_after_index : 0) });
+                    const infoP = await require('../lib/seb/mesa.js').herramientaEnPosesion({ tel, texto: ultimoSolo }).catch(() => null);
+                    if (infoP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (infoP.universo || 'info_auto'), segmentos: infoP.segmentos, fotos: infoP.fotos || null, fotos_after_index: (infoP.fotos_after_index != null ? infoP.fotos_after_index : 0), ubicacion_auto_id: infoP.ubicacion_auto_id || null, pin_after_index: (infoP.pin_after_index != null ? infoP.pin_after_index : null) });
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + ultimoSolo : ultimoSolo;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
                     let autoP = clasifP.auto_id;
@@ -523,6 +525,14 @@ module.exports = async function handler(req, res) {
                     if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) {
                         const nomPos = (convRow.length && convRow[0].nombre) || null;
                         return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '🔧 herramienta sin datos: ' + (eP.motivo || ''), escala_nombre: nomPos, escala_ultimo: followupP });
+                    }
+                    // El silencio JAMÁS se traga una PETICIÓN (auditoría caso Héctor): si el
+                    // comprador pidió algo reconocible y la herramienta no pudo correr, se
+                    // te ESCALA con el motivo — el dueño se entera siempre.
+                    if (RE_PETICION_POS.test(followupP)) {
+                        const nomPet = (convRow.length && convRow[0].nombre) || null;
+                        await logEscala(tel, '🔧 pidió algo en tu chat y el bot no pudo servirlo');
+                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '🔧 te pidió algo (chat en tus manos) y la herramienta no pudo correr — lo ves tú', escala_nombre: nomPet, escala_ultimo: followupP });
                     }
                     return res.status(200).json({ ok: false, motivo: 'posesion_owner — chat en tus manos; no es herramienta → silencio' });
                 }
