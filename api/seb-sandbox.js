@@ -336,15 +336,21 @@ module.exports = async function handler(req, res) {
                 } catch (e) { }
             }
 
-            // AUTO ACTIVO con memoria (fidelidad con producción): si este mensaje no
-            // menciona el auto, se usa el último resuelto (wa_conversations.auto_id_activo).
-            let autoActivo = clasif.auto_id || null;
-            if (autoActivo) {
-                await run("UPDATE wa_conversations SET auto_id_activo=?, updated_at=? WHERE telefono=?", [autoActivo, Date.now(), SANDBOX_TEL]).catch(() => {});
-                await run("INSERT INTO wa_conversations (telefono, auto_id_activo, updated_at) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [SANDBOX_TEL, autoActivo, Date.now(), SANDBOX_TEL]).catch(() => {});
+            // AUTO ACTIVO: el estado GUARDADO manda (fix raíz compradores-reales: la
+            // inferencia de la IA escribiéndose como estado hacía DERIVAR el foco —
+            // 273→259→291→268 — y la cita salía del auto equivocado). En el OPENER la
+            // resolución del primer mensaje (nombre o anuncio) sí es deliberada; de
+            // ahí en adelante, solo lo NOMBRADO con sus letras cambia el auto.
+            let autoActivo = null;
+            if (bursts === 0) {
+                autoActivo = clasif.auto_id || null;
+                if (autoActivo) {
+                    await run("UPDATE wa_conversations SET auto_id_activo=?, updated_at=? WHERE telefono=?", [autoActivo, Date.now(), SANDBOX_TEL]).catch(() => {});
+                    await run("INSERT INTO wa_conversations (telefono, auto_id_activo, updated_at) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [SANDBOX_TEL, autoActivo, Date.now(), SANDBOX_TEL]).catch(() => {});
+                }
             } else {
-                const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [SANDBOX_TEL]).catch(() => []);
-                if (wc.length && wc[0].auto_id_activo) autoActivo = Number(wc[0].auto_id_activo) || null;
+                autoActivo = await require('../lib/seb/mesa.js').alinearAuto({ tel: SANDBOX_TEL, texto: textoFamilia, clasif });
+                clasif.auto_id = autoActivo;   // la inferencia re-alineada: jamás manda sola
             }
 
             let out = null; let etapa = ''; let ruta = ''; let universo = '';

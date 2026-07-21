@@ -540,6 +540,8 @@ module.exports = async function handler(req, res) {
                 }
                 const mcC = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
                 const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
+                // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
+                clasifC.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followup, clasif: clasifC });
                 // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
                 // con 2-3 en mesa lo general se contesta para todos, lo de uno en ese.
                 const mesaC = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasifC, convId });
@@ -607,6 +609,8 @@ module.exports = async function handler(req, res) {
                 }
                 const mcE = adCtx ? '[DESC: ' + adCtx + ']\n' + followupE : followupE;
                 const clasifE = await entender({ mensaje: mcE, historial: histCorto, estado: {} });
+                // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
+                clasifE.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followupE, clasif: clasifE });
                 // ══ LA MESA (owner 2026-07-21) — misma capa que en continuación
                 const mesaE = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followupE, clasif: clasifE, convId });
                 if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null) });
