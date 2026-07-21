@@ -497,6 +497,10 @@ module.exports = async function handler(req, res) {
                     const ultimoSolo = insP.length ? String(insP[insP.length - 1].mensaje || '') : (entrantes[entrantes.length - 1].mensaje || '');
                     const rafagaP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || ultimoSolo;
                     let followupP = ultimoSolo;
+                    // "mándame la información del X" = herramienta DIRECTA (leer ficha) — sin
+                    // gancho, y si nombra otro auto ese se abre (orden owner 2026-07-21)
+                    const infoP = await require('../lib/seb/mesa.js').infoEnPosesion({ tel, texto: ultimoSolo }).catch(() => null);
+                    if (infoP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_info_auto', segmentos: infoP.segmentos, fotos: infoP.fotos || null, fotos_after_index: (infoP.fotos_after_index != null ? infoP.fotos_after_index : 0) });
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + ultimoSolo : ultimoSolo;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
                     let autoP = clasifP.auto_id;
@@ -584,7 +588,7 @@ module.exports = async function handler(req, res) {
                     if (candC) {
                         return res.status(200).json({
                             ok: true, modo: 'continuacion', tipo: 'cont_desambiguar', segmentos: [
-                                'Claro, de esos tenemos estos disponibles:\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
+                                require('../lib/seb/aparador.js').introFamilia(followup, candC) + '\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
                                 'Cuál te interesa?'
                             ]
                         });
@@ -678,6 +682,18 @@ module.exports = async function handler(req, res) {
                             const listaG = [rowG].concat(gemG);
                             return res.status(200).json({ ok: true, modo: 'mesa', tipo: 'mesa_gemelos', segmentos: ['Tenemos dos así, nada más cambia el precio:\n' + listaG.map((x, i) => `${i + 1}) ${apNeg.fichaBreve(x)}`).join('\n'), '¿Cuál de los dos te interesa?'] });
                         }
+                        // FAMILIA ambigua también en el opener ("info del mazda 2021" y hay
+                        // dos): se pregunta con la familia y SE RECUERDA — jamás adivinar
+                        const rFamO = apNeg.resolverEleccion(textoFamilia, autosG.map(a => ({ n: 0, id: a.id, nombre: a.nombre, color: '' })));
+                        if (rFamO && rFamO.pregunta && rFamO.via === 'nombre_ambiguo' && rFamO.pregunta.some(x => x.id === Number(clasif.auto_id))) {
+                            const idsF = rFamO.pregunta.map(x => x.id);
+                            const ejF = JSON.stringify({ mesa_familia: idsF });
+                            await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [ejF, Date.now(), tel]).catch(() => { });
+                            await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [tel, 'mesa', ejF, Date.now(), tel]).catch(() => { });
+                            const { nombreReal: nrF, saludoHora: shF } = require('../lib/seb/opener.js');
+                            const nmF = nrF(nombreChat);
+                            return res.status(200).json({ ok: true, modo: 'mesa', tipo: 'mesa_pregunta_cual', segmentos: [`Qué tal${nmF ? ' ' + nmF : ''} ${shF()}!`, 'De esos tenemos estos — ¿cuál te interesa?\n' + rFamO.pregunta.map((x, i) => `${i + 1}) ${x.nombre}`).join('\n')] });
+                        }
                     }
                 } catch (e) { }
             }
@@ -744,7 +760,7 @@ module.exports = async function handler(req, res) {
                                 ok: true, tipo: 'opener_desambiguar', segmentos: [
                                     `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
                                     'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
-                                    'Claro, de esos tenemos estos disponibles:\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
+                                    require('../lib/seb/aparador.js').introFamilia(textoFamilia, cand) + '\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
                                     'Cuál te interesa?'
                                 ]
                             });

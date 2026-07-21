@@ -385,18 +385,23 @@ module.exports = async function handler(req, res) {
                 const ultTsP = insP.length ? Number(insP[insP.length - 1].ts) : 0;
                 const ultimoSolo = insP.length ? String(insP[insP.length - 1].mensaje || '') : textoFamilia;
                 const rafagaP = insP.filter(m => ultTsP - Number(m.ts) < 2 * 60000).map(m => m.mensaje).join(' ') || ultimoSolo;
+                // "mándame la información del X" = herramienta DIRECTA (leer ficha) — sin
+                // gancho, y si nombra otro auto ese se abre (orden owner 2026-07-21)
+                const infoP = await require('../lib/seb/mesa.js').infoEnPosesion({ tel: SANDBOX_TEL, texto: ultimoSolo }).catch(() => null);
+                if (infoP) { out = infoP; ruta = 'herramienta'; universo = 'info_auto'; }
                 // la clasificación TAMBIÉN sobre el último mensaje (la del backlog envenena el ruteo)
-                const clasifP = await entender({ mensaje: ultimoSolo, historial: histCorto, estado: {} });
-                let eP = await responderEtapa3({ texto: ultimoSolo, auto_id: autoActivo || clasifP.auto_id, conv_id: convId, clasif: clasifP });
-                let hP = herramientaPura(eP);
-                if (!hP && rafagaP !== ultimoSolo) {
+                const clasifP = out ? { intencion_principal: 'info_inicial', datos: {} } : await entender({ mensaje: ultimoSolo, historial: histCorto, estado: {} });
+                let eP = out ? null : await responderEtapa3({ texto: ultimoSolo, auto_id: autoActivo || clasifP.auto_id, conv_id: convId, clasif: clasifP });
+                let hP = out ? null : herramientaPura(eP);
+                if (!out && !hP && rafagaP !== ultimoSolo) {
                     const eP2 = await responderEtapa3({ texto: rafagaP, auto_id: autoActivo || clasifP.auto_id, conv_id: convId, clasif: clasifP });
                     const hP2 = herramientaPura(eP2);
                     if (hP2) { eP = eP2; hP = hP2; }
                     else if ((!eP || !eP.escalar) && eP2 && eP2.escalar) eP = eP2;
                 }
                 const RE_HERR_SIN_DATOS = /(punto de venta configurado|no se pudo cotizar|arma t[uú] la cotizaci[oó]n|hey no lo financia)/i;
-                if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
+                if (out) { /* la info directa ya salió */ }
+                else if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
                 else if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
                 else { out = { silencio: true, motivo: 'posesión del owner — no es herramienta → silencio' }; ruta = 'silencio'; }
             } else if (bursts === 0) {
@@ -435,7 +440,7 @@ module.exports = async function handler(req, res) {
                             const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
                             const aAct = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                             const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
-                            if (cand) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro, de esos tenemos estos disponibles:\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'opener_desambiguar' };
+                            if (cand) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', require('../lib/seb/aparador.js').introFamilia(textoFamilia, cand) + '\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'opener_desambiguar' };
                         } catch (e) { }
                         // ══ PUERTA 3 — criterio / link (fuente única, misma que el panel)
                         if (!out) {
@@ -487,7 +492,7 @@ module.exports = async function handler(req, res) {
                         const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
                         const aActC = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                         const candC = candidatosDeAuto(textoFamilia, aActC.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
-                        if (candC) { out = { segmentos: ['Claro, de esos tenemos estos disponibles:\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'cont_desambiguar' }; ruta = 'banco_continuacion'; universo = 'desambiguar'; }
+                        if (candC) { out = { segmentos: [require('../lib/seb/aparador.js').introFamilia(textoFamilia, candC) + '\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'cont_desambiguar' }; ruta = 'banco_continuacion'; universo = 'desambiguar'; }
                     } catch (e) { }
                     if (!out) { out = { escala: true, motivo: 'fuera de la lista blanca (continuación, no claro) — lo ves tú' }; ruta = 'escala'; }
                 }
