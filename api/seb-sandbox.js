@@ -184,7 +184,10 @@ module.exports = async function handler(req, res) {
                 adCtx = '🚙 Seminuevos verificados en Monterrey 🚙\nAutos particulares únicos dueños y facturas de agencia. Desliza y agenda prueba de manejo por el tuyo — te respondemos al instante. | https://fb.me/6paTJncjy';
                 await run("INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at",
                     [SANDBOX_TEL, adCtx, Date.now()]).catch(() => {});
-                if (!/https?:\/\//i.test(texto)) texto = '🔗 https://fb.me/6paTJncjy\n' + texto;
+                // el LINK del referral solo llega en el PRIMER contacto (como en la vida
+                // real) — con el selector puesto, los mensajes siguientes van limpios
+                const yaHayIn = await query("SELECT 1 FROM mensajes WHERE conversacion_id=? AND direccion='in' LIMIT 1", [convId]).catch(() => []);
+                if (!yaHayIn.length && !/https?:\/\//i.test(texto)) texto = '🔗 https://fb.me/6paTJncjy\n' + texto;
             } else if (autoAd) {
                 const a = await query("SELECT marca, modelo, anio, precio FROM inventario_autos WHERE id=?", [autoAd]);
                 if (a.length) {
