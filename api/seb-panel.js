@@ -23,7 +23,7 @@ const citasVivas = require('../lib/seb/citas-vivas.js');
 // CRITERIO abren la puerta a que su primer manual tome posesión (ver doctrina).
 // ══ APARADOR DE CARRUSEL (orden owner 2026-07-20) — la lógica vive en la FUENTE
 // ÚNICA lib/seb/aparador.js (el sandbox usa LA MISMA): aquí solo se importa.
-const { intentarEleccionAparador, arranqueCarrusel } = require('../lib/seb/aparador.js');
+const { intentarEleccionAparador, arranqueCarrusel, opcionesEnFlujo } = require('../lib/seb/aparador.js');
 
 async function logEscala(tel, motivo) {
     try {
@@ -532,6 +532,12 @@ module.exports = async function handler(req, res) {
                 // aún no hay foco, este mensaje puede ser la elección (hecho duro) o "más opciones"
                 const elA = await intentarEleccionAparador(tel, followup, convId);
                 if (elA) return res.status(200).json({ ok: true, modo: 'aparador', ...elA });
+                // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
+                const opF = await opcionesEnFlujo({ tel, texto: followup });
+                if (opF) {
+                    if (opF.escalar_owner) await logEscala(tel, opF.escala_motivo);
+                    return res.status(200).json({ ok: true, modo: 'aparador', ...opF, escala_ultimo: opF.escalar_owner ? followup : undefined });
+                }
                 const mcC = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
                 const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
                 const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses, intencion: clasifC.intencion_principal, conv_id: convId, clasif: clasifC });
@@ -577,6 +583,12 @@ module.exports = async function handler(req, res) {
                 // elección tardía del aparador (preguntó algo en medio y luego eligió)
                 const elA2 = await intentarEleccionAparador(tel, followupE, convId);
                 if (elA2) return res.status(200).json({ ok: true, modo: 'aparador', ...elA2 });
+                // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
+                const opF2 = await opcionesEnFlujo({ tel, texto: followupE });
+                if (opF2) {
+                    if (opF2.escalar_owner) await logEscala(tel, opF2.escala_motivo);
+                    return res.status(200).json({ ok: true, modo: 'aparador', ...opF2, escala_ultimo: opF2.escalar_owner ? followupE : undefined });
+                }
                 const mcE = adCtx ? '[DESC: ' + adCtx + ']\n' + followupE : followupE;
                 const clasifE = await entender({ mensaje: mcE, historial: histCorto, estado: {} });
                 let autoE = clasifE.auto_id;

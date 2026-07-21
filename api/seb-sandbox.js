@@ -303,8 +303,17 @@ module.exports = async function handler(req, res) {
                     elAparador = await apSx.intentarEleccionAparador(SANDBOX_TEL, textoFamilia, convId);
                 } catch (e) { }
             }
+            // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
+            // (fuente única, MISMO orden que el panel: después de elección, antes de entender)
+            let opFlujo = null;
+            if (!outStandby && !elAparador && bursts >= 1) {
+                try {
+                    const apSx2 = require('../lib/seb/aparador.js');
+                    opFlujo = await apSx2.opcionesEnFlujo({ tel: SANDBOX_TEL, texto: textoFamilia });
+                } catch (e) { }
+            }
 
-            const clasif = (outStandby || elAparador) ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
+            const clasif = (outStandby || elAparador || opFlujo) ? { intencion_principal: 'otro', datos: {} } : await entender({ mensaje: mensajeCerebro, historial: histCorto, estado: {} });
 
             // AUTO ACTIVO con memoria (fidelidad con producción): si este mensaje no
             // menciona el auto, se usa el último resuelto (wa_conversations.auto_id_activo).
@@ -328,6 +337,11 @@ module.exports = async function handler(req, res) {
                 out = { segmentos: elAparador.segmentos, tipo: elAparador.tipo, fotos: elAparador.fotos || null, fotos_after_index: (elAparador.fotos_after_index != null ? elAparador.fotos_after_index : null) };
                 if (elAparador.escalar_owner) { out.escala = true; out.motivo = elAparador.escala_motivo; }
                 ruta = elAparador.tipo;
+            } else if (opFlujo) {
+                etapa = 'APARADOR';
+                out = { segmentos: opFlujo.segmentos, tipo: opFlujo.tipo, fotos: opFlujo.fotos || null, fotos_after_index: (opFlujo.fotos_after_index != null ? opFlujo.fotos_after_index : null) };
+                if (opFlujo.escalar_owner) { out.escala = true; out.motivo = opFlujo.escala_motivo; }
+                ruta = opFlujo.tipo;
             } else if (posesionSb) {
                 etapa = 'POSESIÓN · HERRAMIENTA';
                 const { herramientaPura, UNIV_HERRAMIENTA } = require('../lib/seb/doctrina.js');
@@ -388,7 +402,10 @@ module.exports = async function handler(req, res) {
                                 const apSb3 = require('../lib/seb/aparador.js');
                                 const esDudaSb = ['cotizar_credito', 'cita_ubicacion', 'fotos_videos', 'estado_auto', 'precio_negociacion'].includes(clasif.intencion_principal);
                                 const arrSb3 = await apSb3.arranqueCarrusel({ tel: SANDBOX_TEL, textoRaw: textoFamilia, textoFamilia, adCtx, textosIn: textoFamilia, nombre: NOMBRE_COMPRADOR, esClick: false, duda: esDudaSb ? String(textoFamilia).slice(0, 200) : null });
-                                if (arrSb3) out = { segmentos: arrSb3.segmentos, tipo: arrSb3.tipo, fotos: arrSb3.fotos || null, fotos_after_index: (arrSb3.fotos_after_index != null ? arrSb3.fotos_after_index : null) };
+                                if (arrSb3) {
+                                    out = { segmentos: arrSb3.segmentos, tipo: arrSb3.tipo, fotos: arrSb3.fotos || null, fotos_after_index: (arrSb3.fotos_after_index != null ? arrSb3.fotos_after_index : null) };
+                                    if (arrSb3.escalar_owner) { out.escala = true; out.motivo = arrSb3.escala_motivo; }
+                                }
                             } catch (e) { }
                         }
                         if (!out) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro que sí, de qué auto buscas información? Para poderte ayudar'], tipo: 'opener_sin_auto' };
@@ -433,6 +450,11 @@ module.exports = async function handler(req, res) {
                 // momento y te mando…"), y en paralelo se escala al humano para lo que sigue.
                 segmentos = [out.puente];
                 await guardarMsg(convId, 'out', out.puente, 'text');
+            } else if (out && out.escala && out.segmentos && out.segmentos.length) {
+                // escala CON mensaje honesto (p. ej. búsqueda sin match): el comprador SÍ
+                // lo recibe y en paralelo se te escala — igual que el panel real.
+                segmentos = out.segmentos;
+                for (const s of segmentos) await guardarMsg(convId, 'out', s, 'text');
             } else if (out && out.escala) {
                 // escala pura sin puente: en la vida real Seb se queda callado y lo ves tú
             } else if (out && out.segmentos) {
