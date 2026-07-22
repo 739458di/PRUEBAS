@@ -734,7 +734,17 @@ module.exports = async function handler(req, res) {
                         // FAMILIA ambigua también en el opener ("info del mazda 2021" y hay
                         // dos): se pregunta con la familia y SE RECUERDA — jamás adivinar
                         const rFamO = apNeg.resolverEleccion(textoFamilia, autosG.map(a => ({ n: 0, id: a.id, nombre: a.nombre, color: '' })));
-                        if (rFamO && rFamO.pregunta && rFamO.via === 'nombre_ambiguo' && rFamO.pregunta.some(x => x.id === Number(clasif.auto_id))) {
+                        // ⚖️ EL JUEZ DE DISPARO (owner 2026-07-22): primer contacto — si el
+                        // juez razona que NO nombró esos autos, este guard no dispara.
+                        let famOk = true;
+                        if (rFamO && rFamO.pregunta && rFamO.via === 'nombre_ambiguo') {
+                            try {
+                                const { juezNombroAuto } = require('../lib/seb/juez.js');
+                                const jF = await juezNombroAuto({ texto: textoFamilia, candidatos: rFamO.pregunta });
+                                famOk = !jF || jF.nombro !== false;
+                            } catch (e) { }
+                        }
+                        if (famOk && rFamO && rFamO.pregunta && rFamO.via === 'nombre_ambiguo' && rFamO.pregunta.some(x => x.id === Number(clasif.auto_id))) {
                             const idsF = rFamO.pregunta.map(x => x.id);
                             const ejF = JSON.stringify({ mesa_familia: idsF });
                             await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [ejF, Date.now(), tel]).catch(() => { });
@@ -1263,13 +1273,23 @@ module.exports = async function handler(req, res) {
                         // la foto JAMÁS despierta a Ignacio — es imagen de comprador.
                         if (activa) {
                             const adR = await query("SELECT 1 FROM ad_por_telefono WHERE telefono=?", [tR]).catch(() => []);
-                            let compradorTxt = false;
+                            let compradorTxt = false; let insR = [];
                             if (cvR.length) {
-                                const insR = await query("SELECT texto FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY id DESC LIMIT 5", [cvR[0].id]).catch(() => []);
+                                insR = await query("SELECT texto FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY id DESC LIMIT 5", [cvR[0].id]).catch(() => []);
                                 const blob = insR.map(x => String(x.texto || '')).join(' ').toLowerCase();
                                 compradorTxt = /(fb\.me\/|instagram\.com|wa\.me\/|me interesa (un|el|este) auto|me interesa un auto|informaci[oó]n para comprar|quiero comprar|busco (un|una) (auto|carro|camioneta)|precio de[l]? )/.test(blob);
                             }
                             if (adR.length || compradorTxt) activa = false;
+                            // ⚖️ JUEZ DE ROL (owner 2026-07-22): respaldo IA del candado.
+                            // Si el determinista no vio señal pero hay TEXTO, el juez razona
+                            // el rol; SOLO 'comprador' frena a Ignacio (vendedor/duda pasan).
+                            if (activa && insR.length) {
+                                try {
+                                    const { juezRol } = require('../lib/seb/juez.js');
+                                    const jR = await juezRol({ mensajes: insR.map(x => x.texto) });
+                                    if (jR && jR.rol === 'comprador') activa = false;
+                                } catch (e) { }
+                            }
                         }
                     }
                 } catch (e) { }
