@@ -558,6 +558,9 @@ module.exports = async function handler(req, res) {
                 clasifC.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followup, clasif: clasifC });
                 // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
                 // con 2-3 en mesa lo general se contesta para todos, lo de uno en ese.
+                // DUDAS GENERALES (crédito/requisitos/tasas) → su carril, no la mesa
+                const dgC = await require('../lib/seb/mesa.js').dudaGeneral({ tel, texto: followup, nombre: nombreChat, clasif: clasifC, convId });
+                if (dgC) return res.status(200).json({ ok: true, modo: 'duda_general', tipo: dgC.tipo, segmentos: dgC.segmentos });
                 const mesaC = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasifC, convId });
                 if (mesaC && mesaC.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaC.tipo, segmentos: mesaC.segmentos, fotos: mesaC.fotos || null, fotos_after_index: (mesaC.fotos_after_index != null ? mesaC.fotos_after_index : null), ubicacion_auto_id: mesaC.ubicacion_auto_id || null, pin_after_index: (mesaC.pin_after_index != null ? mesaC.pin_after_index : null) });
                 if (mesaC && mesaC.auto_id) clasifC.auto_id = mesaC.auto_id;
@@ -626,6 +629,9 @@ module.exports = async function handler(req, res) {
                 // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
                 clasifE.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followupE, clasif: clasifE });
                 // ══ LA MESA (owner 2026-07-21) — misma capa que en continuación
+                // DUDAS GENERALES (crédito/requisitos/tasas) → su carril, no la mesa
+                const dgE = await require('../lib/seb/mesa.js').dudaGeneral({ tel, texto: followupE, nombre: nombreChat, clasif: clasifE, convId });
+                if (dgE) return res.status(200).json({ ok: true, modo: 'duda_general', tipo: dgE.tipo, segmentos: dgE.segmentos });
                 const mesaE = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followupE, clasif: clasifE, convId });
                 if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null), ubicacion_auto_id: mesaE.ubicacion_auto_id || null, pin_after_index: (mesaE.pin_after_index != null ? mesaE.pin_after_index : null) });
                 if (mesaE && mesaE.auto_id) clasifE.auto_id = mesaE.auto_id;

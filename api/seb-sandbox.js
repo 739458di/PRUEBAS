@@ -465,7 +465,11 @@ module.exports = async function handler(req, res) {
                 etapa = 'CONTINUACIÓN';
                 // ══ LA MESA (owner 2026-07-21) — fuente única, mismo orden que el panel
                 let mesaSb = null;
-                try { mesaSb = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
+                try {
+                    const dgSb = await require('../lib/seb/mesa.js').dudaGeneral({ tel: SANDBOX_TEL, texto: textoFamilia, nombre: NOMBRE_COMPRADOR, clasif, convId });
+                    if (dgSb) { out = { segmentos: dgSb.segmentos, tipo: dgSb.tipo }; etapa = 'DUDA GENERAL'; ruta = dgSb.tipo; universo = dgSb.universo || 'cotizacion'; }
+                } catch (e) { }
+                try { if (!out) mesaSb = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
                 if (mesaSb && mesaSb.segmentos) {
                     out = { segmentos: mesaSb.segmentos, tipo: mesaSb.tipo, fotos: mesaSb.fotos || null, fotos_after_index: (mesaSb.fotos_after_index != null ? mesaSb.fotos_after_index : null), ubicacion_auto_id: mesaSb.ubicacion_auto_id || null };
                     etapa = 'MESA'; ruta = mesaSb.tipo;
@@ -503,7 +507,11 @@ module.exports = async function handler(req, res) {
                 etapa = 'ETAPA 3';
                 // ══ LA MESA (owner 2026-07-21) — fuente única, mismo orden que el panel
                 let mesaSb3 = null;
-                try { mesaSb3 = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
+                try {
+                    const dgSb3 = await require('../lib/seb/mesa.js').dudaGeneral({ tel: SANDBOX_TEL, texto: textoFamilia, nombre: NOMBRE_COMPRADOR, clasif, convId });
+                    if (dgSb3) { out = { segmentos: dgSb3.segmentos, tipo: dgSb3.tipo }; etapa = 'DUDA GENERAL'; ruta = dgSb3.tipo; universo = dgSb3.universo || 'cotizacion'; }
+                } catch (e) { }
+                try { if (!out) mesaSb3 = await require('../lib/seb/mesa.js').responderMesa({ tel: SANDBOX_TEL, texto: textoFamilia, clasif, convId }); } catch (e) { }
                 if (mesaSb3 && mesaSb3.segmentos) {
                     out = { segmentos: mesaSb3.segmentos, tipo: mesaSb3.tipo, fotos: mesaSb3.fotos || null, fotos_after_index: (mesaSb3.fotos_after_index != null ? mesaSb3.fotos_after_index : null), ubicacion_auto_id: mesaSb3.ubicacion_auto_id || null };
                     etapa = 'MESA'; ruta = mesaSb3.tipo;
