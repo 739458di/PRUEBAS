@@ -4,5 +4,13 @@
       "source": "/api/(.*)",
       "destination": "/api/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/seb-sandbox.js": {
+      "maxDuration": 60
+    },
+    "api/seb-panel.js": {
+      "maxDuration": 60
+    }
+  }
 }
