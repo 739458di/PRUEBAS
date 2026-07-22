@@ -78,6 +78,20 @@ async function guardarMsg(convId, direccion, texto, tipo, manual) {
          Math.floor(ts / 1000), 'sbx_' + ts, direccion === 'out' ? 1 : 0, 'sandbox', 'sandbox']).catch(() => {});
 }
 
+// Guarda qué OFRECIÓ Seb en su última respuesta ("¿te mando las fotos?") para que
+// un "sí" del comprador lo ejecute (orden owner 2026-07-21).
+async function guardarOferta(telO, segs) {
+    try {
+        const mm = require('../lib/seb/mesa.js');
+        const of = mm.ofertaDeSegmentos(segs);
+        const cur = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [telO]);
+        if (!cur.length) return;
+        let ej = {}; try { ej = JSON.parse(cur[0].estado_json || '{}'); } catch (e) { }
+        if (of) ej.oferta = of; else delete ej.oferta;
+        await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), Date.now(), telO]);
+    } catch (e) { }
+}
+
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -558,6 +572,7 @@ module.exports = async function handler(req, res) {
                 // escala pura sin puente: en la vida real Seb se queda callado y lo ves tú
             } else if (out && out.segmentos) {
                 segmentos = out.segmentos;
+                await guardarOferta(SANDBOX_TEL, segmentos);
                 for (const s of segmentos) await guardarMsg(convId, 'out', s, 'text');
                 if (out.fotos && out.fotos.length) { fotos = out.fotos; await guardarMsg(convId, 'out', '', 'image'); }
                 if (out.ubicacion_auto_id) {

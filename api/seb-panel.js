@@ -126,6 +126,20 @@ function aplicarReset(c, resets) {
     return c;
 }
 
+// Guarda qué OFRECIÓ Seb en su última respuesta ("¿te mando las fotos?") para que
+// un "sí" del comprador lo ejecute (orden owner 2026-07-21).
+async function guardarOferta(telO, segs) {
+    try {
+        const mm = require('../lib/seb/mesa.js');
+        const of = mm.ofertaDeSegmentos(segs);
+        const cur = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [telO]);
+        if (!cur.length) return;
+        let ej = {}; try { ej = JSON.parse(cur[0].estado_json || '{}'); } catch (e) { }
+        if (of) ej.oferta = of; else delete ej.oferta;
+        await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), Date.now(), telO]);
+    } catch (e) { }
+}
+
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
