@@ -62,6 +62,22 @@
   /* ═══ LÍNEA DEL TIEMPO (el cron de película) ═══ */
   .tl { display:none; width:118px; flex:none; background:#0e1b21; border-left:1px solid #223; border-right:1px solid #223; flex-direction:column; align-items:center; padding:10px 4px; position:relative; }
   body.timeline .tl { display:flex; }
+  /* ══ LA MÁQUINA DE RESCATE — panel temporal (promesa / ghost) ══ */
+  .resc { display:none; margin:6px 14px 0; padding:8px 12px; border-radius:10px; background:#111b21; border:1px solid #233138; }
+  body.rescate .resc { display:block; }
+  .resc.prom { border-color:#f0a020; }
+  .resc.ghost { border-color:#7c8b95; }
+  .resc .rhead { display:flex; align-items:center; gap:8px; font-weight:800; font-size:13px; }
+  .resc.prom .rhead { color:#f0c060; }
+  .resc.ghost .rhead { color:#aebbc4; }
+  .resc .rtrack { position:relative; height:8px; margin:10px 4px 4px; background:#233138; border-radius:4px; }
+  .resc .rfill { position:absolute; left:0; top:0; height:100%; border-radius:4px; background:linear-gradient(90deg,#00a884,#f0a020); }
+  .resc .rdot { position:absolute; top:-5px; width:16px; height:16px; border-radius:50%; background:#233138; border:2px solid #7c8b95; transform:translateX(-50%); font-size:9px; text-align:center; line-height:13px; }
+  .resc .rdot.hecho { background:#075e54; border-color:#00e5a0; }
+  .resc .rdot.prox { border-color:#f0a020; background:#3a2c10; }
+  .resc .rlbl { display:flex; justify-content:space-between; color:#8696a0; font-size:11px; margin-top:8px; }
+  .resc .rbtn { background:#075e54; color:#e9edef; border:0; border-radius:8px; padding:4px 12px; font-weight:700; cursor:pointer; font-size:12px; }
+  .resc .rbtn:hover { background:#0a7a68; }
   .tl .tlt { color:#ffd279; font-size:10px; font-weight:700; text-align:center; letter-spacing:.5px; }
   .tl .cita-lbl { color:#00e5a0; font-size:12px; font-weight:800; text-align:center; margin-top:6px; }
   .tl .now-lbl { color:#8696a0; font-size:11px; text-align:center; margin-bottom:4px; }
@@ -125,6 +141,15 @@
   </div>
 
   <!-- ═══════ LÍNEA DEL TIEMPO (aparece con el MATCH; arrastra el reloj = cron) ═══════ -->
+  <div class="resc" id="resc">
+    <div class="rhead"><span id="rescIco">🛟</span> <span id="rescTit">RESCATE</span>
+      <span style="flex:1"></span>
+      <span id="rescReloj" style="font-weight:600;color:#8696a0;font-size:12px">—</span>
+      <button class="rbtn" onclick="avanzarRescate()">⏭ siguiente evento</button>
+    </div>
+    <div class="rtrack" id="rescTrack"><div class="rfill" id="rescFill" style="width:0%"></div></div>
+    <div class="rlbl"><span id="rescIni">—</span><span id="rescProx">—</span></div>
+  </div>
   <div class="tl" id="tl">
     <div class="tlt">⏱ LÍNEA DEL TIEMPO</div>
     <div class="cita-lbl" id="tlCita">—</div>
@@ -563,12 +588,54 @@ async function enviar(){
         }
         if (d.cita_dueno) ofrecerVendedor(d.cita_dueno);
       }
+      if ('rescate' in d) pintarRescate(d.rescate);
     }
   } catch(e){ typing.remove(); sistema('❌ red: ' + e.message); }
   document.getElementById('estado').textContent = 'en línea';
   ocupado = false; btn.disabled = false; txt.focus();
 }
 
+// ══ LA MÁQUINA DE RESCATE — panel temporal (mismo cerebro que producción) ══
+let RESC = null;
+function fmtR(ts){ const d = new Date(ts); return d.toLocaleDateString('es-MX',{weekday:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}); }
+function pintarRescate(r){
+  RESC = (r && r.activo) ? r : null;
+  const box = document.getElementById('resc');
+  if (!RESC) { document.body.classList.remove('rescate'); return; }
+  document.body.classList.add('rescate');
+  box.className = 'resc ' + (RESC.tipo === 'promesa' ? 'prom' : 'ghost');
+  document.getElementById('rescIco').textContent = RESC.tipo === 'promesa' ? '🤝' : '👻';
+  const etapas = RESC.tipo === 'promesa' ? 'PROMESA · ' + (RESC.etiqueta || RESC.escala) : 'GHOST · ' + (RESC.carril || '') + ' · toque ' + (RESC.etapa + 1) + ' de 3';
+  document.getElementById('rescTit').textContent = RESC.folio + ' · ' + etapas;
+  document.getElementById('rescReloj').textContent = '🔔 ' + fmtR(RESC.proxima_ts);
+  document.getElementById('rescIni').textContent = 'inicio ' + fmtR(RESC.created);
+  document.getElementById('rescProx').textContent = 'próximo toque ' + fmtR(RESC.proxima_ts);
+  const total = Math.max(RESC.proxima_ts - RESC.created, 1);
+  const p = Math.min(100, Math.max(0, (Date.now() - RESC.created) / total * 100));
+  document.getElementById('rescFill').style.width = p + '%';
+  const track = document.getElementById('rescTrack');
+  track.querySelectorAll('.rdot').forEach(x => x.remove());
+  const evs = (RESC.historial || []).filter(h => /push|reclamo|promesa|armado/.test(h.ev));
+  evs.forEach((h) => {
+    const dot = document.createElement('div'); dot.className = 'rdot hecho';
+    const pos = Math.min(98, Math.max(2, (h.ts - RESC.created) / total * 100));
+    dot.style.left = pos + '%'; dot.title = h.ev + ' · ' + fmtR(h.ts); dot.textContent = '✓';
+    track.appendChild(dot);
+  });
+  const prox = document.createElement('div'); prox.className = 'rdot prox'; prox.style.left = '98%';
+  prox.title = 'próximo · ' + fmtR(RESC.proxima_ts); prox.textContent = '🔔';
+  track.appendChild(prox);
+}
+async function avanzarRescate(){
+  if (!RESC) return;
+  const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'rescate_tiempo', sim_ts: Number(RESC.proxima_ts) + 1000 }) });
+  const d = await r.json();
+  if (!d.ok) { sistema('❌ rescate: ' + (d.error || '')); return; }
+  sistema('🕐 reloj adelantado a ' + fmtR(Number(RESC.proxima_ts) + 1000) + ' — el barredor corrió (mismo cron que producción)', true);
+  for (const p of (d.pushes || [])) { burbuja('seb', p.texto); sistema((p.tipo === 'promesa' ? '🤝 reclamo de promesa' : '👻 push de rescate (toque ' + (p.etapa + 1) + ')') + ' · ' + p.folio, true); }
+  pintarRescate(d.rescate);
+  if (!(d.rescate && d.rescate.activo)) sistema('📦 folio cerrado — ' + ((d.pushes||[]).length ? 'se agotaron los toques (a la lista)' : 'sin folio vivo'), true);
+}
 async function reiniciar(){
   if (ocupado) return;
   chat.innerHTML = ''; vchat.innerHTML = '';

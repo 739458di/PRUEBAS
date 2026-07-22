@@ -124,6 +124,7 @@ module.exports = async function handler(req, res) {
             await run("DELETE FROM seguimientos_ghost WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seb_queue WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM sandbox_match WHERE carril=?", [carril || 'owner']).catch(() => {});
+            try { await require('../lib/seb/rescate.js').limpiar(SANDBOX_TEL); } catch (e) { }
             await recepcion.resetSesion(SANDBOX_TEL).catch(() => {});
             await recepcion.olvidarDueno(SANDBOX_TEL).catch(() => {});
             return res.status(200).json({ ok: true, reset: true });
@@ -684,6 +685,14 @@ module.exports = async function handler(req, res) {
                      JSON.stringify({ segmentos, fotos: fotos ? fotos.length : 0, pin: !!pin, escala: !!(out && out.escala) })]);
                 turnoId = Number(ins.lastInsertRowid) || null;
             } catch (e) { }
+            // ══ LA MÁQUINA DE RESCATE (fuente única): cada turno re-evalúa folios
+            // (promesa/cancha/relleno) y re-arma el reloj del silencio.
+            let rescateInfo = null;
+            try {
+                const resc = require('../lib/seb/rescate.js');
+                await resc.registrarTurno({ tel: SANDBOX_TEL, textoIn: textoFamilia, ruta, segmentos, pin: !!pin, ahora: Date.now() });
+                rescateInfo = await resc.estadoPanel(SANDBOX_TEL);
+            } catch (e) { console.error('[rescate sb]', e.message); }
 
             return res.status(200).json({
                 ok: true, etapa,
@@ -694,7 +703,7 @@ module.exports = async function handler(req, res) {
                 puente: (out && out.puente) || null,
                 silencio: (!out || !!out.silencio) && !(out && out.escala && out.puente),
                 motivo: (out && out.motivo) || (!out ? 'ningún banco/cerebro aplicó — en WhatsApp Seb se queda callado' : null),
-                ruta, universo, turno_id: turnoId
+                ruta, universo, turno_id: turnoId, rescate: rescateInfo
             });
         }
 
@@ -895,6 +904,22 @@ module.exports = async function handler(req, res) {
         }
 
         // ══════════════ RELOJ SIMULADO: el owner adelanta el tiempo (cron de película) ══════════════
+        // ══════════ LA MÁQUINA DE RESCATE — panel y reloj simulado ══════════
+        if (action === 'rescate_estado') {
+            const resc = require('../lib/seb/rescate.js');
+            return res.status(200).json({ ok: true, rescate: await resc.estadoPanel(SANDBOX_TEL), ahora: Date.now() });
+        }
+        if (action === 'rescate_tiempo' && req.method === 'POST') {
+            // el owner adelanta el reloj → el BARREDOR corre a esa hora (mismo cerebro
+            // que el cron real; aquí el push acaba como burbuja del sandbox)
+            const resc = require('../lib/seb/rescate.js');
+            const simTs = Number(req.body.sim_ts || Date.now());
+            const convId = await ensureConv();
+            const ultIn = await query("SELECT ts FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY ts DESC LIMIT 1", [convId]).catch(() => []);
+            const pushes = await resc.barrer({ tel: SANDBOX_TEL, ahora: simTs, ultimoInTs: ultIn.length ? Number(ultIn[0].ts) : null });
+            for (const p of pushes) await guardarMsg(convId, 'out', p.texto, 'text');
+            return res.status(200).json({ ok: true, pushes, rescate: await resc.estadoPanel(SANDBOX_TEL), sim_ts: simTs });
+        }
         if (action === 'tiempo' && req.method === 'POST') {
             await ensureMatchTable();
             const laneKey = carril || 'owner';
