@@ -833,6 +833,25 @@ module.exports = async function handler(req, res) {
                         const arrF = await arranqueCarrusel({ tel, textoRaw: textoFamilia, textoFamilia, adCtx, textosIn: entrantes.slice(0, 3).map(m => m.mensaje).join(' '), nombre: nombreChat, esClick: false, duda: esDuda ? String(textoFamilia).slice(0, 200) : null });
                         if (arrF) return res.status(200).json({ ok: true, ...arrF });
                     } catch (e) { console.error('[aparador]', e.message); }
+                    // ══ LEY DEL OPENER (owner 2026-07-22): ni anuncio ni auto ni señal de
+                    // rol ("cómo funcionan", "info de su negocio") → se pregunta el CAJÓN
+                    // directo; la respuesta la resuelve dudaGeneral (comprar/vender).
+                    try {
+                        if (require('../lib/seb/aparador.js').rolAmbiguo({ texto: textoFamilia, adCtx })) {
+                            const curRol = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [tel]);
+                            let ejRol = {}; try { ejRol = JSON.parse((curRol[0] && curRol[0].estado_json) || '{}'); } catch (e) { }
+                            ejRol.pregunta_rol = 1;
+                            await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ejRol), Date.now(), tel]).catch(() => { });
+                            await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [tel, 'opener', JSON.stringify(ejRol), Date.now(), tel]).catch(() => { });
+                            return res.status(200).json({
+                                ok: true, tipo: 'opener_rol', segmentos: [
+                                    `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
+                                    'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
+                                    '¿Andas buscando comprar un auto, o vender el tuyo? Para atenderte como va 👍'
+                                ]
+                            });
+                        }
+                    } catch (e) { console.error('[rol]', e.message); }
                     // red de seguridad: la pregunta clásica del owner
                     return res.status(200).json({
                         ok: true, tipo: 'opener_sin_auto', segmentos: [

@@ -485,6 +485,19 @@ module.exports = async function handler(req, res) {
                                 }
                             } catch (e) { }
                         }
+                        // ══ LEY DEL OPENER: rol ambiguo → pregunta de cajón (paridad panel)
+                        if (!out) {
+                            try {
+                                if (require('../lib/seb/aparador.js').rolAmbiguo({ texto: textoFamilia, adCtx })) {
+                                    const curRol = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [SANDBOX_TEL]);
+                                    let ejRol = {}; try { ejRol = JSON.parse((curRol[0] && curRol[0].estado_json) || '{}'); } catch (e) { }
+                                    ejRol.pregunta_rol = 1;
+                                    await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ejRol), Date.now(), SANDBOX_TEL]).catch(() => { });
+                                    await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [SANDBOX_TEL, 'opener', JSON.stringify(ejRol), Date.now(), SANDBOX_TEL]).catch(() => { });
+                                    out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', '¿Andas buscando comprar un auto, o vender el tuyo? Para atenderte como va 👍'], tipo: 'opener_rol' };
+                                }
+                            } catch (e) { }
+                        }
                         if (!out) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro que sí, de qué auto buscas información? Para poderte ayudar'], tipo: 'opener_sin_auto' };
                     }
                 }
