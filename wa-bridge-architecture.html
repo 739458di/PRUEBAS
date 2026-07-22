@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wa-bridge.js — Arquitectura Completa</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; color: #e0e0e0; font-family: 'SF Mono', 'Fira Code', monospace; padding: 20px; }
+h1 { color: #00ff88; text-align: center; font-size: 28px; margin-bottom: 5px; }
+.subtitle { text-align: center; color: #666; font-size: 13px; margin-bottom: 30px; }
+.stats-bar { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+.stat { background: #111; border: 1px solid #333; border-radius: 8px; padding: 10px 18px; text-align: center; }
+.stat-num { font-size: 24px; font-weight: bold; color: #00ff88; }
+.stat-label { font-size: 10px; color: #888; text-transform: uppercase; }
+
+/* Sections */
+.section { margin-bottom: 40px; }
+.section-title { font-size: 20px; color: #ff6b35; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid #333; }
+.section-title .line { color: #555; font-size: 12px; }
+
+/* Flow diagram */
+.flow { display: flex; flex-direction: column; gap: 0; align-items: center; }
+.flow-row { display: flex; align-items: center; gap: 10px; }
+.arrow-down { color: #444; font-size: 24px; line-height: 1; }
+.arrow-right { color: #444; font-size: 18px; }
+
+.node { border-radius: 10px; padding: 12px 18px; min-width: 200px; text-align: center; position: relative; }
+.node-title { font-weight: bold; font-size: 13px; margin-bottom: 3px; }
+.node-detail { font-size: 10px; opacity: 0.7; }
+.node-line { font-size: 9px; color: #666; position: absolute; top: 3px; right: 8px; }
+
+.node-wa { background: #1a3d1a; border: 2px solid #25d366; color: #25d366; }
+.node-baileys { background: #1a1a3d; border: 2px solid #5b7fff; color: #a0b4ff; }
+.node-buffer { background: #3d3d1a; border: 2px solid #ffd700; color: #ffd700; }
+.node-router { background: #2d1a3d; border: 2px solid #bf5fff; color: #d49fff; }
+.node-seb { background: #1a2d3d; border: 2px solid #00bcd4; color: #80deea; }
+.node-ignacio { background: #3d2a1a; border: 2px solid #ff9800; color: #ffcc80; }
+.node-claude { background: #3d1a2a; border: 2px solid #e91e63; color: #f48fb1; }
+.node-db { background: #1a3d3d; border: 2px solid #009688; color: #80cbc4; }
+.node-crash { background: #3d1a1a; border: 2px solid #ff1744; color: #ff5252; animation: pulse-red 2s infinite; }
+.node-recovery { background: #1a3d2a; border: 2px solid #4caf50; color: #81c784; }
+.node-http { background: #2a2a1a; border: 2px solid #cddc39; color: #e6ee9c; }
+.node-boss { background: #3d2d1a; border: 2px solid #ff6f00; color: #ffab40; }
+.node-safe { background: #1a2a1a; border: 1px solid #2e7d32; color: #66bb6a; }
+
+@keyframes pulse-red { 0%, 100% { box-shadow: 0 0 5px #ff1744; } 50% { box-shadow: 0 0 20px #ff1744; } }
+
+/* Grid layouts */
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 15px 0; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 15px 0; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
+
+.card { background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; }
+.card-title { font-size: 13px; font-weight: bold; margin-bottom: 5px; }
+.card-body { font-size: 11px; color: #999; line-height: 1.5; }
+.card-line { font-size: 10px; color: #555; }
+
+.crash-card { border-color: #ff1744; background: #1a0a0a; }
+.crash-title { color: #ff5252; }
+.fix-card { border-color: #4caf50; background: #0a1a0a; }
+.fix-title { color: #66bb6a; }
+
+/* Route tree */
+.tree { margin: 15px 0 15px 20px; }
+.tree-item { padding: 6px 0; border-left: 2px solid #333; padding-left: 15px; font-size: 12px; position: relative; }
+.tree-item::before { content: '├'; position: absolute; left: -2px; color: #555; }
+.tree-item:last-child::before { content: '└'; }
+.tree-check { color: #4caf50; }
+.tree-x { color: #ff5252; }
+.tree-arrow { color: #ffd700; }
+
+/* Big flow */
+.mega-flow { background: #0d0d15; border: 1px solid #222; border-radius: 12px; padding: 25px; margin: 20px 0; }
+.mega-title { font-size: 16px; color: #00ff88; margin-bottom: 15px; text-align: center; }
+
+.step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 4px; }
+.step-num { background: #222; color: #00ff88; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; }
+.step-content { flex: 1; }
+.step-title { font-size: 13px; font-weight: bold; color: #ccc; }
+.step-detail { font-size: 11px; color: #777; margin-top: 2px; }
+.step-code { font-size: 10px; color: #5b7fff; background: #0a0a1a; padding: 3px 8px; border-radius: 4px; margin-top: 3px; display: inline-block; }
+.step-crash { border-left: 3px solid #ff1744; padding-left: 10px; }
+.step-connector { width: 28px; display: flex; justify-content: center; margin-bottom: 4px; }
+.step-line { width: 2px; height: 12px; background: #333; }
+
+.branch { margin-left: 40px; border-left: 2px solid #333; padding-left: 15px; margin-bottom: 4px; }
+.branch-label { font-size: 11px; color: #bf5fff; margin-bottom: 3px; }
+.branch-dest { font-size: 12px; color: #ccc; padding: 3px 0; }
+.branch-dest .tag { font-size: 9px; padding: 1px 6px; border-radius: 3px; margin-left: 5px; }
+.tag-seb { background: #1a2d3d; color: #00bcd4; }
+.tag-ignacio { background: #3d2a1a; color: #ff9800; }
+.tag-skip { background: #1a1a1a; color: #666; }
+.tag-crash { background: #3d1a1a; color: #ff5252; }
+.tag-tradein { background: #1a3d3d; color: #009688; }
+.tag-boss { background: #3d2d1a; color: #ff6f00; }
+
+/* Legend */
+.legend { display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0; padding: 10px; background: #111; border-radius: 8px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+/* Responsive */
+@media (max-width: 768px) { .grid-3, .grid-4 { grid-template-columns: 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>🔧 wa-bridge.js — Arquitectura del Bot</h1>
+<p class="subtitle">/root/wa-bridge/wa-bridge.js • VPS 134.209.51.172 • PM2: claude-remote</p>
+
+<div class="stats-bar">
+  <div class="stat"><div class="stat-num">7,212</div><div class="stat-label">Líneas de código</div></div>
+  <div class="stat"><div class="stat-num">40+</div><div class="stat-label">Variables globales</div></div>
+  <div class="stat"><div class="stat-num">208</div><div class="stat-label">try { blocks</div></div>
+  <div class="stat"><div class="stat-num">213</div><div class="stat-label">catch blocks</div></div>
+  <div class="stat"><div class="stat-num">5</div><div class="stat-label">Capas de dedup</div></div>
+  <div class="stat"><div class="stat-num">3</div><div class="stat-label">Failsafes</div></div>
+</div>
+
+<!-- ==================== SECTION 1: MEGA FLOW ==================== -->
+<div class="section">
+<div class="section-title">📡 1. FLUJO COMPLETO DE UN MENSAJE (de WhatsApp → respuesta)</div>
+
+<div class="mega-flow">
+  <div class="mega-title">🟢 WhatsApp Message Lifecycle</div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">📱 WhatsApp Cloud → Baileys WebSocket</div>
+      <div class="step-detail">Baileys mantiene conexión WebSocket con WhatsApp. Mensajes llegan como eventos.</div>
+      <div class="step-code">sock = makeWASocket({ auth: state, browser: ['Mac OS', 'Chrome', '14.4.1'] })</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">⚡ Event: messages.upsert <span style="color:#555">L.6280</span></div>
+      <div class="step-detail">Baileys dispara este evento con array de mensajes. Se procesan uno por uno en for loop.</div>
+      <div class="step-code">sock.ev.on('messages.upsert', async (upsert) => { for (const msg of upsert.messages) { ... } })</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <div class="step-title">🔍 RAW-UPSERT Log + Filtros Iniciales <span style="color:#555">L.6290</span></div>
+      <div class="step-detail">Log del mensaje raw. Filtros: status@broadcast → skip, ready=false → skip, reactionMessage → skip</div>
+      <div class="step-code">[RAW-UPSERT] jid: XXX | fromMe: false | type: conversation | pushName: Juan</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <div class="step-title">👤 ¿fromMe? (mensaje del boss o del bot) <span style="color:#555">L.6320</span></div>
+      <div class="step-detail">Si msg.key.fromMe = true → captura texto, guarda en DB como 'Sebastian (Boss)', boss-active lock, continue</div>
+    </div>
+  </div>
+
+  <div class="branch">
+    <div class="branch-label">if (msg.key.fromMe)</div>
+    <div class="branch-dest">→ ¿Es auto-sent? (_autoSentMsgIds.has) → delete del Set, skip <span class="tag tag-skip">SKIP</span></div>
+    <div class="branch-dest">→ ¿Es manual del boss? → Guardar en wa_messages (ai_generated=0) <span class="tag tag-boss">BOSS-CTX</span></div>
+    <div class="branch-dest">→ ¿Destino es vendedor? → bossActiveChats[phone] = Date.now() <span class="tag tag-boss">LOCK 10min</span></div>
+    <div class="branch-dest">→ continue (no procesar más)</div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <div class="step-title">📝 Extracción de Texto <span style="color:#555">L.6345-6432</span></div>
+      <div class="step-detail">Extrae texto según tipo: conversation, extendedTextMessage, imageMessage(caption), audioMessage, etc.</div>
+      <div class="step-code">if (mm.conversation) texto = mm.conversation;
+else if (mm.extendedTextMessage) texto = mm.extendedTextMessage.text;
+// + extrae adContext de externalAdReply y link preview → [ANUNCIO:...][DESC:...][LINK:...]
+if (adContext) texto += adContext; // L.6432</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <div class="step-title">🕐 DEDUP + Pulse Check + Buffer <span style="color:#555">L.6500-6560</span></div>
+      <div class="step-detail">processedMsgIds dedup, Pulse response check, LID cache, luego se agrega al buffer con timer</div>
+      <div class="step-code">msgBuffer[bufferKey].mensajes.push(texto);
+msgBuffer[bufferKey].rawMsgs.push(msg);
+msgBuffer[bufferKey].timer = setTimeout(() => processBuffered(bufferKey), MSG_BUFFER_DELAY);</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#ffd700">⏱️ BUFFER DELAY (1.5s) — Agrupa mensajes rápidos <span style="color:#555">L.652</span></div>
+      <div class="step-detail">MSG_BUFFER_DELAY = 1500ms. Si llegan múltiples mensajes rápido, se agrupan. Cada nuevo mensaje resetea el timer.</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num" style="background:#2d1a3d; color:#bf5fff">8</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#bf5fff">🔀 processBuffered(bufferKey) — EL GRAN ROUTER <span style="color:#555">L.5990</span></div>
+      <div class="step-detail">Función async que toma el buffer acumulado y decide a dónde enviarlo. AQUÍ es donde todo se decide.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== SECTION 2: ROUTER ==================== -->
+<div class="section">
+<div class="section-title">🔀 2. processBuffered() — El Router Central <span class="line">L.5990-6120</span></div>
+
+<div class="mega-flow">
+  <div class="mega-title">Árbol de Decisión del Router</div>
+
+  <div class="step">
+    <div class="step-num">A</div>
+    <div class="step-content">
+      <div class="step-title">📸 Fotos pendientes</div>
+      <div class="step-detail">Si hay imageMsgs y NO es flujo Ignacio/tradein → descarga y guarda en pendingPhotos[tel]</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">B</div>
+    <div class="step-content">
+      <div class="step-title">🆔 LID Resolution <span style="color:#555">L.6020</span></div>
+      <div class="step-detail">Si JID termina en @lid → resolver a phone@s.whatsapp.net usando onWhatsApp() y lidCache</div>
+      <div class="step-code">if (jid.includes('@lid')) → resolvedJid = clean(realPhone) + '@s.whatsapp.net'</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">C</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#ff9800">🔒 VENDEDOR INTERCEPT <span style="color:#555">L.6040</span></div>
+      <div class="step-detail">¿Es vendedor registrado Y NO es el boss?</div>
+    </div>
+  </div>
+  <div class="branch">
+    <div class="branch-label">if (!isGroup && isVendedor(realPhone) && !isBossMsg)</div>
+    <div class="branch-dest">→ ¿Boss-active lock? → SILENCIO (return) <span class="tag tag-boss">LOCK</span></div>
+    <div class="branch-dest">→ handleVendedorMessage(realPhone, texto, sock, jid) <span class="tag tag-ignacio">IGNACIO</span></div>
+    <div class="branch-dest">→ return; (NO llega a Seb)</div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">D</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#ff9800">🔍 SELLER LEAD DETECTION <span style="color:#555">L.6065</span></div>
+      <div class="step-detail">¿Nuevo contacto con intención de vender? detectSellerLead(textoCombinado, rawMsgs[0])</div>
+    </div>
+  </div>
+  <div class="branch">
+    <div class="branch-label">if (!isGroup && !isVendedor && !isBossMsg && detectSellerLead())</div>
+    <div class="branch-dest">→ Registrar como vendedor → vendedorPhones.add() <span class="tag tag-ignacio">REGISTRO</span></div>
+    <div class="branch-dest">→ startIgnacioFlow() → bienvenida de Ignacio <span class="tag tag-ignacio">IGNACIO</span></div>
+    <div class="branch-dest">→ notifyBoss('🟢 NUEVO LEAD VENDEDOR') <span class="tag tag-boss">NOTIF</span></div>
+    <div class="branch-dest">→ return;</div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">E</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#009688">🔄 TRADEIN FLOW <span style="color:#555">L.6090</span></div>
+      <div class="step-detail">¿Tiene tradeinFlows[tel] activo? (flujo de avalúo de auto a cuenta)</div>
+    </div>
+  </div>
+  <div class="branch">
+    <div class="branch-label">if (!isGroup && tradeinFlows[clean(realPhone)])</div>
+    <div class="branch-dest">→ handleTradeinFlow() <span class="tag tag-tradein">TRADEIN</span></div>
+    <div class="branch-dest">→ return;</div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">F</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#00bcd4">🤖 SEB TRIGGER DETECTION <span style="color:#555">L.6130+</span></div>
+      <div class="step-detail">detectSebIntent() → cotización, ubicación, cita, info, tradein, fyratrack. Si ninguno → allowlist check o TRUE SILENCE</div>
+      <div class="step-code">globalSebTriggers[tel] = { cotizacion, ubicacion, cita, info, tradein, ... }</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">G</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#00bcd4">📤 onMessage() → Claude API <span style="color:#555">L.5144</span></div>
+      <div class="step-detail">Construye prompt con historial (wa_messages), deal context, triggers. Llama a Claude API. Extrae respuesta + tools.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== SECTION 3: SEB INTERNALS ==================== -->
+<div class="section">
+<div class="section-title">🤖 3. Seb (onMessage) — Agente Comprador <span class="line">L.5144-5450</span></div>
+
+<div class="mega-flow">
+  <div class="mega-title">Flujo interno de onMessage → Claude</div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">DEDUP Check</div>
+      <div class="step-detail">respondingTo[tel], recentResponses[tel] (DEDUP_WINDOW), lock timer 45s auto-release</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">Guardar mensaje IN en wa_messages</div>
+      <div class="step-code">INSERT INTO wa_messages (..., direccion='in', ai_generated=0)</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <div class="step-title">SEB-CLOSED Check (agente cerrado)</div>
+      <div class="step-detail">Si detectSebIntent() = null Y no hay trigger → TRUE SILENCE. Seb NO responde a mensajes sin intent claro.</div>
+      <div class="step-code">[SEB-CLOSED] Claude skip for XXX — TRUE SILENCE (closed agent)</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <div class="step-title">Construir systemPrompt + prompt</div>
+      <div class="step-detail">basePrompt (identidad Seb) + boss_instructions + deal activo + cita + auto del anuncio + fotos + protección datos</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#ffd700">📜 HISTORIAL (wa_messages) <span style="color:#555">L.4957</span></div>
+      <div class="step-detail">SELECT últimos 15 mensajes. Labels: BOSS (ai_generated=0) vs SEB (ai_generated=1) vs CLIENTE (in)</div>
+      <div class="step-code">HISTORIAL:
+CLIENTE: Hola quiero info del Mazda
+SEB: Claro! El Mazda CX-5 2018 tiene...
+BOSS: Dale buen precio a este cliente
+SEB: ...</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <div class="step-title">Inyectar TRIGGERS al prompt</div>
+      <div class="step-detail">Si cotización → TRIGGER COTIZACION. Si cita → TRIGGER CITA + fecha HOY. Si primer mensaje → OBLIGATORIO RESPONDER.</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#e91e63">🧠 Claude API Call <span style="color:#555">L.5100</span></div>
+      <div class="step-detail">model: claude-sonnet-4-5, max_tokens: 800, tools: TOOLS (buscar_autos, agendar_cita, registrar_signal, etc.)</div>
+      <div class="step-code">fetch('https://api.anthropic.com/v1/messages', {
+  system: systemPrompt,
+  messages: [{ role: 'user', content: prompt }],  // ← SOLO 1 mensaje user
+  tools: TOOLS
+})</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">8</div>
+    <div class="step-content">
+      <div class="step-title">Tool Use Loop (hasta 5 rounds)</div>
+      <div class="step-detail">Si Claude devuelve tool_use → ejecutar herramienta → devolver resultado → Claude responde de nuevo</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">9</div>
+    <div class="step-content">
+      <div class="step-title">Enviar respuesta por WhatsApp + Guardar en DB</div>
+      <div class="step-code">sock.sendMessage(jid, { text: respuesta })
+INSERT INTO wa_messages (..., direccion='out', ai_generated=1)</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== SECTION 4: CRASH POINTS ==================== -->
+<div class="section">
+<div class="section-title">💥 4. PUNTOS DE CRASH — Dónde se rompe el sistema</div>
+
+<div class="grid-2">
+
+  <div class="card crash-card">
+    <div class="card-title crash-title">🔴 CRASH 1: reqPath is not defined <span class="card-line">L.6855</span></div>
+    <div class="card-body">
+      <strong>Dónde:</strong> HTTP server handler — cuando un request HTTP llega que no matchea /status, /api/send, etc.<br>
+      <strong>Causa:</strong> Variable <code>reqPath</code> nunca se declara. Debería ser <code>req.url</code>.<br>
+      <strong>Impacto:</strong> Genera ReferenceError continuo en logs. No mata el proceso pero llena logs de basura.<br>
+      <strong>Fix:</strong> Cambiar <code>reqPath</code> → <code>req.url</code> en L.6855
+    </div>
+  </div>
+
+  <div class="card crash-card">
+    <div class="card-title crash-title">🟢 CRASH 2: msg is not defined (YA FIXED)</div>
+    <div class="card-body">
+      <strong>Dónde:</strong> processBuffered() — seller lead detection<br>
+      <strong>Causa:</strong> <code>var _rawMsgForLead = msg;</code> — <code>msg</code> no existe en scope de processBuffered<br>
+      <strong>Impacto:</strong> ❌ CRASHEABA TODO processBuffered → mensajes de nuevos contactos se perdían silenciosamente<br>
+      <strong>Fix:</strong> ✅ Ya arreglado — ahora usa <code>rawMsgs[0]</code> del buffer
+    </div>
+  </div>
+
+  <div class="card crash-card">
+    <div class="card-title crash-title">🟡 CRASH 3: Claude API timeout/failure <span class="card-line">L.5100</span></div>
+    <div class="card-body">
+      <strong>Dónde:</strong> onMessage() → fetch a api.anthropic.com<br>
+      <strong>Causa:</strong> API lenta, timeout, rate limit, o error 500<br>
+      <strong>Impacto:</strong> Circuit breaker se activa → TODOS los mensajes se skipean por 5 minutos<br>
+      <strong>Protección:</strong> AbortSignal.timeout(15s), circuit breaker, _failedMessageQueue para retry
+    </div>
+  </div>
+
+  <div class="card crash-card">
+    <div class="card-title crash-title">🟡 CRASH 4: Baileys desconexión <span class="card-line">L.6170</span></div>
+    <div class="card-body">
+      <strong>Dónde:</strong> connection.update event<br>
+      <strong>Causa:</strong> WhatsApp cierra sesión, phone se desconecta, ban temporal<br>
+      <strong>Impacto:</strong> Bot offline, no recibe mensajes<br>
+      <strong>Protección:</strong> Watchdog + auto-reconnect cada 30s. PM2 restart en crash fatal.
+    </div>
+  </div>
+
+  <div class="card crash-card">
+    <div class="card-title crash-title">🟡 CRASH 5: DB (Turso) offline <span class="card-line">Varias</span></div>
+    <div class="card-body">
+      <strong>Dónde:</strong> Cualquier llamada a db()<br>
+      <strong>Causa:</strong> Turso timeout, token expirado, red<br>
+      <strong>Impacto:</strong> Mensajes no se guardan → recovery no los encuentra<br>
+      <strong>Protección:</strong> try/catch en cada db call. Mensajes siguen procesándose aunque DB falle.
+    </div>
+  </div>
+
+  <div class="card crash-card">
+    <div class="card-title crash-title">🟡 CRASH 6: processBuffered uncaught error</div>
+    <div class="card-body">
+      <strong>Dónde:</strong> Cualquier error no capturado dentro de processBuffered<br>
+      <strong>Causa:</strong> Cualquier throw/ReferenceError/TypeError no envuelto en try/catch<br>
+      <strong>Impacto:</strong> El setTimeout callback muere → mensaje se pierde. process.on('unhandledRejection') lo loguea pero no lo salva.<br>
+      <strong>Protección parcial:</strong> La failsafe en messages.upsert guarda el mensaje raw en DB antes del buffer.
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ==================== SECTION 5: DEDUP ==================== -->
+<div class="section">
+<div class="section-title">🛡️ 5. Sistema de DEDUP (5 capas)</div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-title" style="color:#ffd700">Capa 1: processedMsgIds</div>
+    <div class="card-body">Set de msg.key.id ya procesados. Max 500, purge a 250. Previene duplicados de reconexión Baileys.</div>
+    <div class="card-line">L.6507</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:#ffd700">Capa 2: respondingTo[tel]</div>
+    <div class="card-body">Lock booleano: true mientras se procesa respuesta para ese teléfono. Auto-release 45s. Previene respuestas paralelas.</div>
+    <div class="card-line">L.5155</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:#ffd700">Capa 3: recentResponses[tel]</div>
+    <div class="card-body">Timestamp de última respuesta. DEDUP_WINDOW segundos de cooldown. Previene double-fire.</div>
+    <div class="card-line">L.5161</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:#ffd700">Capa 4: msgBuffer timer</div>
+    <div class="card-body">setTimeout 1.5s reseteable. Agrupa mensajes rápidos. Solo dispara processBuffered una vez por ráfaga.</div>
+    <div class="card-line">L.6556</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:#ffd700">Capa 5: _recoveredIds</div>
+    <div class="card-body">Set de tel ya recuperados en esta sesión. Previene que recovery re-procese al mismo contacto.</div>
+    <div class="card-line">L.5928</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:#ffd700">Bonus: _autoSentMsgIds</div>
+    <div class="card-body">Set de msg IDs enviados automáticamente por el bot. Distingue boss manual vs bot automático en fromMe.</div>
+    <div class="card-line">L.201</div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== SECTION 6: RECOVERY ==================== -->
+<div class="section">
+<div class="section-title">🔄 6. Sistema de Recovery <span class="line">L.5877-5975</span></div>
+
+<div class="mega-flow">
+  <div class="mega-title">recoverMissedMessages(lookbackMinutes)</div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">Timer: 20s al boot, luego cada 5 min</div>
+      <div class="step-detail">Min 60s entre ejecuciones. Lookback default: 120 min (2hrs)</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">Query: mensajes IN sin respuesta OUT después</div>
+      <div class="step-code">SELECT FROM wa_messages WHERE direccion='in' AND timestamp > sinceTs
+AND NOT EXISTS (SELECT 1 FROM wa_messages o WHERE o.telefono = m.telefono AND o.direccion='out' AND o.timestamp > m.timestamp)</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <div class="step-title">Agrupar por teléfono, combinar textos</div>
+      <div class="step-detail">Skip: _recoveredIds, respondingTo, deal stages avanzados (cita_agendada+)</div>
+    </div>
+  </div>
+  <div class="step-connector"><div class="step-line"></div></div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <div class="step-title" style="color:#4caf50">Smart Routing (NUEVO)</div>
+      <div class="step-detail">isVendedor? → handleVendedorMessage. detectSellerLead? → startIgnacioFlow. Default → onMessage (Seb)</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== SECTION 7: VARIABLES GLOBALES ==================== -->
+<div class="section">
+<div class="section-title">🧠 7. Variables Globales de Estado</div>
+
+<div class="grid-4">
+  <div class="card"><div class="card-title" style="color:#25d366">globalSock</div><div class="card-body">Socket activo de Baileys</div></div>
+  <div class="card"><div class="card-title" style="color:#25d366">ready</div><div class="card-body">true cuando conectado</div></div>
+  <div class="card"><div class="card-title" style="color:#ffd700">msgBuffer{}</div><div class="card-body">Buffer de msgs por JID</div></div>
+  <div class="card"><div class="card-title" style="color:#ffd700">processedMsgIds</div><div class="card-body">Set de IDs procesados</div></div>
+  <div class="card"><div class="card-title" style="color:#ff9800">vendedorPhones</div><div class="card-body">Set de tel de vendedores</div></div>
+  <div class="card"><div class="card-title" style="color:#ff9800">vendedorState{}</div><div class="card-body">Estado onboarding vendedor</div></div>
+  <div class="card"><div class="card-title" style="color:#ff9800">ignacioPubFlows{}</div><div class="card-body">Flujo publicación activo</div></div>
+  <div class="card"><div class="card-title" style="color:#ff6f00">bossActiveChats{}</div><div class="card-body">Lock: boss hablando con tel</div></div>
+  <div class="card"><div class="card-title" style="color:#ff6f00">_autoSentMsgIds</div><div class="card-body">Set de IDs auto-enviados</div></div>
+  <div class="card"><div class="card-title" style="color:#00bcd4">respondingTo{}</div><div class="card-body">Lock: procesando respuesta</div></div>
+  <div class="card"><div class="card-title" style="color:#00bcd4">recentResponses{}</div><div class="card-body">Timestamp última respuesta</div></div>
+  <div class="card"><div class="card-title" style="color:#00bcd4">globalSebTriggers{}</div><div class="card-body">Triggers detectados por tel</div></div>
+  <div class="card"><div class="card-title" style="color:#009688">tradeinFlows{}</div><div class="card-body">Flujo trade-in activo</div></div>
+  <div class="card"><div class="card-title" style="color:#009688">pendingPhotos{}</div><div class="card-body">Fotos descargadas por tel</div></div>
+  <div class="card"><div class="card-title" style="color:#5b7fff">lidCache{}</div><div class="card-body">LID → phone mapping</div></div>
+  <div class="card"><div class="card-title" style="color:#4caf50">_recoveredIds</div><div class="card-body">Set de tel ya recuperados</div></div>
+  <div class="card"><div class="card-title" style="color:#e91e63">_apiHealthy</div><div class="card-body">Circuit breaker estado</div></div>
+  <div class="card"><div class="card-title" style="color:#e91e63">_apiFailCount</div><div class="card-body">Contador de fails API</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">CONFIG</div><div class="card-body">Modelo AI, instrucciones boss</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">BOSS_NUMBERS</div><div class="card-body">['5218120066355']</div></div>
+</div>
+</div>
+
+<!-- ==================== SECTION 8: FAILSAFES ==================== -->
+<div class="section">
+<div class="section-title">🛡️ 8. Triple Failsafe — Protección contra pérdida de mensajes</div>
+
+<div class="grid-3">
+  <div class="card fix-card">
+    <div class="card-title fix-title">Failsafe 1: Catch en messages.upsert</div>
+    <div class="card-body">
+      El for loop tiene try/catch individual por mensaje. Si un mensaje crashea, los demás siguen procesándose. El catch guarda el mensaje fallido en wa_messages para recovery.
+      <br><br><code>catch(_msgErr) { /* save to DB for recovery */ }</code>
+    </div>
+  </div>
+  <div class="card fix-card">
+    <div class="card-title fix-title">Failsafe 2: Catch global del batch</div>
+    <div class="card-body">
+      Todo el messages.upsert handler tiene un try/catch externo. Si el for loop entero falla, se loguea el error completo.
+      <br><br><code>try { for (const msg...) {} } catch(outerErr) { log }</code>
+    </div>
+  </div>
+  <div class="card fix-card">
+    <div class="card-title fix-title">Failsafe 3: Recovery periódico</div>
+    <div class="card-body">
+      Cada 5 minutos, recoverMissedMessages() busca mensajes IN sin respuesta OUT en las últimas 2 horas. Re-procesa los que se perdieron.
+      <br><br><code>setInterval(recoverMissedMessages, 300000)</code>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== SECTION 9: HTTP ==================== -->
+<div class="section">
+<div class="section-title">🌐 9. HTTP Server <span class="line">L.6700+ | Puerto 3000</span></div>
+
+<div class="grid-3">
+  <div class="card"><div class="card-title" style="color:#cddc39">GET /status</div><div class="card-body">Estado del bot: ready, uptime, memory, counts, config</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">GET /memory</div><div class="card-body">Estado de memoria: vendedorState, ignacioPubFlows, bossActiveChats</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">POST /api/send</div><div class="card-body">Enviar mensaje WA. body: {tel, msg, manual}. Si manual→guarda como boss</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">POST /api/check</div><div class="card-body">Verificar si número existe en WhatsApp</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">GET /unanswered</div><div class="card-body">Lista mensajes sin respuesta</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">GET /recover</div><div class="card-body">Forzar recovery manual</div></div>
+  <div class="card"><div class="card-title" style="color:#cddc39">GET /reload</div><div class="card-body">Recargar config desde DB</div></div>
+  <div class="card"><div class="card-title" style="color:#ff5252">⚠️ reqPath bug</div><div class="card-body">L.6855: reqPath no definido. Genera ReferenceError en cada request que llega al fallthrough.</div></div>
+</div>
+</div>
+
+<!-- ==================== SECTION 10: SOLUTION ==================== -->
+<div class="section">
+<div class="section-title">🔧 10. SOLUCIÓN: Anti-Crash Architecture</div>
+
+<div class="mega-flow">
+  <div class="mega-title">Propuesta de Hardening</div>
+
+  <div class="grid-2">
+    <div class="card fix-card">
+      <div class="card-title fix-title">1. Wrap processBuffered en try/catch global</div>
+      <div class="card-body">
+        <strong>El problema más grande:</strong> Si processBuffered crashea, el mensaje se pierde silenciosamente porque el setTimeout callback muere sin recuperación.<br><br>
+        <strong>Fix:</strong> Envolver TODO processBuffered en try/catch. En el catch: guardar los mensajes del buffer en wa_messages + programar recovery inmediato.
+        <pre style="color:#5b7fff;font-size:10px;margin-top:8px">
+async function processBuffered(key) {
+  try {
+    // ... todo el código actual ...
+  } catch(fatalErr) {
+    console.log('[FATAL-PB]', fatalErr);
+    // Guardar mensajes perdidos para recovery
+    var buf = msgBuffer[key];
+    if (buf) {
+      for (var m of buf.mensajes) {
+        db('INSERT INTO wa_messages...',
+          [buf.realPhone, m, 'in', ...]);
+      }
+    }
+    delete msgBuffer[key];
+  }
+}</pre>
+      </div>
+    </div>
+
+    <div class="card fix-card">
+      <div class="card-title fix-title">2. Fix reqPath → req.url (L.6855)</div>
+      <div class="card-body">
+        <strong>Impacto:</strong> Genera ReferenceError constante en logs. Fácil de arreglar.<br><br>
+        <code>// L.6855: cambiar reqPath → req.url</code>
+      </div>
+    </div>
+
+    <div class="card fix-card">
+      <div class="card-title fix-title">3. Heartbeat DB save cada 30s</div>
+      <div class="card-body">
+        Guardar estado del buffer en DB periódicamente. Si PM2 reinicia, recovery tiene datos frescos en vez de depender solo de wa_messages.
+      </div>
+    </div>
+
+    <div class="card fix-card">
+      <div class="card-title fix-title">4. Validar variables antes de usar</div>
+      <div class="card-body">
+        Antes de acceder a cualquier variable en processBuffered, verificar existencia:
+        <pre style="color:#5b7fff;font-size:10px;margin-top:8px">
+// En vez de:
+var x = msg; // crash si no existe
+
+// Usar:
+var x = (typeof msg !== 'undefined') ? msg : null;
+        </pre>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#25d366"></div> WhatsApp/Baileys</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffd700"></div> Buffer/Dedup</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#bf5fff"></div> Router</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#00bcd4"></div> Seb (comprador)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff9800"></div> Ignacio (vendedor)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e91e63"></div> Claude API</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#009688"></div> Base de datos</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff1744"></div> Crash point</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4caf50"></div> Recovery/Fix</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff6f00"></div> Boss</div>
+</div>
+
+<p style="text-align:center; color:#333; font-size:11px; margin-top:30px;">
+  wa-bridge.js v1 | 7,212 líneas | VPS: 134.209.51.172:3000 | PM2: claude-remote | Generado: 2026-03-12
+</p>
+
+</body>
+</html>

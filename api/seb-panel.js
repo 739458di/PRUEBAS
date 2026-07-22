@@ -555,7 +555,17 @@ module.exports = async function handler(req, res) {
             // ===== EN_CURSO: PRIMERA respuesta del comprador al opener (1 ráfaga nuestra + último=entrante) =====
             // Solo financiamiento / ubicación (sus manuales). Lo demás → silencio (lo ve el owner).
             if (bursts === 1 && lastDir === 'in') {
-                const followup = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ');
+                let followup = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ');
+                // 📷 LA IMAGEN SE LEE (owner 2026-07-22): con URL se identifica el auto y
+                // entra al texto; sin URL y sin texto útil → aviso al owner, jamás silencio.
+                {
+                    const absI = await require('../lib/seb/aparador.js').absorberImagen({ texto: followup, urls: req.body.imagenes });
+                    if (absI.imagen && absI.sinUrl && !absI.textoUtil) {
+                        await logEscala(tel, '📷 mandó una IMAGEN que el bot no puede ver — revísala tú');
+                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: followup });
+                    }
+                    if (absI.texto && absI.texto !== followup) followup = absI.texto;
+                }
                 // ══ ELECCIÓN DEL APARADOR (carrusel 2026-07-20): si mostramos aparador y
                 // aún no hay foco, este mensaje puede ser la elección (hecho duro) o "más opciones"
                 const elA = await intentarEleccionAparador(tel, followup, convId);
@@ -628,7 +638,16 @@ module.exports = async function handler(req, res) {
             // claro / no maximiza la venta → ESCALA al owner (NO improvisa con Sonnet). =====
             const AUTO_ETAPA3 = process.env.AUTO_ETAPA3 !== '0';   // interruptor maestro (default ON)
             if (AUTO_ETAPA3 && bursts >= 2 && lastDir === 'in') {
-                const followupE = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes.length ? entrantes[entrantes.length - 1].mensaje : '');
+                let followupE = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes.length ? entrantes[entrantes.length - 1].mensaje : '');
+                // 📷 LA IMAGEN SE LEE (owner 2026-07-22) — misma ley que en continuación
+                {
+                    const absI2 = await require('../lib/seb/aparador.js').absorberImagen({ texto: followupE, urls: req.body.imagenes });
+                    if (absI2.imagen && absI2.sinUrl && !absI2.textoUtil) {
+                        await logEscala(tel, '📷 mandó una IMAGEN que el bot no puede ver — revísala tú');
+                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: followupE });
+                    }
+                    if (absI2.texto && absI2.texto !== followupE) followupE = absI2.texto;
+                }
                 // elección tardía del aparador (preguntó algo en medio y luego eligió)
                 const elA2 = await intentarEleccionAparador(tel, followupE, convId);
                 if (elA2) return res.status(200).json({ ok: true, modo: 'aparador', ...elA2, pin_after_index: (elA2.pin_after_index != null ? elA2.pin_after_index : null) });
@@ -1237,6 +1256,20 @@ module.exports = async function handler(req, res) {
                         else {
                             const oR = await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id=? AND direccion='out'", [cvR[0].id]);
                             activa = Number(oR[0].n) === 0;
+                        }
+                        // 🚫 CANDADO COMPRADOR (2026-07-22, caso 3223506761: clic de anuncio
+                        // + pantallazo despertó a Ignacio como si fuera vendedor). Si este
+                        // contacto viene de un ANUNCIO o sus mensajes suenan a COMPRADOR,
+                        // la foto JAMÁS despierta a Ignacio — es imagen de comprador.
+                        if (activa) {
+                            const adR = await query("SELECT 1 FROM ad_por_telefono WHERE telefono=?", [tR]).catch(() => []);
+                            let compradorTxt = false;
+                            if (cvR.length) {
+                                const insR = await query("SELECT texto FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY id DESC LIMIT 5", [cvR[0].id]).catch(() => []);
+                                const blob = insR.map(x => String(x.texto || '')).join(' ').toLowerCase();
+                                compradorTxt = /(fb\.me\/|instagram\.com|wa\.me\/|me interesa (un|el|este) auto|me interesa un auto|informaci[oó]n para comprar|quiero comprar|busco (un|una) (auto|carro|camioneta)|precio de[l]? )/.test(blob);
+                            }
+                            if (adR.length || compradorTxt) activa = false;
                         }
                     }
                 } catch (e) { }

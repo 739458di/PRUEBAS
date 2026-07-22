@@ -6,7 +6,7 @@
 // POST /api/webhook con source:'wa-bridge' = Bridge mode (devuelve JSON)
 
 const { createClient } = require('@libsql/client');
-const { analizarMensaje } = require('./analyze.js');
+
 const { generarRespuestaAI, getAIConfig, initAITables } = require('./ai-sales.js');
 
 const client = createClient({
@@ -349,10 +349,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
     // Messenger: análisis en background + responder como Vendedor Estrella
     if (platform === 'messenger') {
         console.log('[FYRA-BOT] Messenger activo — Vendedor Estrella para', telefono);
-        // Fire-and-forget: no esperar análisis
-        analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre, 'messenger').catch(function(ae) {
-            console.error('[FYRA-BOT] Error análisis Messenger:', ae.message);
-        });
+        // análisis emocional removido
     }
 
     var conv = await getConversation(telefono);
@@ -408,11 +405,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         try {
             var config = await getAIConfig();
             if (config && config.ai_enabled) {
-                // Fire-and-forget: análisis emocional en background (no bloquea respuesta)
-                analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre).catch(function(ae) {
-                    console.error('[FYRA-AI] Error análisis background:', ae.message);
-                });
-                // Generar respuesta IA sin esperar análisis (más rápido)
+                // Generar respuesta IA
                 var aiResult = await generarRespuestaAI(telefono, texto, nombre, null);
 
                 if (aiResult && aiResult.trigger_cotizacion) {
@@ -617,11 +610,7 @@ async function procesarMensaje(telefono, nombre, texto, platform) {
         try {
             var configPost = await getAIConfig();
             if (configPost && configPost.ai_enabled) {
-                var analisisPost = null;
-                try {
-                    analisisPost = await analizarMensaje(telefono, texto, 'in', 'Nombre: ' + nombre + ' | Acaba de recibir cotización');
-                } catch(aePost) {}
-                var aiPost = await generarRespuestaAI(telefono, texto, nombre, analisisPost);
+                var aiPost = await generarRespuestaAI(telefono, texto, nombre, null);
                 if (aiPost && aiPost.respuesta) {
                     await sendMessage(telefono, aiPost.respuesta, true, platform);
                     return;
@@ -719,11 +708,6 @@ module.exports = async function handler(req, res) {
                 // Mejor: procesar manualmente igual que procesarMensaje pero devolver
 
                 try { await initAITables(); } catch(e) {}
-
-                // Análisis en background
-                analizarMensaje(bridgeTel, bridgeTexto, 'in', 'Nombre: ' + bridgeNombre).catch(function(ae) {
-                    console.error('[BRIDGE] Error análisis:', ae.message);
-                });
 
                 var conv = await getConversation(bridgeTel);
                 var estado = conv ? conv.estado : 'idle';

@@ -1,0 +1,14 @@
+{
+  "name": "fyra-wa-bridge-v2",
+  "version": "2.0.0",
+  "description": "Cartero delgado de Fyradrive — WhatsApp (Baileys) → Turso + /api/send",
+  "main": "wa-bridge-v2.js",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "@libsql/client": "^0.17.0",
+    "@hapi/boom": "^10.0.1",
+    "qrcode-terminal": "^0.12.0",
+    "node-cache": "^5.1.2",
+    "ws": "^8.18.0"
+  }
+}

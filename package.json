@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/739458di/PRUEBAS#readme",
   "dependencies": {
-    "@libsql/client": "^0.17.0"
+    "@libsql/client": "^0.17.0",
+    "ssh2": "^1.17.0"
   }
 }

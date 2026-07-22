@@ -274,9 +274,19 @@ module.exports = async function handler(req, res) {
                 const esc = await query("SELECT ts FROM sandbox_turnos WHERE carril=? AND ruta='escala' ORDER BY id DESC LIMIT 1", [carril || 'owner']);
                 if (esc.length) corteEscala = Number(esc[0].ts) || 0;
             } catch (e) { }
-            const textoFamilia = (bursts === 0)
+            let textoFamilia = (bursts === 0)
                 ? entrantes.filter(m => m.ts > corteEscala).map(e => e.mensaje).join(' ')
                 : mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in' && m.ts > corteEscala).map(m => m.mensaje).join(' ');
+            // 📷 LA IMAGEN SE LEE (owner 2026-07-22, paridad con el panel): con URL el ojo
+            // identifica el auto y entra al texto; sin URL y sin texto útil → escala.
+            let escalaImagen = null;
+            if (bursts >= 1) {
+                try {
+                    const absSb = await require('../lib/seb/aparador.js').absorberImagen({ texto: textoFamilia });
+                    if (absSb.imagen && absSb.sinUrl && !absSb.textoUtil) escalaImagen = { escala: true, motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú' };
+                    else if (absSb.texto && absSb.texto !== textoFamilia) textoFamilia = absSb.texto;
+                } catch (e) { }
+            }
             const mensajeCerebro = adCtx ? '[DESC: ' + adCtx + ']\n' + textoFamilia : textoFamilia;
 
             // ══ CANDADO STANDBY (🚩fyrachat#8, caso Gustavo — IDÉNTICO a producción): si el
@@ -376,6 +386,10 @@ module.exports = async function handler(req, res) {
                 etapa = 'STANDBY';
                 out = outStandby;
                 ruta = out.puente ? 'escala_puente' : 'escala';
+            } else if (escalaImagen) {
+                etapa = 'IMAGEN';
+                out = escalaImagen;
+                ruta = 'escala';
             } else if (outGemelos) {
                 etapa = 'MESA';
                 out = outGemelos;

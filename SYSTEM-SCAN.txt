@@ -1,0 +1,616 @@
+# FYRADRIVE WA-BRIDGE — FULL SYSTEM SCAN
+# Generated: 2026-03-18T18:41:06.739Z
+# File: wa-bridge.js | Lines: 8879 | Size: 540KB
+
+=== FUNCTIONS ===
+L25 backupSession()
+L37 restoreSession()
+L62 _persistTestMode()
+L63 isTestUser()
+L74 isTestModeActive()
+L98 getDayName()
+L108 async geocodeWithMapbox()
+L153 getMemoryMB()
+L158 memoryCleanup()
+L266 isBossActiveWith()
+L280 isLikelyBossReply()
+L309 async loadVendedorPhones()
+L330 isVendedor()
+L337 getVendedorClean()
+L349 getUserProfile()
+L364 updateUserProfile()
+L373 cacheRecentMsg()
+L381 detectNewSellIntent()
+L410 async handleVendedorMessage()
+L792 async getUnansweredMessages()
+L861 getMtyNow()
+L864 getMtyToday()
+L868 getMtyTomorrow()
+L872 getMtyHour()
+L874 getMtyPasadoManana()
+L894 resolveHumanDateTime()
+L1134 extractDateTime()
+L1144 isYesResponse()
+L1164 isNoResponse()
+L1177 detectSebIntent()
+L1280 detectTradeinTrigger()
+L1289 detectSellerLead()
+L1362 extractAdContext()
+L1376 scoreAdContext()
+L1399 scoreMessageText()
+L1466 scoreLinks()
+L1485 scoreConversationHistory()
+L1500 scoreUserProfile()
+L1512 classifyIntent()
+L1538 logIntentDecision()
+L1595 _saveFlows()
+L1607 _loadFlows()
+L1667 tradeinPickRandom()
+L1668 tradeinFormat()
+L1670 async startTradeinIntake()
+L1701 parseTradeinPapeles()
+L1729 parseTradeinDatos()
+L1760 async handleTradeinFlow()
+L1840 async advanceTradeinFlow()
+L1890 async saveTradeinDraft()
+L1929 calcPulseAdjustment()
+L1939 generatePulseMessage()
+L1964 async handlePulseResponse()
+L2085 igPickRandom()
+L2087 igFormat()
+L2091 detectVenderTrigger()
+L2099 getMinimumCommission()
+L2107 calculateListingPrice()
+L2113 async initPricingColumns()
+L2125 async notifyGroup()
+L2140 parseIgnacioResponse()
+L2281 async parseWithClaudeFallback()
+L2310 async igSend()
+L2326 async startIgnacioFlow()
+L2425 getFlowContinuation()
+L2457 detectIgnacioIntent()
+L2471 answerIgnacioQuestion()
+L2549 interpretUnstructuredInput()
+L2625 async handleIgnacioFlow()
+L3038 buildStateResponse()
+L3059 async advanceIgnacioFlow()
+L3274 async publishAutoIgnacio()
+L3438 async db()
+L3465 async checkPulseResponse()
+L3535 async loadConfig()
+L3549 clean()
+L3562 resolveLid()
+L3576 isBoss()
+L3593 async sendAutoWA()
+L3640 async notifyBoss()
+L3658 async downloadAndUploadImage()
+L3977 async runTool()
+L4081 async removeBgFromPrincipal()
+L4914 async draftExists()
+L4919 async autoSendTracking()
+L4979 async ensureStateDraft()
+L5023 async checkScheduledDrafts()
+L5252 async handleTestCommand()
+L5351 async handleBoss()
+L5555 async executeBossAction()
+L5576 isMario()
+L5590 parseLeadFromMessage()
+L5710 async processGroupLead()
+L5799 shouldRespondInGroup()
+L5821 async resolveAutoFromAd()
+L5880 async askClaude()
+L6349 async onMessage()
+L6828 async start()
+L7116 async recoverMissedMessages()
+L8165 _getClientIP()
+L8169 _checkRateLimit()
+L8179 _requireAuth()
+
+=== IGNACIO FLOW STEPS (advanceIgnacioFlow) ===
+  flow.step = "datos_auto"
+  flow.step = "nombre_vendedor"
+  flow.step = "precio_detalles"
+  flow.step = "comision_confirm"
+  flow.step = "documentos"
+  flow.step = "contacto_completo"
+  flow.step = 'notas_fotos'
+  flow.step = 'fotos'
+  flow.step = "confirmacion"
+
+=== STEP_FIELDS ===
+STEP_FIELDS = { datos_auto: ['marca','modelo','ano','km'], tipo_vehiculo: ['tipo_vehiculo'], nombre_vendedor: ['nombre'], precio_detalles: ['seller_base_price','color','transmision','combustible'], comision_confirm: [], documentos: ['a_su_nombre','adeudo','duenos','tipo_factura'], contacto_completo: ['ciudad','estado','direccion_mostrar'], notas_fotos: ['notas_extra'] }
+
+=== COLLECTED OBJECT (initial structure) ===
+collected: {
+            a_su_nombre: null, adeudo: null, tipo_factura: null,
+            marca: null, modelo: null, ano: null, km: null
+        }
+
+=== INTENT DETECTION ===
+function detectIgnacioIntent(text, flow) {
+    var lower = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    // QUESTION: contains ? or starts with question word
+    if ((lower.includes('?') || /^(como|que|cuanto|cuando|donde|por que|para que|quien|cual)\b/.test(lower) || /\b(como funciona|que pasa|que necesit|para que|es gratis|es seguro|cuanto tard|como es|que es|y luego|donde public|por que pid)/.test(lower))
+        && !/^(ok|si|no|va|dale|sale|listo|claro)\??$/.test(lower)) {
+        return 'question';
+    }
+    // UNSTRUCTURED: long text with legal/ownership context
+    if (text.length >= 15 && /factura|endosada|a nombre de|adeudo|dueno|propietario|cambio de|tenencia|verificacion|multa|placas/.test(lower)) {
+        return 'unstructured';
+    }
+    return 'flow_response';
+}
+
+=== FAQ PATTERNS (answerIgnacioQuestion) ===
+  if (/donde se ubic|donde estan|tienen oficina|tienen local|donde los encuentr|direccion|domicilio|a donde voy|donde qued
+    -> return 'Somos 100% digitales. FyraDrive es un marketplace de consigna virtual — todo se maneja desde tu cel. No necesita
+  if (/como funciona|como es el proceso|como trabajan|que hacen|como le hacen|explicame/.test(lower))
+    -> return 'Es bien sencillo: tu me pasas los datos y fotos de tu auto, yo lo publico y empiezo a buscar compradores. Cuando
+  if (/es gratis|tiene costo|cobran|cuanto cuesta|hay que pagar/.test(lower))
+    -> return 'Publicar no te cuesta nada. La comision va incluida en el precio de venta al comprador, o sea que a ti te llega 
+  if (/cuanto tard|cuanto tiempo|cuando se vende|rapido|pronto/.test(lower))
+    -> return 'Depende del auto y el precio, pero normalmente en 2-4 semanas ya tienes compradores interesados. Autos con buen 
+  if (/es seguro|confiable|estafa|confiar|no me vayan|sera real|es verdad|de fiar|fraude|robo/.test(lower))
+    -> return 'Totalmente seguro. FyraDrive es una plataforma profesional de compraventa. Nosotros filtramos compradores, coord
+  if (/que pasa despues|que sigue|y luego|y despues|cuando publican|que hacen con/.test(lower))
+    -> return 'Una vez que tenga tus datos y fotos, publico tu auto de inmediato. Yo me encargo de filtrar compradores serios, 
+  if (/donde public|donde se ve|en que pagina|donde lo ponen|en que plataforma/.test(lower))
+    -> return 'Lo publicamos en FyraDrive y lo promovemos en redes sociales y marketplaces. Llegamos a miles de compradores. To
+  if (/para que necesit|por que pid|para que es|para que sirve|por que tanto/.test(lower))
+    -> return 'Con estos datos armo tu anuncio completo y atractivo. Entre mas info tenga, mas rapido encontramos comprador y m
+  if (/cuantas fotos|que fotos|fotos necesit|que tipo de foto/.test(lower))
+    -> return 'Minimo 5 fotos: frente, atras, laterales e interior. Si puedes mandar mas, mejor — los anuncios con buenas fotos
+  if (/puedo cambiar|se puede modific|despues cambio|si me arrepiento|quiero cambiar/.test(lower))
+    -> return 'Claro! Puedes modificar precio, fotos y datos cuando quieras. Nomas dimelo y lo actualizo al momento.';
+  if (/como son las cita|donde se hace la cita|como es la visit|quien va a ver|van a mi casa/.test(lower))
+    -> return 'Las citas se coordinan en un punto de encuentro publico y seguro que tu elijas. Nosotros filtramos a los comprad
+  if (/como se paga|como me pagan|transferencia|efectivo|como cobro|cuando me pagan/.test(lower))
+    -> return 'El pago es directo entre tu y el comprador, como tu prefieras: transferencia, efectivo o como acuerden. Nosotros
+  if (/que tramite|que documento|que papeles|necesito algun papel|requisitos/.test(lower))
+    -> return 'Necesitas tener la factura del auto y que este al corriente en adeudos. Nosotros te orientamos en todo el proces
+  if (/que es consigna|consignacion|como es la consigna|consignar/.test(lower))
+    -> return 'Consigna virtual significa que tu auto se queda contigo todo el tiempo — nosotros lo publicamos y buscamos compr
+  if (/quien es fyra|quienes son|que es fyra|quien eres|con quien hablo/.test(lower))
+    -> return 'Soy Ignacio, tu agente digital en FyraDrive. Somos la nueva forma de vender tu auto: un marketplace donde lo pub
+  if (/puedo cancelar|si no quiero|me puedo salir|sin compromiso|estoy obligado/.test(lower))
+    -> return 'Sin compromiso. Puedes pausar o cancelar cuando quieras, sin costo ni penalizacion. Estas en control total.';
+  if (/tambien compran|compran autos|me lo compran ustedes|compraventa/.test(lower))
+    -> return 'Nosotros no compramos directamente — somos marketplace. Te conectamos con compradores reales interesados en tu a
+
+=== INTERPRETATION MODULE PATTERNS ===
+  if (/factura\s*original/i.test(lower)) { extracted.tipo_factura = 'original'; facts.push('Factura original'); }
+  else if (/factura\s*endosada|endosada/i.test(lower)) { extracted.tipo_factura = 'endosada'; facts.push('Factura endosada
+  else if (/refactura/i.test(lower)) { extracted.tipo_factura = 'refacturado'; facts.push('Refacturado'); }
+  else if (/carta\s*factura/i.test(lower)) { extracted.tipo_factura = 'carta factura'; facts.push('Carta factura'); }
+  extracted.a_su_nombre = 'si'; facts.push('A tu nombre');
+  extracted.a_su_nombre = 'no'; facts.push('No esta a tu nombre');
+  extracted.adeudo = 'sin adeudo'; facts.push('Sin adeudos');
+  extracted.adeudo = 'con adeudo'; facts.push('Con adeudos');
+  extracted.duenos = 'Unico dueno'; facts.push('Unico dueno');
+  extracted.duenos = '2'; facts.push('2 duenos');
+  extracted.duenos = '3'; facts.push('3 duenos');
+  extracted.duenos = '4+'; facts.push('Varios duenos');
+  if (/automatica|automatico|auto\s*transmision/i.test(lower)) { extracted.transmision = 'automatica'; }
+  else if (/estandar|manual|stick/i.test(lower)) { extracted.transmision = 'manual'; }
+  Object.keys(_colores).forEach(function(col) { if (lower.includes(col) && !extracted.color) extracted.color = col.charAt(
+  if (/no\s*he\s*hecho\s*cambio|sin\s*cambio\s*de\s*propietario|falta\s*cambio|pendiente.*cambio/i.test(lower)) notes.push
+  if (/(sobrino|papa|mama|esposo|esposa|hermano|hermana|tio|abuelo|finado|herencia|difunto)/i.test(lower) && !collected._i
+  if (/choca|choque|golpe|siniestro|perdida\s*total/i.test(lower)) notes.push('Historial de siniestro mencionado');
+
+=== SELLER LEAD DETECTION ===
+function detectSellerLead(texto, rawMsg) {
+    if (!texto) return false;
+    var t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (t.length < 3) return false;
+
+    // === STEP 1: Check AD CONTEXT first — this is the primary signal ===
+    // If message came from a CAR LISTING ad (has price/$, car brand, Fyradrive listing) → BUYER, not seller
+    var adCombined = '';
+    if (rawMsg && rawMsg.message) {
+        var _extMsg = rawMsg.message.extendedTextMessage;
+        if (_extMsg) {
+            adCombined = ((_extMsg.title || '') + ' ' + (_extMsg.description || '') + ' ' + (_extMsg.canonicalUrl || '')).toLowerCase();
+        }
+        // Also check contextInfo for external ad reply (Click-to-WhatsApp ads)
+        var _ctxInfo = (_extMsg && _extMsg.contextInfo) || rawMsg.contextInfo;
+        if (_ctxInfo && _ctxInfo.externalAdReply) {
+            var _adR = _ctxInfo.externalAdReply;
+            adCombined += ' ' + ((_adR.title || '') + ' ' + (_adR.body || '') + ' ' + (_adR.description || '') + ' ' + (_adR.sourceUrl || '')).toLowerCase();
+        }
+    }
+    // Also check [DESC:] and [ANUNCIO:] tags in texto
+    var descMatch = t.match(/\[desc:\s*([^\]]+)\]/);
+    var anuncioMatch = t.match(/\[anuncio:\s*([^\]]+)\]/);
+    if (descMatch) adCombined += ' ' + descMatch[1];
+    if (anuncioMatch) adCombined += ' ' + anuncioMatch[1];
+
+    // CAR LISTING detection: if ad has price + car info → this is a BUYER responding to a listing
+    var adHasPrice = /\$\s*[\d,.]+|\d{2,3},?\d{3}/.test(adCombined);
+    var adHasCarInfo = /(chrysler|honda|toyota|ford|chevrolet|chevy|nissan|mazda|vw|volkswagen|hyundai|kia|bmw|dodge|jeep|ram|suzuki|mitsubishi|audi|mercedes|gmc|buick|lincoln|cadillac|subaru|acura|infiniti|lexus|renault|peugeot|seat|fiat|mini|mg|changan|chirey|omoda|tiggo|cupra|chery)/.test(adCombined);
+    var adHasYear = /\b(19|20)\d{2}\b/.test(adCombined);
+    var adIsFyraListing = (adCombined.includes('fyradrive') || adCombined.includes('fyra drive') || adCombined.includes('fb.me')) && (adHasPrice || adHasCarInfo);
+    
+    if (adIsFyraListing || (adHasPrice && adHasCarInfo) || (adHasPrice && adHasYear && adHasCarInfo)) {
+        console.log('[SELLER-LEAD] AD CONTEXT = CAR LISTING (buyer) — NOT a seller lead');
+        return false; // This is a BUYER responding to a car listing
+    }
+
+    // SELLER AD detection: ad explicitly about selling your car
+    var adIsSellAd = /rematar|no seas menso|mejor forma|vende tu auto|vende tu carro|vender tu carro|publica tu auto|publica tu carro|consigna/.test(adCombined);
+    if (adIsSellAd) {
+        console.log('[SELLER-LEAD] AD CONTEXT = SELL AD — seller lead detected');
+        return true;
+    }
+
+    // === STEP 2: Text-based detection (only UNAMBIGUOUS sell phrases) ===
+    var sellPhrases = ['quiero vender','vender mi auto','vender mi carro','vender mi camioneta',
+        'publicar mi auto','publicar mi carro','como vendo','ayuda a vender','ayudame a vender',
+        'cuanto me dan','en cuanto me lo compran','quiero publicar mi','subir mi auto','subir mi carro',
+        'necesito vender','donde puedo vender','como le hago para vender','me interesa vender',
+        'queriendo vender','ando vendiendo','busco vender','ocupo vender','vender una ','vender un ',
+        'vendo mi auto','vendo mi carro','tengo un auto','tengo un carro','tengo una camioneta',
+        'quiero consignar','me gustaria vender','quisiera vender','vender mi truck','vender mi troca'];
+    if (sellPhrases.some(function(w) { return t.includes(w); })) return true;
+    // BRAND + VENDER combo: "vender" + any car brand = seller
+    if (/\bvender\b/.test(t) && /\b(tiguan|jetta|golf|polo|vento|taos|passat|atlas|tcross|nivus|saveiro|amarok|civic|accord|crv|hrv|fit|pilot|corolla|camry|rav4|yaris|highlander|fortuner|tacoma|hilux|versa|sentra|altima|kicks|xtrail|frontier|pathfinder|march|mazda|cx3|cx30|cx5|cx50|mazda3|mazda6|ford|ranger|escape|explorer|bronco|ecosport|territory|mustang|f150|expedition|maverick|spark|aveo|onix|cruze|equinox|traverse|tahoe|suburban|silverado|colorado|trax|tracker|captiva|elantra|tucson|creta|santa|sonata|venue|ioniq|accent|seltos|sportage|sorento|forte|rio|soul|carnival|niro|wrangler|cherokee|compass|renegade|gladiator|serie|clase|x1|x3|x5|gle|glc|gla|tiggo|omoda|jolion|duster|logan|koleos|stepway|kwid|ibiza|leon|ateca|tarraco|swift|vitara|ignis|jimny|baleno|peugeot|2008|3008|seat|mini|audi|porsche|volvo|tesla|ram|jeep|dodge|fiat|renault|chery|haval|mg|byd|jac)\b/i.test(t)) return true;
+
+    // Seller ad context from social media links
+    if ((t.includes('instagram.com') || t.includes('facebook.com') || t.includes('fb.com')) &&
+        (t.includes('rematar') || t.includes('no seas menso') || t.includes('mejor forma'))) return true;
+
+    // FyraDrive mention ONLY with explicit sell intent (not just greeting/info)
+    if (t.includes('fyradrive') || t.includes('fyra drive') || t.includes('fyra autos')) {
+        if (t.includes('vender') || t.includes('publicar') || t.includes('subir mi') || t.includes('consignar')) return true;
+    }
+
+    return false;
+}
+
+=== BOSS-ACTIVE / CO-PILOT CHECKPOINTS ===
+L266 function isBossActiveWith(phone) {
+L416 // === // === CO-PILOT MODE: Boss-active + active flow = continue with delay ===
+L417 if ((isBossActiveWith(c) && !isBoss(c)) || isLikelyBossReply(c, texto)) {
+L425 console.log('[CO-PILOT] Boss-active but active flow/state for ' + c + ' \u2014 continuing with delay');
+L426 if (_cpHasFlow) _cpHasFlow._coPilotDelay = true;
+L2311 // CO-PILOT: delay response when boss is active
+L2313 if (_igFlow && _igFlow._coPilotDelay) {
+L2314 console.log('[CO-PILOT] Delaying Ignacio response 3s for', clean(tel));
+L2316 delete _igFlow._coPilotDelay;
+L6625 if (isBossActiveWith(telClean) && !isBoss(telClean) && !isTestModeActive(telClean)) {
+L7370 if (isBossActiveWith(_vfTel) && !isBoss(_vfTel)) {
+L7371 // CO-PILOT: Don't block — continue flow with delay
+L7374 _vfFlowBA._coPilotDelay = true;
+L7375 console.log('[CO-PILOT] Boss-active, vendedor Ignacio flow continues with delay for ' + _vfTel);
+L7382 if (_bpUrl) { _vfFlowBA.fotos.push(_bpUrl); console.log('[CO-PILOT] Photo stored for ' + _vfTel + ' total: ' + _vfFlowBA.fotos.length); }
+L7507 if ((isBossActiveWith(clean(realPhone)) || isLikelyBossReply(clean(realPhone), textoCombinado)) && !isTestModeActive(clean(realPhone))) {
+L7508 // CO-PILOT: set delay flag instead of blocking
+L7510 if (_cpFlow) { _cpFlow._coPilotDelay = true; console.log("[CO-PILOT] Boss-active, non-vendedor flow continues with delay"); }
+L7517 console.log("[CO-PILOT] Boss-active for " + clean(realPhone) + " \u2014 co-pilot active, no pause");
+
+=== HTTP ENDPOINTS ===
+L8211 var _isPublic = req.url === '/api/health' || req.url.startsWith('/api/health?');
+L8227 if (req.url === '/qr.png' && qrCode) { try { var buf = await QRCode.toBuffer(qrCode, { width: 400, m
+L8228 if (req.url === '/reload') { console.log('[SECURITY] Config reload by', _clientIP); await loadConfig
+L8229 if (req.url.startsWith('/api/contactos')) { try { res.writeHead(200, { 'Content-Type': 'application/
+L8230 if (req.url.startsWith('/api/citas')) { try { res.writeHead(200, { 'Content-Type': 'application/json
+L8231 if (req.url.startsWith('/api/deals')) { try { res.writeHead(200, { 'Content-Type': 'application/json
+L8232 if (req.url.startsWith('/api/drafts')) { try { res.writeHead(200, { 'Content-Type': 'application/jso
+L8235 if (req.url.startsWith('/api/deals/delete/') && req.method === 'POST') {
+L8284 if (req.url === '/api/check' && req.method === 'POST') {
+L8310 if (req.url === '/api/vendedor-state' && req.method === 'POST') {
+L8327 if (req.url === '/api/send' && req.method === 'POST') {
+L8390 if (req.url === '/api/health') {
+L8407 if (req.url === "/api/pulse/update-margin" && req.method === "POST") {
+L8434 if (req.url.startsWith('/recover-flow') && req.method === 'POST') {
+L8476 if (req.url.startsWith('/manual-publish') && req.method === 'POST') {
+L8508 if (req.url === '/status') {
+L8514 if (req.url === '/memory') {
+L8541 if (req.url === '/memory/cleanup') {
+L8551 if (req.url.startsWith("/intent-log")) {
+L8573 if (req.url.startsWith('/unanswered')) {
+L8595 if (req.url.startsWith('/recover')) {
+L8634 if (req.url === '/api/pulse/generate' && req.method === 'GET') {
+L8712 if (req.url.startsWith('/api/pulse/drafts') && req.method === 'GET') {
+L8740 if (req.url === '/api/pulse/update' && req.method === 'POST') {
+L8778 if (req.url === '/api/pulse/send' && req.method === 'POST') {
+
+=== LOG TAGS ===
+  [AD-EXTRACT] x1
+  [AD-RESOLVE] x5
+  [ALERT-ERR] x1
+  [API-ERROR] x2
+  [API-HEALTH] x4
+  [API-RECOVERY] x9
+  [BG] x19
+  [BOSS] x2
+  [BOSS-ACTIVE] x2
+  [BOSS-CTX] x1
+  [BOSS-CTX-SKIP] x1
+  [BOSS-VENDEDOR] x3
+  [BUYER-MSG-GUARDED-NO-SELLER-CONFIRM] x1
+  [BUYER-NEGOTIATE] x4
+  [CARTOKEN-VPS] x4
+  [CHECK] x2
+  [CIRCUIT-BREAKER] x5
+  [CITA] x3
+  [CITA-COMPLETE] x1
+  [CITA-CREATED] x1
+  [CITA-FB-GEO] x1
+  [CITA-SEGURA] x4
+  [CITA-VEND-TEL] x2
+  [CITA-VEND-TEL-FB] x2
+  [CLAUDE] x2
+  [CO-PILOT] x6
+  [CONFIG] x2
+  [CONTEXT-RESOLVE] x3
+  [COT-DETECT] x3
+  [CRITICAL] x1
+  [CRM] x1
+  [CRM-SEND] x5
+  [DB] x2
+  [DEAL] x2
+  [DEDUP] x4
+  [DEDUP-PB] x1
+  [DIA-CITA] x2
+  [DIRECT-MSG] x1
+  [DRAFT] x1
+  [ERR] x1
+  [ESCALATE-REPLY] x1
+  [EXEC] x1
+  [FAILSAFE] x1
+  [FAILSAFE-BATCH] x1
+  [FALLBACK-SEND-ERR] x1
+  [FATAL] x1
+  [FATAL-PB] x4
+  [FLOW] x2
+  [FLOW-PERSIST] x2
+  [FOTOS] x1
+  [FOTOS-ERR] x1
+  [FYRATRACK] x3
+  [FYRATRACK-CANONICAL] x1
+  [FYRATRACK-WA] x4
+  [GEO] x2
+  [GEO-FB] x1
+  [GRUPO-LEAD] x8
+  [GRUPO-MENTION] x2
+  [GRUPO-RAW] x1
+  [HEAP] x1
+  [HISTORY-SYNC] x1
+  [IGNACIO] x37
+  [IGNACIO-AI] x3
+  [IGNACIO-DORMANT] x2
+  [IGNACIO-ERR] x3
+  [IGNACIO-FALLBACK-ERR] x1
+  [IGNACIO-INTENT] x2
+  [IGNACIO-INTERP] x2
+  [IGNACIO-PARSE] x2
+  [IGNACIO-PRICING] x5
+  [IGNACIO-REACTIVATE-ERR] x1
+  [IGNACIO-STATE] x1
+  [IGNACIO-VENDEDOR-FLOW-ERR] x1
+  [IMG] x18
+  [INGRESS-TABLE] x1
+  [INTENT-LOG] x1
+  [INTENT-SHADOW] x1
+  [INTENT-TABLE] x1
+  [LEARN] x2
+  [LID-CACHE] x1
+  [LID-FIX] x1
+  [MANUAL-PUB] x1
+  [MARGIN-UPDATE] x1
+  [MATCH] x3
+  [MATCH-AUTO] x1
+  [MEM] x3
+  [MSG-IN] x1
+  [MSG-QUEUE] x1
+  [MSG-SKIP] x1
+  [MSG-TYPE] x1
+  [NOTIF] x4
+  [NOTIF-VENDEDOR] x4
+  [NOTIF-VENDEDOR-RESCHED] x1
+  [NOTIF-VENDEDOR-REVIEW] x2
+  [NOTIFY-GROUP] x3
+  [PAIR] x1
+  [PARSE-LEAD] x1
+  [PERIODIC-RECOVERY] x3
+  [PHOTO-TIMER-N] x1
+  [PHOTO-TIMER-V] x1
+  [PREVIA-AGENDA] x1
+  [PREVIA-AGENDA-ERR] x1
+  [PRICING] x1
+  [PRIVACY] x1
+  [PUBLISH] x9
+  [PULSE] x11
+  [PULSE-ACCEPT] x1
+  [PULSE-API] x1
+  [PULSE-CANONICAL] x1
+  [PULSE-REJECT] x1
+  [PULSE-RESP] x2
+  [PUSH-1] x1
+  [PUSH-2] x1
+  [PUSH-3] x1
+  [PUSH-HANDLER-ERR] x1
+  [PUSH-RESCHEDULE-ERR] x1
+  [PUSH-RESPONSE] x6
+  [QUEUE] x3
+  [RAW-UPSERT] x1
+  [RECONNECT] x6
+  [RECOVER] x3
+  [RECOVER-MANUAL] x1
+  [RECOVERY] x17
+  [RECOVERY-SELLER-ERR] x1
+  [RECOVERY-VENDEDOR-ERR] x1
+  [RESCHEDULE] x3
+  [RESCHEDULE-CANONICAL] x1
+  [RESCHEDULE-CHECK] x1
+  [RESCHEDULE-DEAL] x1
+  [RESCHEDULE-PATCH] x1
+  [SAFETY] x1
+  [SCHEDULER] x4
+  [SCHEDULER-BLOCKED] x2
+  [SCHEDULER-BLOCKED-NOTIFY] x1
+  [SCHEDULER-BLOCKED-NOTIFY-ERR] x1
+  [SCHEDULER-CANONICAL] x1
+  [SCHEDULER-STALE] x1
+  [SEB] x1
+  [SEB-ALLOWLIST] x6
+  [SEB-ALLOWLIST-ERR] x1
+  [SEB-CLOSED] x1
+  [SEB-INTENT-FALLBACK] x1
+  [SEB-SKIP] x1
+  [SEB-TRIGGERS] x1
+  [SECURITY] x6
+  [SELLER-LEAD] x4
+  [SELLER-LEAD-ERR] x1
+  [SELLER-PUSH-1] x1
+  [SELLER-PUSH-2] x1
+  [SELLER-PUSH-3] x1
+  [SELLER-PUSH-HANDLER-ERR] x1
+  [SELLER-PUSH-NO] x1
+  [SELLER-PUSH-NO-ROLLBACK-ERR] x1
+  [SELLER-PUSH-RESCHEDULE-ERR] x1
+  [SELLER-PUSH-RESPONSE] x4
+  [SESSION] x4
+  [SIGNAL] x1
+  [SILENCE] x1
+  [START] x1
+  [STATE-TRIGGER] x3
+  [TEST] x3
+  [TEST-CMD] x1
+  [TEST-CMD-ERR] x1
+  [TEST-MODE] x1
+  [TIME-RESOLVE] x10
+  [TOOL] x2
+  [TRACKER] x3
+  [TRADEIN] x10
+  [TRADEIN-ALLOWLIST-ERR] x1
+  [TRADEIN-ERR] x1
+  [TRADEIN-FALLBACK-ERR] x1
+  [TRADEIN-PRE-ERR] x1
+  [TRIGGER-OVERRIDE] x1
+  [UBI-LOOKUP] x1
+  [UBICACION] x1
+  [UBICACION-GEO] x1
+  [UBICACION-GEO-FB] x1
+  [UBICACION-JID] x1
+  [UNANSWERED] x1
+  [UNANSWERED-DBG] x3
+  [UNCAUGHT] x1
+  [VENDEDOR] x13
+  [VENDEDOR-API] x1
+  [VENDEDOR-DORMANT] x1
+  [VENDEDOR-ERR] x1
+  [VENDEDOR-NEGOTIATE] x6
+  [VENDEDOR-REACTIVATE] x1
+  [VENDEDOR-WELCOME-ERR] x1
+  [VENDEDORES] x2
+  [WATCHDOG] x2
+  [WIPE] x4
+
+=== KEY CONSTANTS ===
+BOSS_NUMBERS = ['5218120066355']
+TEST_USERS = ['5218120066355']
+MSG_BUFFER_DELAY = 3000
+FYRADRIVE_KEY = 'fyradrive2026'
+
+=== handleIgnacioFlow EXECUTION ORDER ===
+  1. // Cancel photo debounce timer when receiving text
+  2. // Cancel
+  3. // === PRICING QUESTION INTERCEPTORS ===
+  4. // Q1: "cuanto le pones?" → NEEDS HUMAN
+  5. // Q2: "cuanto cobran?" → Explain FyraDrive model (Ignacio is the seller's agent)
+  6. // Q3: No sabe el precio → Insist
+  7. if (flow.step === "precio_detalles" && _pqNoSabe.test(text) && !flow.collected.seller_base_price) {
+  8. // Q4: Change price after set
+  9. // === INTENT ROUTING (runs BEFORE step handlers) ===
+  10. // === END INTENT ROUTING ===
+  11. // === CONTEXT-AWARE: bare number = km when only km is missing ===
+  12. if (flow.step === 'datos_auto' && flow.collected.marca && flow.collected.modelo && flow.collected.ano && !flow.collected
+  13. await advanceIgnacioFlow(tel, sock, jid);
+  14. // === END CONTEXT-AWARE KM ===
+  15. // === STATE CHANGE TRIGGER: Pre-parse ALL data before step handlers ===
+  16. // === END STATE CHANGE TRIGGER ===
+  17. if (flow.step === 'confirmacion') {
+  18. if (flow.step === 'fotos') {
+  19. if (flow.fotos.length >= 5) { await advanceIgnacioFlow(tel, sock, jid); return; }
+  20. // === NEW STEP HANDLERS ===
+  21. if (flow.step === "comision_confirm") {
+  22. await advanceIgnacioFlow(tel, sock, jid);
+  23. if (flow.step === "tipo_vehiculo") {
+  24. if (_tipoFound) { flow.collected.tipo_vehiculo = _tipoFound; await advanceIgnacioFlow(tel, sock, jid); return; }
+  25. await advanceIgnacioFlow(tel, sock, jid);
+  26. if (flow.step === "nombre_vendedor") {
+  27. await advanceIgnacioFlow(tel, sock, jid);
+  28. await advanceIgnacioFlow(tel, sock, jid);
+  29. if (flow.step === "notas_fotos") {
+  30. if (flow.collected.notas_extra) { await advanceIgnacioFlow(tel, sock, jid); return; }
+  31. if (flow.step === "contacto_completo") {
+  32. await advanceIgnacioFlow(tel, sock, jid);
+  33. await advanceIgnacioFlow(tel, sock, jid);
+  34. // === AUTO-CALCULATE PRICING when seller_base_price is set ===
+  35. // === INTERPRETATION MODULE: Controlled Redirection ===
+  36. return; // Already responded — skip advanceIgnacioFlow
+  37. // === END INTERPRETATION MODULE ===
+  38. await advanceIgnacioFlow(tel, sock, jid);
+
+=== PRICING MODEL ===
+function getMinimumCommission(sellerBasePrice) {
+    if (sellerBasePrice >= 800000) return 35000;
+    if (sellerBasePrice >= 500000) return 30000;
+    if (sellerBasePrice >= 300000) return 25000;
+    if (sellerBasePrice >= 150000) return 20000;
+    return 15000;
+}
+function calculateListingPrice(sellerBasePrice, extraMargin) {
+    return sellerBasePrice + getMinimumCommission(sellerBasePrice) + (extraMargin || 0);
+}
+
+=== PARSER: parseIgnacioResponse ===
+  // ANO
+    -> parsed.ano
+  // MARCA
+    -> parsed.marca
+  // MODELO
+    -> parsed.modelo
+  // KM
+    -> parsed.km
+  // PRECIO -> seller_base_price
+    -> parsed.seller_base_price
+    -> parsed.seller_base_price
+  // GUARD: Never extract car year (1990-2030) as price
+    -> parsed.seller_base_price
+    -> parsed.seller_base_price
+  // COLOR
+    -> parsed.color
+  // TRANSMISION
+    -> parsed.transmision
+    -> parsed.transmision
+    -> parsed.transmision
+  // COMBUSTIBLE
+    -> parsed.combustible
+    -> parsed.combustible
+    -> parsed.combustible
+    -> parsed.combustible
+  // A SU NOMBRE
+    -> parsed.a_su_nombre
+    -> parsed.a_su_nombre
+    -> parsed.a_su_nombre
+  // ADEUDO
+    -> parsed.adeudo
+    -> parsed.adeudo
+  // DUENOS
+    -> parsed.duenos
+    -> parsed.duenos
+    -> parsed.duenos
+    -> parsed.duenos
+  // TIPO FACTURA
+    -> parsed.tipo_factura
+    -> parsed.tipo_factura
+    -> parsed.tipo_factura
+  // CIUDAD
+    -> parsed.ciudad
+  // TIPO VEHICULO
+    -> parsed.tipo_vehiculo
+    -> parsed.tipo_vehiculo
+  // ESTADO (Mexican states)
+    -> parsed.estado
