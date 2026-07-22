@@ -564,10 +564,12 @@ module.exports = async function handler(req, res) {
                 segmentos = [out.puente];
                 await guardarMsg(convId, 'out', out.puente, 'text');
             } else if (out && out.escala && out.segmentos && out.segmentos.length) {
-                // escala CON mensaje honesto (p. ej. búsqueda sin match): el comprador SÍ
-                // lo recibe y en paralelo se te escala — igual que el panel real.
+                // escala CON mensaje honesto: el comprador SÍ lo recibe (CON sus fotos/pin
+                // — jamás decir "ahí te van" sin mandarlas) y en paralelo se te escala.
                 segmentos = out.segmentos;
+                await guardarOferta(SANDBOX_TEL, segmentos);
                 for (const s of segmentos) await guardarMsg(convId, 'out', s, 'text');
+                if (out.fotos && out.fotos.length) { fotos = out.fotos; await guardarMsg(convId, 'out', '', 'image'); }
             } else if (out && out.escala) {
                 // escala pura sin puente: en la vida real Seb se queda callado y lo ves tú
             } else if (out && out.segmentos) {

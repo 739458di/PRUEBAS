@@ -585,7 +585,7 @@ module.exports = async function handler(req, res) {
                     const perroC = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followup, historial: histTxt, convId });
                     if (perroC && perroC.escalar_owner) {
                         await logEscala(tel, perroC.escala_motivo);
-                        return res.status(200).json({ ok: !!(perroC.segmentos && perroC.segmentos.length), modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos || [], escalar_owner: true, escala_motivo: perroC.escala_motivo, escala_ultimo: followup });
+                        return res.status(200).json({ ok: !!(perroC.segmentos && perroC.segmentos.length), modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos || [], fotos: perroC.fotos || null, fotos_after_index: (perroC.fotos_after_index != null ? perroC.fotos_after_index : null), escalar_owner: true, escala_motivo: perroC.escala_motivo, escala_ultimo: followup });
                     }
                     if (perroC) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos, fotos: perroC.fotos || null, fotos_after_index: (perroC.fotos_after_index != null ? perroC.fotos_after_index : null) });
                 }
@@ -655,7 +655,7 @@ module.exports = async function handler(req, res) {
                     const perroE = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followupE, historial: histTxtE, convId });
                     if (perroE && perroE.escalar_owner) {
                         await logEscala(tel, perroE.escala_motivo);
-                        return res.status(200).json({ ok: !!(perroE.segmentos && perroE.segmentos.length), modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos || [], escalar_owner: true, escala_motivo: perroE.escala_motivo, escala_ultimo: followupE });
+                        return res.status(200).json({ ok: !!(perroE.segmentos && perroE.segmentos.length), modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos || [], fotos: perroE.fotos || null, fotos_after_index: (perroE.fotos_after_index != null ? perroE.fotos_after_index : null), escalar_owner: true, escala_motivo: perroE.escala_motivo, escala_ultimo: followupE });
                     }
                     if (perroE) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos, fotos: perroE.fotos || null, fotos_after_index: (perroE.fotos_after_index != null ? perroE.fotos_after_index : null) });
                 }
