@@ -958,7 +958,7 @@ module.exports = async function handler(req, res) {
             const convId = await ensureConv();
             const ultIn = await query("SELECT ts FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY ts DESC LIMIT 1", [convId]).catch(() => []);
             const pushes = await resc.barrer({ tel: TEL_LANE, ahora: simTs, ultimoInTs: ultIn.length ? Number(ultIn[0].ts) : null });
-            for (const p of pushes) await guardarMsg(convId, 'out', p.texto, 'text');
+            for (const p of pushes) for (const sg of (p.segmentos || [p.texto])) await guardarMsg(convId, 'out', sg, 'text');
             return res.status(200).json({ ok: true, pushes, rescate: await resc.estadoPanel(TEL_LANE), sim_ts: simTs });
         }
         if (action === 'tiempo' && req.method === 'POST') {
