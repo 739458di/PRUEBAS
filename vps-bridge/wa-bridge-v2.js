@@ -507,6 +507,12 @@ async function conectar() {
             const esSaliente = !!m.key.fromMe;                    // lo mandaste TÚ
             // Eco de un mensaje que ya mandó FyraChat → ya quedó registrado, saltar
             if (esSaliente && enviadosPorPanel.has(m.key.id)) { enviadosPorPanel.delete(m.key.id); continue; }
+            // 🛟 PIN MANUAL TUYO (máquina de rescate): el pin nativo que mandas desde tu
+            // teléfono acredita carril ubicación (24h) — timbre y sigue el skip normal.
+            if (esSaliente && (m.message?.locationMessage || m.message?.liveLocationMessage) && !enviadosPorPanel.has(m.key.id)) {
+                const telPin = telefonoReal(m);
+                if (telPin) fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_manual', key: 'fyra-bridge-v2-2026', telefono: telPin, texto: '', es_pin: true }) }).catch(() => {});
+            }
             // Eco SALIENTE de MEDIA (imagen/pin/video/doc/audio): NO crear burbuja en FyraChat.
             // Lo que mandamos (p.ej. el paquete de ubicación) ya está representado por su texto;
             // el eco de la imagen/pin se vería como "[imagen]"/"[ubicación]". Race-proof: por TIPO,
@@ -577,6 +583,11 @@ async function conectar() {
                 nombre: esSaliente ? null : (m.pushName || null),
                 ai_generated: 0
             }).catch(() => {});
+            // 🛟 MANUAL TUYO (máquina de rescate): tu texto escrito a mano re-arma el
+            // reloj del silencio (jamás toca una promesa del comprador).
+            if (esSaliente) {
+                fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_manual', key: 'fyra-bridge-v2-2026', telefono: tel, texto: String(texto || '') }) }).catch(() => {});
+            }
             // ══ TIMBRE DE CIERRE (lógica del timbre, orden owner 2026-07-16): "cita
             // confirmada" MANUAL tuyo → fyrachat ejecuta la máquina AL INSTANTE (paquete
             // determinista + casillas CRM/Calendar/solicitud). El cron queda de barredor
@@ -738,6 +749,9 @@ async function dispararAutoOpener(tel) {
             for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
         }
         console.log('[auto-opener] ' + (d.modo || 'opener') + ' → ' + tel + ' (' + segmentos.length + ' msgs' + (d.ubicacion_auto_id ? ' +pin' : '') + (d.fotos ? ' +' + d.fotos.length + 'fotos' : '') + ')');
+        // 🛟 LA MÁQUINA DE RESCATE: turno cerrado → el cerebro re-evalúa folios
+        // (promesa del comprador / cancha / arma el reloj del silencio con su carril)
+        fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_turno', key: 'fyra-bridge-v2-2026', telefono: tel, segmentos: segmentos, pin: !!d.ubicacion_auto_id }) }).catch(() => {});
     } finally {
         autoOpenerEnVuelo.delete(tel);
         // ¿Llegó algún mensaje mientras respondíamos? → reprocesar (leerá el nuevo contexto
@@ -784,8 +798,11 @@ async function correrGhostScan() {
         if (d && d.ok && Array.isArray(d.enviar) && d.enviar.length) {
             for (const g of d.enviar) {
                 let p = String(g.telefono).replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
-                try { await autoEnviarTexto(p, g.texto); console.log('[ghost-3h] →', p.slice(-4), g.escenario); }
-                catch (e) { console.error('[ghost-3h] envío:', e.message); }
+                try {
+                    if (g.foto) await autoEnviarFotos(p, [g.foto]);
+                    else await autoEnviarTexto(p, g.texto);
+                    console.log('[rescate] →', p.slice(-4), g.foto ? '📸' : String(g.texto || '').slice(0, 40));
+                } catch (e) { console.error('[rescate] envío:', e.message); }
                 await new Promise(s => setTimeout(s, 1500));
             }
             // Lista al personal del owner — envío directo (NO se persiste en FyraChat/SalesBrain).

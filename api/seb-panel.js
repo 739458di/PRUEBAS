@@ -320,10 +320,54 @@ module.exports = async function handler(req, res) {
         // que tocan AHORA (con todos los candados adentro de ghosting.js) + la lista
         // para el personal del owner. dry=1 → solo muestra, no registra ni envía.
         if (action === 'ghost_scan' && req.method === 'POST') {
-            const { ghostScan } = require('../lib/seb/ghosting.js');
-            const duenos = await telefonosDueno();
-            const r = await ghostScan({ duenos, dry: !!(req.body && req.body.dry) });
-            return res.status(200).json({ ok: true, ...r });
+            // ══ LA MÁQUINA DE RESCATE EN VIVO (owner 2026-07-23): este es el canal por
+            // el que el puente ya manda toques cada ~15 min. El anti-ghost VIEJO de 3h
+            // queda APAGADO (GHOST_VIEJO=1 lo revive) — jamás doble-push.
+            const resc = require('../lib/seb/rescate.js');
+            const enviar = [];
+            const pushes = await resc.barrer({ ahora: Date.now() });
+            for (const p of pushes) {
+                for (const sg of (p.segmentos || [p.texto])) enviar.push({ telefono: p.telefono, texto: sg });
+                if (p.foto) enviar.push({ telefono: p.telefono, foto: p.foto });
+            }
+            const avisos = await resc.preAvisos({ ahora: Date.now() });
+            let reporte = avisos.length ? avisos.join('\n\n') : null;
+            if (process.env.GHOST_VIEJO === '1') {
+                const { ghostScan } = require('../lib/seb/ghosting.js');
+                const duenos = await telefonosDueno();
+                const rV = await ghostScan({ duenos, dry: !!(req.body && req.body.dry) });
+                for (const g of (rV.enviar || [])) enviar.push(g);
+                if (rV.reporte) reporte = (reporte ? reporte + '\n\n' : '') + rV.reporte;
+            }
+            return res.status(200).json({ ok: true, enviar, reporte });
+        }
+        // ══ TIMBRES DEL PUENTE → LA MÁQUINA DE RESCATE (fuente única) ══
+        if (action === 'rescate_turno' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false });
+            const telR = String(req.body.telefono || '').replace(/\D/g, '');
+            if (!telR) return res.status(400).json({ ok: false, error: 'telefono' });
+            try {
+                // la ráfaga entrante = lo que él dijo desde nuestra última salida
+                const cvT = await query("SELECT id FROM conversaciones WHERE channel_thread_id=?", ['whatsapp:' + telR]);
+                let textoIn = '';
+                if (cvT.length) {
+                    const ms = await query("SELECT direccion, texto FROM mensajes WHERE conversacion_id=? ORDER BY ts DESC LIMIT 12", [cvT[0].id]);
+                    const rafaga = [];
+                    for (const m of ms) { if (m.direccion === 'out') break; rafaga.unshift(m.texto); }
+                    textoIn = rafaga.join('\n');
+                }
+                const resc2 = require('../lib/seb/rescate.js');
+                const rT2 = await resc2.registrarTurno({ tel: telR, textoIn, ruta: 'real', segmentos: req.body.segmentos || [], pin: !!req.body.pin, ahora: Date.now() });
+                return res.status(200).json({ ok: true, rescate: rT2 });
+            } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
+        }
+        if (action === 'rescate_manual' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false });
+            const telM = String(req.body.telefono || '').replace(/\D/g, '');
+            if (!telM) return res.status(400).json({ ok: false, error: 'telefono' });
+            const resc3 = require('../lib/seb/rescate.js');
+            const rM = await resc3.registrarSalidaManual({ tel: telM, texto: String(req.body.texto || ''), esPin: !!req.body.es_pin, ahora: Date.now() });
+            return res.status(200).json({ ok: true, rescate: rM });
         }
 
         // ============ CIERRE TIMBRE (lógica del timbre, orden owner 2026-07-16) ============
@@ -1295,6 +1339,46 @@ module.exports = async function handler(req, res) {
         // ═══ IGNACIO RECEPCIÓN — soporte del puente ═══
         // ¿Este teléfono tiene sesión de recepción abierta? (el puente pregunta antes
         // de descargar/subir una foto — así las fotos de compradores no se tocan)
+        // ══════════ 🛟 LA GUARDIA — agenda de rescate para el calendario ══════════
+        if (action === 'rescate_agenda') {
+            const resc = require('../lib/seb/rescate.js');
+            const incluirPruebas = String(req.query.incluir_pruebas || '') === '1';
+            const desde = Date.now() - 48 * 3600000;
+            let rows = await query("SELECT * FROM rescates WHERE estado='vivo' OR updated > ? ORDER BY proxima_ts ASC LIMIT 200", [desde]).catch(() => []);
+            if (!incluirPruebas) rows = rows.filter(r => !/^52100000000/.test(String(r.telefono)));
+            const out = [];
+            for (const r of rows.slice(0, 80)) {
+                const ctx = await resc.ctxDe(r.telefono, Number(r.etapa) || 0, Number(r.proxima_ts) || Date.now()).catch(() => ({}));
+                let nombre = ctx && ctx.nombre;
+                if (!nombre) { try { const cv = await query("SELECT nombre FROM conversaciones WHERE channel_thread_id=?", ['whatsapp:' + r.telefono]); nombre = cv.length ? cv[0].nombre : null; } catch (e) { } }
+                let saldra = [];
+                try { saldra = resc.machote(r, { ...ctx, ahora: Number(r.proxima_ts) || Date.now() }); } catch (e) { }
+                out.push({
+                    id: r.id, folio: 'R-' + r.id, telefono: r.telefono, nombre: nombre || '',
+                    tipo: r.tipo, carril: r.carril, bala: r.pendiente, etapa: Number(r.etapa) || 0,
+                    escala: r.escala || '', etiqueta: r.etiqueta || '', estado: r.estado, motivo_cierre: r.motivo_cierre || '',
+                    proxima_ts: Number(r.proxima_ts) || null, created: Number(r.created) || null,
+                    auto: (ctx && ctx.auto && ctx.auto.nombre) || '', foto: (ctx && ctx.foto) || null, saldra
+                });
+            }
+            return res.status(200).json({ ok: true, folios: out, ahora: Date.now() });
+        }
+        if (action === 'rescate_cancelar' && req.method === 'POST') {
+            const idR = Number(req.body.id || 0);
+            if (!idR) return res.status(400).json({ ok: false, error: 'id requerido' });
+            await run("UPDATE rescates SET estado='cerrado', motivo_cierre='cancelado por el owner', updated=? WHERE id=?", [Date.now(), idR]);
+            return res.status(200).json({ ok: true });
+        }
+        if (action === 'rescate_reactivar' && req.method === 'POST') {
+            const idR = Number(req.body.id || 0);
+            if (!idR) return res.status(400).json({ ok: false, error: 'id requerido' });
+            const rowR = await query("SELECT proxima_ts FROM rescates WHERE id=?", [idR]);
+            if (!rowR.length) return res.status(404).json({ ok: false, error: 'no existe' });
+            let prox = Number(rowR[0].proxima_ts) || 0;
+            if (prox < Date.now()) prox = Date.now() + 60 * 60000;   // ya pasó → reloj fresco de 60 min
+            await run("UPDATE rescates SET estado='vivo', motivo_cierre='', proxima_ts=?, updated=? WHERE id=?", [prox, Date.now(), idR]);
+            return res.status(200).json({ ok: true, proxima_ts: prox });
+        }
         if (action === 'recepcion_activa') {
             const tR = String((req.query && req.query.telefono) || (req.body && req.body.telefono) || '').replace(/\D/g, '');
             if (!tR) return res.status(400).json({ ok: false, error: 'telefono requerido' });
