@@ -632,7 +632,7 @@ async function avanzarRescate(){
   const d = await r.json();
   if (!d.ok) { sistema('❌ rescate: ' + (d.error || '')); return; }
   sistema('🕐 reloj adelantado a ' + fmtR(Number(RESC.proxima_ts) + 1000) + ' — el barredor corrió (mismo cron que producción)', true);
-  for (const p of (d.pushes || [])) { burbuja('seb', p.texto); sistema((p.tipo === 'promesa' ? '🤝 reclamo de promesa' : '👻 push de rescate (toque ' + (p.etapa + 1) + ')') + ' · ' + p.folio, true); }
+  for (const p of (d.pushes || [])) { burbuja('seb', p.texto); if (p.foto) burbuja('seb', '', '<div class="fotos"><img src="' + p.foto + '"></div>'); sistema((p.tipo === 'promesa' ? '🤝 reclamo de promesa' : '👻 push de rescate (toque ' + (p.etapa + 1) + ')') + ' · ' + p.folio, true); }
   pintarRescate(d.rescate);
   if (!(d.rescate && d.rescate.activo)) sistema('📦 folio cerrado — ' + ((d.pushes||[]).length ? 'se agotaron los toques (a la lista)' : 'sin folio vivo'), true);
 }
