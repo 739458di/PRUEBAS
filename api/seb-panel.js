@@ -709,8 +709,38 @@ module.exports = async function handler(req, res) {
             if (bursts >= 1) return res.status(200).json({ ok: false, motivo: 'en_curso_silencio' });
 
             // ===== PRIMER CONTACTO (bursts === 0) → OPENER =====
-            const lastMsg = entrantes[entrantes.length - 1].mensaje;
-            const textoFamilia = entrantes.map(e => e.mensaje).join(' ');   // junta la ráfaga del comprador
+            let lastMsg = entrantes[entrantes.length - 1].mensaje;
+            let textoFamilia = entrantes.map(e => e.mensaje).join(' ');   // junta la ráfaga del comprador
+            // 📷 LA IMAGEN TAMBIÉN ABRE (owner 2026-07-23, caso Brenda): foto en el primer
+            // contacto → el ojo la identifica, el auto queda SENTADO (mesa+escena) y si
+            // además venía OTRA pregunta se contestan AMBAS (nota de la foto + el flujo).
+            let notaFoto = null;
+            try {
+                const apF = require('../lib/seb/aparador.js');
+                const absF = await apF.absorberImagen({ texto: textoFamilia });
+                if (absF && absF.auto) {
+                    const autosF = await apF.inventarioActivo();
+                    const rowF = autosF.find(a => a.id === absF.auto.auto_id);
+                    if (rowF) {
+                        const { guardarMesa } = require('../lib/seb/mesa.js');
+                        const curF2 = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [tel]);
+                        let ejF2 = {}; try { ejF2 = JSON.parse((curF2[0] && curF2[0].estado_json) || '{}'); } catch (e) { }
+                        ejF2.escena = [rowF.id];
+                        await guardarMesa(tel, ejF2, [rowF.id], rowF.id);
+                        const limpioF = String(absF.texto || '').replace(rowF.nombre, ' ').replace(/\$+/g, ' ').replace(/\s+/g, ' ').trim();
+                        if (limpioF.length >= 8) {
+                            notaFoto = `El de la foto es el ${rowF.nombre}${rowF.precio ? ' — $' + Number(rowF.precio).toLocaleString('es-MX') : ''}, disponible 👍`;
+                            textoFamilia = limpioF; lastMsg = limpioF;   // el flujo contesta la OTRA pregunta
+                        } else {
+                            textoFamilia = rowF.nombre; lastMsg = rowF.nombre;   // solo la foto → su paquete
+                        }
+                    }
+                } else if (absF && absF.imagen && absF.sinUrl && !absF.textoUtil) {
+                    await logEscala(tel, '📷 abrió con una IMAGEN que el bot no puede ver — revísala tú');
+                    return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '📷 abrió con una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: textoFamilia });
+                }
+            } catch (e) { console.error('[foto opener]', e.message); }
+            const conFoto = (o) => { if (notaFoto && Array.isArray(o.segmentos) && o.segmentos.length) { const i = Math.min(2, o.segmentos.length); o.segmentos = [...o.segmentos.slice(0, i), notaFoto, ...o.segmentos.slice(i)]; } return o; };
             const historial = histCorto;
             const mensajeCerebro = adCtx ? '[DESC: ' + adCtx + ']\n' + lastMsg : lastMsg;
             const clasif = await entender({ mensaje: mensajeCerebro, historial, estado: {} });
@@ -765,14 +795,14 @@ module.exports = async function handler(req, res) {
             // mismo, eso es Puerta 1 y sigue el flujo normal de abajo.
             try {
                 const arrC = await arranqueCarrusel({ tel, textoRaw: textoFamilia, textoFamilia, adCtx, textosIn: entrantes.slice(0, 3).map(m => m.mensaje).join(' '), nombre: nombreChat, esClick: true });
-                if (arrC) return res.status(200).json({ ok: true, ...arrC });
+                if (arrC) return res.status(200).json(conFoto({ ok: true, ...arrC }));
             } catch (e) { console.error('[aparador clic]', e.message); }
 
             // ══ ENTRADA MÚLTIPLE (red team #3): abre nombrando 2-3 autos → todos a la
             // mesa desde el saludo (ficha + portada + punto de cada uno → a la cita)
             try {
                 const emP = await require('../lib/seb/mesa.js').entradaMultiple({ tel, texto: textoFamilia, nombre: nombreChat });
-                if (emP) return res.status(200).json({ ok: true, modo: 'mesa', tipo: emP.tipo, segmentos: emP.segmentos, fotos: emP.fotos || null, fotos_after_index: (emP.fotos_after_index != null ? emP.fotos_after_index : null), ubicacion_auto_id: emP.ubicacion_auto_id || null, pin_after_index: (emP.pin_after_index != null ? emP.pin_after_index : null) });
+                if (emP) { const oP = conFoto({ ok: true, modo: 'mesa', tipo: emP.tipo, segmentos: emP.segmentos, fotos: emP.fotos || null, fotos_after_index: (emP.fotos_after_index != null ? emP.fotos_after_index : null), ubicacion_auto_id: emP.ubicacion_auto_id || null, pin_after_index: (emP.pin_after_index != null ? emP.pin_after_index : null) }); if (notaFoto && oP.fotos_after_index != null && oP.fotos_after_index >= 2) oP.fotos_after_index++; return res.status(200).json(oP); }
             } catch (e) { console.error('[mesa multi opener]', e.message); }
 
             // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la
@@ -789,7 +819,7 @@ module.exports = async function handler(req, res) {
                 texto: textoFamilia, nombre: nombreChat,
                 auto_id: clasif.auto_id, intencion: clasif.intencion_principal
             });
-            if (op && op.segmentos && op.segmentos.length) return res.status(200).json({ ok: true, segmentos: op.segmentos, tipo: op.tipo, fotos: op.fotos || null, fotos_after_index: (op.fotos_after_index != null ? op.fotos_after_index : null) });
+            if (op && op.segmentos && op.segmentos.length) { const oOp = conFoto({ ok: true, segmentos: op.segmentos, tipo: op.tipo, fotos: op.fotos || null, fotos_after_index: (op.fotos_after_index != null ? op.fotos_after_index : null) }); if (notaFoto && oOp.fotos_after_index != null && oOp.fotos_after_index >= 2) oOp.fotos_after_index++; return res.status(200).json(oOp); }
             // El opener no supo (vendedor → null) → si es vendedor/junk, no autopilot.
             if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
             // Hay auto y es comprador, pero el opener no tiene familia → al CEREBRO (voz del owner).
@@ -815,14 +845,14 @@ module.exports = async function handler(req, res) {
                         const aAct = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                         const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                         if (cand) {
-                            return res.status(200).json({
+                            return res.status(200).json(conFoto({
                                 ok: true, tipo: 'opener_desambiguar', segmentos: [
                                     `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
                                     'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
                                     require('../lib/seb/aparador.js').introFamilia(textoFamilia, cand) + '\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
                                     'Cuál te interesa?'
                                 ]
-                            });
+                            }));
                         }
                     } catch (e) { console.error('[desambiguar]', e.message); }
                     // ══ PUERTAS 2 y 3 — ARRANQUE DE CARRUSEL (fuente única aparador.js):
@@ -853,13 +883,13 @@ module.exports = async function handler(req, res) {
                         }
                     } catch (e) { console.error('[rol]', e.message); }
                     // red de seguridad: la pregunta clásica del owner
-                    return res.status(200).json({
+                    return res.status(200).json(conFoto({
                         ok: true, tipo: 'opener_sin_auto', segmentos: [
                             `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
                             'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
                             'Claro que sí, de qué auto buscas información? Para poderte ayudar'
                         ]
-                    });
+                    }));
                 }
             }
             return res.status(200).json({ ok: false, motivo: 'no_aplica' });

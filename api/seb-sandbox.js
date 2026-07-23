@@ -106,6 +106,10 @@ module.exports = async function handler(req, res) {
         const mLane = String(carril).match(/^pruebas([1-8])?$/);
         SANDBOX_TEL = mLane ? ('521000000000' + (mLane[1] || '1')) : '5210000000000';
         THREAD = 'whatsapp:' + SANDBOX_TEL;
+        // ⚠️ SANDBOX_TEL es variable de módulo y OTRO request concurrente (el owner con
+        // su sandbox abierto) puede pisarla A MEDIA corrida — los hooks tardíos usan
+        // esta copia local del carril de ESTE request (bug real: folio en carril ajeno)
+        const TEL_LANE = SANDBOX_TEL;
 
         // ── Autos activos (para el selector "vengo del anuncio de…") ──
         if (action === 'autos') {
@@ -124,7 +128,7 @@ module.exports = async function handler(req, res) {
             await run("DELETE FROM seguimientos_ghost WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seb_queue WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM sandbox_match WHERE carril=?", [carril || 'owner']).catch(() => {});
-            try { await require('../lib/seb/rescate.js').limpiar(SANDBOX_TEL); } catch (e) { }
+            try { await require('../lib/seb/rescate.js').limpiar(TEL_LANE); } catch (e) { }
             await recepcion.resetSesion(SANDBOX_TEL).catch(() => {});
             await recepcion.olvidarDueno(SANDBOX_TEL).catch(() => {});
             return res.status(200).json({ ok: true, reset: true });
@@ -278,14 +282,38 @@ module.exports = async function handler(req, res) {
             let textoFamilia = (bursts === 0)
                 ? entrantes.filter(m => m.ts > corteEscala).map(e => e.mensaje).join(' ')
                 : mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in' && m.ts > corteEscala).map(m => m.mensaje).join(' ');
-            // 📷 LA IMAGEN SE LEE (owner 2026-07-22, paridad con el panel): con URL el ojo
-            // identifica el auto y entra al texto; sin URL y sin texto útil → escala.
-            let escalaImagen = null;
+            // 📷 LA IMAGEN SE LEE (owner 2026-07-22/23, paridad con el panel): con URL el
+            // ojo identifica; en el OPENER el auto queda SENTADO y si venía otra pregunta
+            // se contestan AMBAS (nota de foto); sin URL y sin texto útil → escala.
+            let escalaImagen = null; let notaFotoSb = null;
             if (bursts >= 1) {
                 try {
                     const absSb = await require('../lib/seb/aparador.js').absorberImagen({ texto: textoFamilia });
                     if (absSb.imagen && absSb.sinUrl && !absSb.textoUtil) escalaImagen = { escala: true, motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú' };
                     else if (absSb.texto && absSb.texto !== textoFamilia) textoFamilia = absSb.texto;
+                } catch (e) { }
+            } else {
+                try {
+                    const apFS = require('../lib/seb/aparador.js');
+                    const absFS = await apFS.absorberImagen({ texto: textoFamilia });
+                    if (absFS && absFS.auto) {
+                        const autosFS = await apFS.inventarioActivo();
+                        const rowFS = autosFS.find(a => a.id === absFS.auto.auto_id);
+                        if (rowFS) {
+                            const { guardarMesa } = require('../lib/seb/mesa.js');
+                            const curFS = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [TEL_LANE]);
+                            let ejFS = {}; try { ejFS = JSON.parse((curFS[0] && curFS[0].estado_json) || '{}'); } catch (e) { }
+                            ejFS.escena = [rowFS.id];
+                            await guardarMesa(TEL_LANE, ejFS, [rowFS.id], rowFS.id);
+                            const limpioFS = String(absFS.texto || '').replace(rowFS.nombre, ' ').replace(/\$+/g, ' ').replace(/\s+/g, ' ').trim();
+                            if (limpioFS.length >= 8) {
+                                notaFotoSb = `El de la foto es el ${rowFS.nombre}${rowFS.precio ? ' — $' + Number(rowFS.precio).toLocaleString('es-MX') : ''}, disponible 👍`;
+                                textoFamilia = limpioFS;
+                            } else textoFamilia = rowFS.nombre;
+                        }
+                    } else if (absFS && absFS.imagen && absFS.sinUrl && !absFS.textoUtil) {
+                        escalaImagen = { escala: true, motivo: '📷 abrió con una IMAGEN que el bot no puede ver — revísala tú' };
+                    }
                 } catch (e) { }
             }
             const mensajeCerebro = adCtx ? '[DESC: ' + adCtx + ']\n' + textoFamilia : textoFamilia;
@@ -502,6 +530,11 @@ module.exports = async function handler(req, res) {
                         if (!out) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', 'Claro que sí, de qué auto buscas información? Para poderte ayudar'], tipo: 'opener_sin_auto' };
                     }
                 }
+                if (notaFotoSb && out && Array.isArray(out.segmentos) && out.segmentos.length && !out.escala) {
+                    const iN = Math.min(2, out.segmentos.length);
+                    out.segmentos = [...out.segmentos.slice(0, iN), notaFotoSb, ...out.segmentos.slice(iN)];
+                    if (out.fotos_after_index != null && out.fotos_after_index >= 2) out.fotos_after_index++;
+                }
                 ruta = !out ? 'silencio' : out.escala ? 'escala' : out.tipo === 'cerebro' ? 'cerebro' : out.tipo === 'opener_sin_auto' ? 'banco_opener_universal' : 'banco_opener';
             } else if (bursts === 1) {
                 etapa = 'CONTINUACIÓN';
@@ -690,8 +723,8 @@ module.exports = async function handler(req, res) {
             let rescateInfo = null;
             try {
                 const resc = require('../lib/seb/rescate.js');
-                await resc.registrarTurno({ tel: SANDBOX_TEL, textoIn: textoFamilia, ruta, segmentos, pin: !!pin, ahora: Date.now() });
-                rescateInfo = await resc.estadoPanel(SANDBOX_TEL);
+                await resc.registrarTurno({ tel: TEL_LANE, textoIn: textoFamilia, ruta, segmentos, pin: !!pin, ahora: Date.now() });
+                rescateInfo = await resc.estadoPanel(TEL_LANE);
             } catch (e) { console.error('[rescate sb]', e.message); }
 
             return res.status(200).json({
@@ -715,6 +748,14 @@ module.exports = async function handler(req, res) {
             if (!texto) return res.status(400).json({ ok: false, error: 'texto requerido' });
             const convId = await ensureConv();
             await guardarMsg(convId, 'out', texto, 'text', true);
+            // ══ RESCATE: tu salida manual también deja la pelota en su cancha →
+            // arma/re-arma el reloj del silencio (jamás toca una promesa viva)
+            let rescateOut = null;
+            try {
+                const rescM = require('../lib/seb/rescate.js');
+                await rescM.registrarSalidaManual({ tel: TEL_LANE, texto, ahora: Date.now() });
+                rescateOut = await rescM.estadoPanel(TEL_LANE);
+            } catch (e) { }
             // ══ CIERRE DEL OWNER (human in the loop): "cita confirmada + día + hora" escrito
             // POR TI como Seb → se interpreta determinista y se simula la máquina (solicitud
             // al dueño + match pendiente), idéntico al cierre del bot.
@@ -745,7 +786,7 @@ module.exports = async function handler(req, res) {
                     });
                 }
             } catch (e) { console.error('[sandbox cierre owner]', e.message); }
-            return res.status(200).json({ ok: true });
+            return res.status(200).json({ ok: true, rescate: rescateOut });
         }
 
         // ══════════════ ⇄ HABLAR COMO SEB EN EL PANEL DEL VENDEDOR ══════════════
@@ -907,7 +948,7 @@ module.exports = async function handler(req, res) {
         // ══════════ LA MÁQUINA DE RESCATE — panel y reloj simulado ══════════
         if (action === 'rescate_estado') {
             const resc = require('../lib/seb/rescate.js');
-            return res.status(200).json({ ok: true, rescate: await resc.estadoPanel(SANDBOX_TEL), ahora: Date.now() });
+            return res.status(200).json({ ok: true, rescate: await resc.estadoPanel(TEL_LANE), ahora: Date.now() });
         }
         if (action === 'rescate_tiempo' && req.method === 'POST') {
             // el owner adelanta el reloj → el BARREDOR corre a esa hora (mismo cerebro
@@ -916,9 +957,9 @@ module.exports = async function handler(req, res) {
             const simTs = Number(req.body.sim_ts || Date.now());
             const convId = await ensureConv();
             const ultIn = await query("SELECT ts FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY ts DESC LIMIT 1", [convId]).catch(() => []);
-            const pushes = await resc.barrer({ tel: SANDBOX_TEL, ahora: simTs, ultimoInTs: ultIn.length ? Number(ultIn[0].ts) : null });
+            const pushes = await resc.barrer({ tel: TEL_LANE, ahora: simTs, ultimoInTs: ultIn.length ? Number(ultIn[0].ts) : null });
             for (const p of pushes) await guardarMsg(convId, 'out', p.texto, 'text');
-            return res.status(200).json({ ok: true, pushes, rescate: await resc.estadoPanel(SANDBOX_TEL), sim_ts: simTs });
+            return res.status(200).json({ ok: true, pushes, rescate: await resc.estadoPanel(TEL_LANE), sim_ts: simTs });
         }
         if (action === 'tiempo' && req.method === 'POST') {
             await ensureMatchTable();

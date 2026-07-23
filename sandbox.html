@@ -661,6 +661,7 @@ async function enviarComoSeb(t){
     const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'mensaje_out', texto: t }) });
     const d = await r.json();
     if (!d.ok) sistema('❌ no se guardó: ' + (d.error||''), true);
+    if ('rescate' in d) pintarRescate(d.rescate);
     // ══ CIERRE DEL OWNER (human in the loop): TU "cita confirmada + día + hora" dispara
     // la solicitud al vendedor — misma pintura que cuando cierra el bot.
     if (d.cita_owner && d.citaDueno) {
