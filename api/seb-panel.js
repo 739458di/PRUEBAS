@@ -1346,6 +1346,9 @@ module.exports = async function handler(req, res) {
             const desde = Date.now() - 48 * 3600000;
             let rows = await query("SELECT * FROM rescates WHERE estado='vivo' OR updated > ? ORDER BY proxima_ts ASC LIMIT 200", [desde]).catch(() => []);
             if (!incluirPruebas) rows = rows.filter(r => !/^52100000000/.test(String(r.telefono)));
+            // los folios que murieron BIEN (regresó a la cancha, renovada, contestó) son
+            // puro ruido en el calendario — solo se enseñan vivos, cancelados y agotados
+            rows = rows.filter(r => r.estado === 'vivo' || /cancelado|agotado|cita viva/.test(String(r.motivo_cierre || '')));
             const out = [];
             for (const r of rows.slice(0, 80)) {
                 const ctx = await resc.ctxDe(r.telefono, Number(r.etapa) || 0, Number(r.proxima_ts) || Date.now()).catch(() => ({}));
