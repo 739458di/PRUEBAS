@@ -346,6 +346,8 @@ module.exports = async function handler(req, res) {
             if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false });
             const telR = String(req.body.telefono || '').replace(/\D/g, '');
             if (!telR) return res.status(400).json({ ok: false, error: 'telefono' });
+            // CANDADO DE CAMPAÑA 📢: una respuesta a la campaña NO crea folios de rescate
+            try { if (await require('../lib/seb/campana.js').esMudo(telR)) return res.status(200).json({ ok: true, rescate: { skip: 'campana_muda' } }); } catch (e) { }
             try {
                 // la ráfaga entrante = lo que él dijo desde nuestra última salida
                 const cvT = await query("SELECT id FROM conversaciones WHERE channel_thread_id=?", ['whatsapp:' + telR]);
@@ -365,6 +367,9 @@ module.exports = async function handler(req, res) {
             if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false });
             const telM = String(req.body.telefono || '').replace(/\D/g, '');
             if (!telM) return res.status(400).json({ ok: false, error: 'telefono' });
+            // CANDADO DE CAMPAÑA 📢: tu mensaje manual desde el teléfono = RETOMASTE
+            // el chat → el candado se libera y todo vuelve a la normalidad.
+            try { await require('../lib/seb/campana.js').liberar(telM); } catch (e) { }
             const resc3 = require('../lib/seb/rescate.js');
             const rM = await resc3.registrarSalidaManual({ tel: telM, texto: String(req.body.texto || ''), esPin: !!req.body.es_pin, ahora: Date.now() });
             return res.status(200).json({ ok: true, rescate: rM });
@@ -455,6 +460,28 @@ module.exports = async function handler(req, res) {
                 const segsM = await citasVivas.manejarMensajeComprador(tel, rafagaIn);
                 if (segsM && segsM.length) return res.status(200).json({ ok: true, modo: 'cita_match', tipo: 'cita_comprador', segmentos: segsM });
             } catch (e) { console.error('[citas-vivas] comprador:', e.message); }
+
+            // ══ CANDADO DE CAMPAÑA 📢 (orden owner 2026-07-25): a los teléfonos del
+            // blast el bot NO les dice UNA sola palabra — ni Seb, ni Ignacio, ni acuses.
+            // Lo que contesten SOLO se escala al owner. Se libera cuando él escribe a
+            // mano en ese chat (manual ai=0 posterior al candado, o eco del teléfono).
+            try {
+                const camp = require('../lib/seb/campana.js');
+                const mudo = await camp.esMudo(tel);
+                if (mudo) {
+                    const manualDespues = mensajes.some(m => m.direccion === 'out' && !m.ai && Number(m.ts) > Number(mudo.ts));
+                    if (manualDespues) {
+                        await camp.liberar(tel);   // el owner ya retomó → chat normal
+                    } else {
+                        const nomCamp = (convRow.length && convRow[0].nombre) || null;
+                        return res.status(200).json({
+                            ok: false, escalar_owner: true,
+                            escala_motivo: 'CAMPAÑA 📢 — respondió al mensaje de la plataforma; el bot está MUDO en este chat (se libera cuando le escribas tú)',
+                            escala_nombre: nomCamp, escala_ultimo: entrantes[entrantes.length - 1].mensaje
+                        });
+                    }
+                }
+            } catch (e) { console.error('[campana]', e.message); }
 
             // ══ CANDADO STANDBY (🚩fyrachat#8, caso Gustavo 2026-07-12): si TU último mensaje
             // MANUAL (ai_generated=0, escrito por ti desde el teléfono o FyraChat) es un
