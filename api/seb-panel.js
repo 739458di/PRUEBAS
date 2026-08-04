@@ -330,6 +330,15 @@ module.exports = async function handler(req, res) {
                 for (const sg of (p.segmentos || [p.texto])) enviar.push({ telefono: p.telefono, texto: sg });
                 if (p.foto) enviar.push({ telefono: p.telefono, foto: p.foto });
             }
+            // MENSAJES PROGRAMADOS A MANO (owner 2026-08-03): los que tocan AHORA
+            // salen por este mismo canal (el puente ya sabe mandar texto y foto).
+            try {
+                const prog = require('../lib/seb/programados.js');
+                for (const p of await prog.dueNow(Date.now())) {
+                    for (const sg of (p.segmentos || [])) enviar.push({ telefono: p.telefono, texto: sg });
+                    if (p.foto) enviar.push({ telefono: p.telefono, foto: p.foto });
+                }
+            } catch (e) { console.error('[programados]', e.message); }
             const avisos = await resc.preAvisos({ ahora: Date.now() });
             let reporte = avisos.length ? avisos.join('\n\n') : null;
             if (process.env.GHOST_VIEJO === '1') {
@@ -1391,7 +1400,41 @@ module.exports = async function handler(req, res) {
                     auto: (ctx && ctx.auto && ctx.auto.nombre) || '', foto: (ctx && ctx.foto) || null, saldra
                 });
             }
-            return res.status(200).json({ ok: true, folios: out, ahora: Date.now() });
+            // MENSAJES PROGRAMADOS A MANO (owner 2026-08-03): van en la misma agenda
+            let programados = [];
+            try {
+                const prog = require('../lib/seb/programados.js');
+                programados = (await prog.listar({ incluirPruebas })).map(p => ({
+                    id: p.id, telefono: p.telefono, nombre: p.nombre || '', texto: p.texto,
+                    con_foto: Number(p.con_foto) || 0, cuando_ts: Number(p.cuando_ts), estado: p.estado
+                }));
+            } catch (e) { }
+            return res.status(200).json({ ok: true, folios: out, programados, ahora: Date.now() });
+        }
+        // ══ MENSAJES PROGRAMADOS (owner 2026-08-03): el Calendar agenda a mano ══
+        if (action === 'prog_crear' && req.method === 'POST') {
+            const prog = require('../lib/seb/programados.js');
+            const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0 });
+            return res.status(r.ok ? 200 : 400).json(r);
+        }
+        if (action === 'prog_cancelar' && req.method === 'POST') {
+            const prog = require('../lib/seb/programados.js');
+            return res.status(200).json(await prog.cancelar(req.body.id));
+        }
+        if (action === 'prog_machote') {
+            // prellenado del popup: nombre + auto en foco → machote editable
+            const telM2 = String(req.query.telefono || '').replace(/\D/g, '');
+            if (!telM2) return res.status(400).json({ ok: false, error: 'telefono' });
+            const resc = require('../lib/seb/rescate.js');
+            const telFull = telM2.length === 10 ? '521' + telM2 : telM2;
+            const ctx = await resc.ctxDe(telFull, 1, Date.now()).catch(() => ({}));
+            let nombre = ctx && ctx.nombre;
+            if (!nombre) { try { const cv = await query("SELECT nombre FROM conversaciones WHERE channel_thread_id=?", ['whatsapp:' + telFull]); nombre = cv.length ? cv[0].nombre : null; } catch (e) { } }
+            const saludo = (() => { const h = new Date(Date.now() - 6 * 3600000).getUTCHours(); return h < 12 ? 'buen día' : (h < 19 ? 'buenas tardes' : 'buenas noches'); })();
+            const auto = ctx && ctx.auto && ctx.auto.nombre;
+            const texto = 'Hola' + (nombre ? ' ' + nombre : '') + ', ' + saludo + '!\n' +
+                (auto ? ('¿Qué has pensado del ' + auto + '? ¿Sí te vas a animar? 👍') : '¿Qué has pensado? ¿Seguimos en pie? 👍');
+            return res.status(200).json({ ok: true, nombre: nombre || '', auto: auto || '', foto: (ctx && ctx.foto) || null, texto });
         }
         if (action === 'rescate_cancelar' && req.method === 'POST') {
             const idR = Number(req.body.id || 0);
