@@ -377,6 +377,11 @@ async function conectar() {
         browser: ['Fyradrive', 'Chrome', '120.0.0'],
         markOnlineOnConnect: true,
         msgRetryCounterCache,
+        // LA PESTE DE LOS GRUPOS (2026-08-06): el lid 213400550379606 —participante
+        // de un grupo— acumuló ~250 mil Bad MAC en DOS brotes y tumbó la recepción
+        // dos veces (sobrevivió incluso al re-enlace por QR). El bot NO trabaja
+        // grupos: se ignoran DE RAÍZ (ni se descifran) — la peste no puede volver.
+        shouldIgnoreJid: jid => typeof jid === 'string' && (jid.endsWith('@g.us') || jid.endsWith('@broadcast')),
         // ARREGLO #1: responder los retry-receipts de Signal con el mensaje original.
         getMessage: async (key) => {
             // Si nos piden reenviar el MISMO mensaje 2+ veces, el destinatario no lo pudo
@@ -386,11 +391,21 @@ async function conectar() {
             setTimeout(() => getMsgRetries.delete(key.id), 60 * 60000);
             if (n >= 2 && key.remoteJid) { await resetearSesionContacto(key.remoteJid).catch(() => {}); }
             const m = sentStore.get(key.id);
-            return m ? m.message : undefined;
+            if (m) return m.message;
+            // G1 (badmac 2026-08-03): sentStore es RAM — cada pm2 restart lo vacía y los
+            // retry-receipts regresaban undefined → el saliente se quedaba en UNA palomita
+            // para siempre. Respaldo: el TEXTO vive en Turso (wa_messages) — re-servirlo.
+            try {
+                const r = await db.execute({ sql: "SELECT mensaje FROM wa_messages WHERE mensaje_id=? AND direccion='out' ORDER BY created_at DESC LIMIT 1", args: [key.id] });
+                if (r.rows.length && r.rows[0].mensaje && !/^\[/.test(String(r.rows[0].mensaje))) return { conversation: String(r.rows[0].mensaje) };
+            } catch (e) { console.error('[getMessage] fallback Turso:', e.message); }
+            return undefined;
         }
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    // G3 (badmac 2026-08-03): si escribir el auth a disco FALLA, hay que verlo en el log —
+    // llaves en RAM ≠ llaves en disco es la semilla de la epidemia de Bad MAC.
+    sock.ev.on('creds.update', () => { Promise.resolve(saveCreds()).catch(e => console.error('[creds] ⚠️ NO pude guardar auth:', e.message)); });
     conectando = false;   // el socket de esta generación ya existe; liberar el candado
 
     sock.ev.on('connection.update', (u) => {
@@ -764,18 +779,26 @@ async function dispararAutoOpener(tel) {
 // NO se le manda nada al comprador ni aviso al owner. Solo queda la burbuja en
 // FyraChat (para que la conversación exista y no sea un lead invisible) y el log.
 // La cura REAL es que las sesiones no se rompan: candado de conexión única (abajo).
-const ilegibleAvisado = new Map();   // tel → ts (1 registro por contacto por 6h)
+const ilegibleAvisado = new Map();   // tel → ts (throttle SOLO del log, no del registro)
 async function manejarMensajeIlegible(m) {
     const tel = telefonoReal(m);
-    if (!tel) return;
+    if (!tel) {
+        // G4 (badmac 2026-08-03, caso lid 213400550379606 con 235 mil errores): un @lid
+        // SIN mapeo perdía sus mensajes en silencio TOTAL. Que al menos grite en el log.
+        console.error('[ilegible] ⚠️ SIN TELÉFONO — lid/jid: ' + (m.key && (m.key.senderLid || m.key.participant || m.key.remoteJid) || '?') + ' push: ' + (m.pushName || '?'));
+        return;
+    }
     const ahora = Date.now();
-    if (ilegibleAvisado.get(tel) && ahora - ilegibleAvisado.get(tel) < 6 * 3600000) return;
+    // G2 (badmac 2026-08-03, caso 445 110 9070 / 81 1792 8244): el throttle de 6h TRAGABA
+    // el 2º+ mensaje ilegible del mismo contacto — perdido sin rastro. Ahora CADA mensaje
+    // perdido deja su burbuja (el dedup real lo da el msg_id); el throttle es solo del log.
+    const yaLog = ilegibleAvisado.get(tel) && ahora - ilegibleAvisado.get(tel) < 6 * 3600000;
     ilegibleAvisado.set(tel, ahora);
     const placeholder = '⚠️ [mensaje no descifrado]';
     await guardar({ telefono: tel, nombre: m.pushName || null, mensaje: placeholder, direccion: 'in', tipo: 'text', mensaje_id: m.key.id, ai_generated: 0 }).catch(() => {});
     guardarMensajeNuevo({ tel, msgId: m.key.id, ts: ahora, direccion: 'in', emisor: m.pushName || null, texto: placeholder, tipo: 'text', nombre: m.pushName || null, ai_generated: 0 }).catch(() => {});
     emitir({ tipo: 'mensaje', telefono: tel, mensaje: placeholder, direccion: 'in', timestamp: Math.floor(ahora / 1000), nombre: m.pushName || null, msg_id: m.key.id });
-    console.log('[ilegible] Bad MAC de ' + tel.slice(-4) + ' (registro silencioso)');
+    if (!yaLog) console.log('[ilegible] Bad MAC de ' + tel.slice(-4) + ' (registro silencioso)');
 }
 
 // ── GHOSTING ETAPA 3: el toque de las 3 HORAS (único auto-envío de etapa 3) ──
