@@ -400,8 +400,14 @@ async function conectar() {
             // G1 (badmac 2026-08-03): sentStore es RAM — cada pm2 restart lo vacía y los
             // retry-receipts regresaban undefined → el saliente se quedaba en UNA palomita
             // para siempre. Respaldo: el TEXTO vive en Turso (wa_messages) — re-servirlo.
+            // ⚠️ CAMISA DE FUERZA (2026-08-06): esta consulta corre DENTRO del tubo de
+            // recepción de Baileys — si Turso se cuelga, el puente queda conectado pero
+            // SORDO (así se murió la recepción 6 horas hoy). Máximo 1.5s y suelta.
             try {
-                const r = await db.execute({ sql: "SELECT mensaje FROM wa_messages WHERE mensaje_id=? AND direccion='out' ORDER BY created_at DESC LIMIT 1", args: [key.id] });
+                const r = await Promise.race([
+                    db.execute({ sql: "SELECT mensaje FROM wa_messages WHERE mensaje_id=? AND direccion='out' ORDER BY created_at DESC LIMIT 1", args: [key.id] }),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('turso_lento')), 1500))
+                ]);
                 if (r.rows.length && r.rows[0].mensaje && !/^\[/.test(String(r.rows[0].mensaje))) return { conversation: String(r.rows[0].mensaje) };
             } catch (e) { console.error('[getMessage] fallback Turso:', e.message); }
             return undefined;
