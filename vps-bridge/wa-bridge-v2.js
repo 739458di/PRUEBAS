@@ -380,8 +380,13 @@ async function conectar() {
         // LA PESTE DE LOS GRUPOS (2026-08-06): el lid 213400550379606 —participante
         // de un grupo— acumuló ~250 mil Bad MAC en DOS brotes y tumbó la recepción
         // dos veces (sobrevivió incluso al re-enlace por QR). El bot NO trabaja
-        // grupos: se ignoran DE RAÍZ (ni se descifran) — la peste no puede volver.
-        shouldIgnoreJid: jid => typeof jid === 'string' && (jid.endsWith('@g.us') || jid.endsWith('@broadcast')),
+        // grupos: se ignoran DE RAÍZ (ni se descifran) — y el dispositivo apestado
+        // queda en LISTA NEGRA directa (también ataca como mensaje 1 a 1; su tráfico
+        // es 100% indescifrable, no se pierde nada real).
+        shouldIgnoreJid: jid => typeof jid === 'string' && (
+            jid.endsWith('@g.us') || jid.endsWith('@broadcast') ||
+            jid.startsWith('213400550379606@') || jid.includes('213400550379606:')
+        ),
         // ARREGLO #1: responder los retry-receipts de Signal con el mensaje original.
         getMessage: async (key) => {
             // Si nos piden reenviar el MISMO mensaje 2+ veces, el destinatario no lo pudo
