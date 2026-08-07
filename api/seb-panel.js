@@ -424,8 +424,16 @@ module.exports = async function handler(req, res) {
             const tel = String(req.body.telefono || '');
             if (!tel) return res.status(400).json({ ok: false, error: 'telefono requerido' });
             // Dueño/vendedor por teléfono → nunca autopilot.
+            // MODO COMPRADOR DE PRUEBA (owner 2026-08-05, "solo por esta vez"): si existe
+            // el marcador 'comprador:<tel>' en prueba_reset, ese tel actúa de COMPRADOR
+            // normal aunque sea dueño/owner. Se apaga borrando el renglón.
+            let compradorTest = false;
+            try {
+                const ct = await query("SELECT 1 FROM prueba_reset WHERE telefono=?", ['comprador:' + tel.replace(/\D/g, '')]);
+                compradorTest = ct.length > 0;
+            } catch (e) { }
             const duenos = await telefonosDueno();
-            if (duenos.has(tel.replace(/\D/g, '').slice(-10))) {
+            if (!compradorTest && duenos.has(tel.replace(/\D/g, '').slice(-10))) {
                 // ══ LADO VENDEDOR REAL: si este dueño tiene una SOLICITUD DE CITA viva,
                 // su respuesta entra a la máquina del match (idéntica al sandbox).
                 try {
@@ -1410,6 +1418,107 @@ module.exports = async function handler(req, res) {
                 }));
             } catch (e) { }
             return res.status(200).json({ ok: true, folios: out, programados, ahora: Date.now() });
+        }
+        // ══ BOTONERA DE EMERGENCIA (owner 2026-08-06): (ubicación)(cotizar)(fotos)(cita)
+        // en FyraChat. DETERMINISTA: ejecuta literal las herramientas de la lista blanca
+        // con el auto EN FOCO de la conversación; sin foco → el front pide el auto y
+        // aquí se amarra contra el inventario (match único o nada). Cero IA.
+        if (action === 'accion_boton' && req.method === 'POST') {
+            const telB = String(req.body.telefono || '').replace(/\D/g, '');
+            const accB = String(req.body.accion || '');
+            if (!telB || !accB) return res.status(400).json({ ok: false, error: 'telefono y accion requeridos' });
+            const telFullB = telB.length === 10 ? '521' + telB : telB;
+            const H = require('../lib/seb/herramientas.js');
+            const normB = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+            // ── 1) RESOLVER EL AUTO (fila de inventario) ──
+            let inv = null;
+            const buscarInv = async (cond, args) => {
+                const r = await query("SELECT id, fyradrive_web_id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo' AND (" + cond + ")", args);
+                return r;
+            };
+            if (req.body.auto_id) {
+                const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [Number(req.body.auto_id), Number(req.body.auto_id)]);
+                inv = r[0] || null;
+            } else if (String(req.body.auto_texto || '').trim()) {
+                // match por nombre contra TODO el inventario activo: todos los tokens
+                // del texto deben vivir en [marca modelo version año]; único o nada.
+                const t = normB(req.body.auto_texto);
+                const toks = t.split(' ').filter(x => x.length >= 2 || /^\d$/.test(x));
+                const todos = await buscarInv('1=1', []);
+                const hits = todos.filter(a => {
+                    const nom = normB([a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '));
+                    return toks.every(tk => nom.includes(tk));
+                });
+                if (hits.length === 1) inv = hits[0];
+                else return res.status(200).json({ ok: false, necesita: 'auto', error: hits.length ? ('ambiguo: ' + hits.map(h => [h.marca, h.modelo, h.anio].join(' ')).join(' | ')) : 'no encontré ese auto en el inventario' });
+            } else {
+                // el AUTO EN FOCO de la conversación
+                const wc = await query('SELECT auto_id_activo FROM wa_conversations WHERE telefono = ?', [telFullB]);
+                const foco = wc.length ? Number(wc[0].auto_id_activo) : null;
+                if (foco) { const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [foco, foco]); inv = r[0] || null; }
+                if (!inv) return res.status(200).json({ ok: false, necesita: 'auto' });
+            }
+            const nombreAuto = [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
+            // el foco queda amarrado a lo que se ejecutó (seguimiento coherente) — upsert
+            try {
+                const focoNuevo = inv.fyradrive_web_id || inv.id;
+                const rU = await run('UPDATE wa_conversations SET auto_id_activo = ? WHERE telefono = ?', [focoNuevo, telFullB]);
+                if (!Number(rU.rowsAffected)) await run('INSERT INTO wa_conversations (telefono, auto_id_activo) VALUES (?, ?)', [telFullB, focoNuevo]);
+            } catch (e) { }
+            // CANDADO SANDBOX (ley de la casa): tels de prueba JAMÁS salen a WhatsApp —
+            // se simula la ejecución (el flujo se prueba completo sin tocar el puente).
+            const esPrueba = /^52100000000/.test(telFullB);
+            const BURL = process.env.BRIDGE_SEND_URL || 'http://137.184.199.19:3000/api/send';
+            const BKEY = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2-2026';
+            const { enviarWA } = require('../lib/seb/citas-vivas.js');
+            try {
+                // ── 2) EJECUTAR LITERAL ──
+                if (accB === 'fotos') {
+                    const urls = await H.fotosDeAuto(inv.id, 8);
+                    if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): texto + ' + urls.length + ' fotos' });
+                    await enviarWA(telFullB, 'Van, ahí te las mando 📸');
+                    const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify({ phone: telFullB, urls }) });
+                    const df = await rf.json().catch(() => ({}));
+                    return res.status(200).json({ ok: !!df.ok, auto: nombreAuto, enviado: 'texto + ' + urls.length + ' fotos', error: df.ok ? undefined : (df.error || 'el puente no pudo mandar las fotos') });
+                }
+                if (accB === 'ubicacion') {
+                    const u = await H.ubicacion({ auto_id: inv.id });
+                    if (!u.ok) return res.status(200).json({ ok: false, error: u.error === 'sin_punto_asignado' ? ('el ' + nombreAuto + ' NO tiene punto de venta asignado (configúralo en puntos.html)') : u.error });
+                    const punto = (u.placeholders && u.placeholders.punto_nombre) || 'nuestro punto Fyradrive';
+                    const pe = await query('SELECT image_b64, lat, lng, name FROM punto_envio WHERE auto_id = ?', [inv.id]);
+                    const cap = pe.length ? pe[0] : {};
+                    const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes';
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): paquete de ubicación de ' + punto });
+                    const body = { phone: telFullB, text: texto };
+                    if (cap.image_b64) body.image = cap.image_b64;
+                    if (cap.lat != null && cap.lng != null) body.location = { lat: cap.lat, lng: cap.lng, name: cap.name || punto };
+                    const ru = await fetch(BURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(body) });
+                    const du = await ru.json().catch(() => ({}));
+                    if (!du.ok) return res.status(200).json({ ok: false, error: du.error || 'el puente no pudo mandar la ubicación' });
+                    await enviarWA(telFullB, '¿Qué día te queda bien para venir a verlo y manejarlo? Te agendo de una vez');
+                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'paquete de ubicación (' + [cap.image_b64 ? 'captura' : null, 'texto', (cap.lat != null ? 'pin' : null), 'cita'].filter(Boolean).join(' + ') + ')' });
+                }
+                if (accB === 'cotizar') {
+                    const c = await H.cotizar({ auto_id: inv.id, enganche: req.body.enganche ? Number(req.body.enganche) : undefined, plazo_meses: req.body.plazo_meses ? Number(req.body.plazo_meses) : undefined });
+                    if (!c.ok) return res.status(200).json({ ok: false, necesita: c.error === 'falta_enganche' ? 'datos' : undefined, error: c.error });
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cotización lista', tarjeta: String(c.placeholders.cotizacion).slice(0, 200) });
+                    await enviarWA(telFullB, 'Va, mira cómo quedaría:');
+                    await enviarWA(telFullB, c.placeholders.cotizacion);
+                    await enviarWA(telFullB, '¿Cómo la ves?');
+                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'cotización de ' + nombreAuto });
+                }
+                if (accB === 'cita') {
+                    const fI = String(req.body.fecha_iso || ''), hI = String(req.body.hora || '');
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return res.status(200).json({ ok: false, necesita: 'fecha_hora' });
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cita ' + fI + ' ' + hI });
+                    const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cita_manual', phone: telB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }) });
+                    const dc = await rc.json().catch(() => ({}));
+                    if (!dc.ok) return res.status(200).json({ ok: false, error: dc.error || 'no se pudo crear la cita' });
+                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'cita ' + fI + ' ' + hI + ' — CRM ✓ Calendar ' + (dc.gcal_ok ? '✓' : '⚠️') + ' Solicitud ' + (dc.solicitud_ok ? '✓' : (dc.solicitud_na ? '(sin tel dueño)' : '⚠️')), cita_id: dc.cita_id });
+                }
+                return res.status(400).json({ ok: false, error: 'accion desconocida' });
+            } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
         }
         // ══ MENSAJES PROGRAMADOS (owner 2026-08-03): el Calendar agenda a mano ══
         if (action === 'prog_crear' && req.method === 'POST') {

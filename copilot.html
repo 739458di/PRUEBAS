@@ -74,6 +74,12 @@
   .bub.anim{animation:bubIn .18s ease-out}
   @keyframes bubIn{from{opacity:0;transform:translateY(7px) scale(.98)}to{opacity:1;transform:none}}
   .bub .t{float:right;font-size:10.5px;color:rgba(40,60,95,.42);margin:7px -3px -1px 9px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* ⚡ botonera de emergencia */
+  #acciones { display:flex; gap:6px; padding:6px 10px 2px; flex-wrap:wrap; }
+  .acc-b { background:#0e2b23; color:#00d492; border:1px solid #1b4a3c; border-radius:99px; padding:6px 11px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .acc-b:active { transform:scale(.96); }
+  .acc-b:disabled { opacity:.5; }
+
   /* 🚩 banderita de training: aparece al pasar el mouse sobre la burbuja */
   .bub .flagb{position:absolute;top:-8px;right:-6px;background:#fff;border:1px solid #e3e8f2;border-radius:50%;width:22px;height:22px;font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:opacity .15s;box-shadow:0 1px 4px rgba(20,40,80,.15);padding:0}
   .bub{position:relative}
@@ -193,6 +199,14 @@
   <div id="msgs"></div>
   <div id="fab" onclick="document.getElementById('msgs').scrollTo({top:9e9,behavior:'smooth'})"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   <div id="obj-banner"><span class="ob-ic">↩</span><span id="obj-preview"></span><button class="ob-x" onclick="limpiarObjetivo()" title="Cancelar">✕</button></div>
+  <!-- ⚡ BOTONERA DE EMERGENCIA (owner 2026-08-06): acciones deterministas de la
+       lista blanca con el auto EN FOCO; sin foco → pregunta cuál (match único). -->
+  <div id="acciones">
+    <button class="acc-b" onclick="accionBoton('ubicacion')">📍 Enviar ubicación</button>
+    <button class="acc-b" onclick="accionBoton('cotizar')">💰 Cotizar</button>
+    <button class="acc-b" onclick="accionBoton('cita')">📅 Agendar cita</button>
+    <button class="acc-b" onclick="accionBoton('fotos')">📸 Enviar fotos</button>
+  </div>
   <div id="gen"><button onclick="sugerir()"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Generar sugerencia de Seb</button></div>
   <div id="copilot">
     <div class="tag"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Respuesta sugerida <span class="int" id="c-int"></span></div>
@@ -703,6 +717,39 @@ function limpiarObjetivo(){
 const _man = document.getElementById('manual');
 _man.addEventListener('input', () => { _man.style.height='auto'; _man.style.height=Math.min(_man.scrollHeight,110)+'px'; });
 _man.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); enviarManual(); } });
+
+// ══ ⚡ BOTONERA DE EMERGENCIA (owner 2026-08-06) — determinista, cero IA ══
+async function postAccion(body){
+  try { const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }); return await r.json(); }
+  catch(e){ return { ok:false, error: e.message }; }
+}
+async function accionBoton(acc){
+  const tel = TEL; if (!tel) { alert('Abre un chat primero'); return; }
+  const body = { action:'accion_boton', telefono: tel, accion: acc };
+  if (acc === 'cita') {
+    const f = prompt('📅 Fecha de la cita (AAAA-MM-DD):'); if (f === null) return;
+    const h = prompt('🕐 Hora (HH:MM, 24 hrs — ej. 15:00):'); if (h === null) return;
+    body.fecha_iso = String(f).trim(); body.hora = String(h).trim();
+  }
+  document.querySelectorAll('.acc-b').forEach(b => b.disabled = true);
+  let d = await postAccion(body);
+  if (d && d.necesita === 'auto') {
+    const a = prompt('🚗 ¿De cuál auto? (marca modelo año — se busca en el Sales Brain)' + (d.error ? '\n⚠️ ' + d.error : ''));
+    if (a !== null && String(a).trim()) { body.auto_texto = String(a).trim(); d = await postAccion(body); }
+    else d = null;
+  }
+  if (d && d.necesita === 'datos') {
+    const e = prompt('💵 Enganche en pesos (ej. 80000):' + (d.error ? '\n⚠️ ' + d.error : ''));
+    if (e !== null && String(e).trim()) { body.enganche = Number(String(e).replace(/[^0-9]/g,'')); d = await postAccion(body); }
+    else d = null;
+  }
+  document.querySelectorAll('.acc-b').forEach(b => b.disabled = false);
+  if (!d) return;
+  if (d.necesita === 'fecha_hora') { alert('⚠️ Fecha u hora con formato inválido (AAAA-MM-DD y HH:MM)'); return; }
+  if (d.necesita === 'auto') { alert('⚠️ No amarré el auto: ' + (d.error || '')); return; }
+  if (d.ok) { alert('✅ ' + (d.enviado || 'ejecutado') + (d.auto ? '\n🚗 ' + d.auto : '')); try { cargarChat(); } catch(e){} }
+  else alert('⚠️ ' + (d.error || 'no se pudo'));
+}
 </script>
 </body>
 </html>
