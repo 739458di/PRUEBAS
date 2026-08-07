@@ -1473,6 +1473,16 @@ module.exports = async function handler(req, res) {
             const { enviarWA } = require('../lib/seb/citas-vivas.js');
             try {
                 // ── 2) EJECUTAR LITERAL ──
+                if (accB === 'info') {
+                    // 📄 ENVIAR INFO (owner 2026-08-07): el machote COMPLETO del auto,
+                    // copy-paste literal (mismo generador del "más información" del bot)
+                    const { machoteDe } = require('../lib/seb/machote.js');
+                    const mch = await machoteDe(inv.id);
+                    if (!mch) return res.status(200).json({ ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): machote de info', machote: String(mch).slice(0, 150) });
+                    await enviarWA(telFullB, mch);
+                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'machote completo de ' + nombreAuto });
+                }
                 if (accB === 'fotos') {
                     const urls = await H.fotosDeAuto(inv.id, 8);
                     if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
