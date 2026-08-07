@@ -206,6 +206,7 @@
     <button class="acc-b" onclick="accionBoton('cotizar')">💰 Cotizar</button>
     <button class="acc-b" onclick="accionBoton('cita')">📅 Agendar cita</button>
     <button class="acc-b" onclick="accionBoton('fotos')">📸 Enviar fotos</button>
+    <button class="acc-b" onclick="recordatorioBoton()">📨 Recordatorio</button>
   </div>
   <div id="gen"><button onclick="sugerir()"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Generar sugerencia de Seb</button></div>
   <div id="copilot">
@@ -224,6 +225,25 @@
   <div class="inputbar">
     <textarea id="manual" rows="1" placeholder="Escribe un mensaje…"></textarea>
     <button id="sendman" onclick="enviarManual()"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
+  </div>
+</div>
+
+<!-- MODAL RECORDATORIO (owner 2026-08-06): programa un mensaje para este chat —
+     misma libreta mensajes_programados que el Calendar (y su veto al ghost). -->
+<div class="cmodal" id="recmodal" onclick="if(event.target===this)cerrarRec()">
+  <div class="cmcard">
+    <div class="cmgrab"></div>
+    <div class="cmbody">
+      <div class="cmtitle">📨 Programar recordatorio</div>
+      <div class="cmhint">Se manda SOLO a la hora que pongas — igual que agendarlo picando el Calendar. Cada renglón = una burbuja aparte.</div>
+      <div style="display:flex;gap:8px;margin:10px 0">
+        <input type="date" id="rec-fecha" style="flex:1;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit">
+        <input type="time" id="rec-hora" style="flex:1;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit">
+      </div>
+      <textarea id="rec-texto" rows="4" placeholder="El mensaje…" style="width:100%;box-sizing:border-box;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit;resize:vertical"></textarea>
+      <label style="font-size:12.5px;display:flex;gap:7px;align-items:center;margin-top:8px;color:#5b6b82"><input type="checkbox" id="rec-foto" checked> 📸 adjuntar la portada del auto (si el chat tiene auto en foco)</label>
+      <button class="cm-add" onclick="guardarRec(this)">📨 Programar envío</button>
+    </div>
   </div>
 </div>
 
@@ -749,6 +769,39 @@ async function accionBoton(acc){
   if (d.necesita === 'auto') { alert('⚠️ No amarré el auto: ' + (d.error || '')); return; }
   if (d.ok) { alert('✅ ' + (d.enviado || 'ejecutado') + (d.auto ? '\n🚗 ' + d.auto : '')); try { cargarChat(); } catch(e){} }
   else alert('⚠️ ' + (d.error || 'no se pudo'));
+}
+
+// ══ 📨 RECORDATORIO (owner 2026-08-06): misma libreta que el Calendar ══
+let REC_NOMBRE = null;
+async function recordatorioBoton(){
+  const tel = TEL; if (!tel) { alert('Abre un chat primero'); return; }
+  const d = new Date(Date.now() - 6*3600000 + 24*3600000);      // default: mañana 9am (hora MTY)
+  document.getElementById('rec-fecha').value = d.toISOString().slice(0,10);
+  document.getElementById('rec-hora').value = '09:00';
+  document.getElementById('rec-texto').value = '';
+  document.getElementById('rec-foto').checked = true;
+  REC_NOMBRE = null;
+  document.getElementById('recmodal').classList.add('show');
+  try {
+    const m = await (await fetch(API + '?action=prog_machote&telefono=' + tel.slice(-10))).json();
+    if (m.ok) { REC_NOMBRE = m.nombre || null; if (!document.getElementById('rec-texto').value.trim()) document.getElementById('rec-texto').value = m.texto || ''; }
+  } catch(e){}
+}
+function cerrarRec(){ document.getElementById('recmodal').classList.remove('show'); }
+async function guardarRec(btn){
+  const tel = TEL;
+  const f = document.getElementById('rec-fecha').value, h = document.getElementById('rec-hora').value;
+  const texto = document.getElementById('rec-texto').value.trim();
+  if (!f || !h) { alert('Falta fecha u hora'); return; }
+  if (!texto) { alert('Falta el mensaje'); return; }
+  const [y,mo,dd] = f.split('-').map(Number); const [hh,mm] = h.split(':').map(Number);
+  const cuando = Date.UTC(y, mo-1, dd, hh, mm) + 6*3600000;      // hora MTY exacta
+  if (cuando < Date.now() && !confirm('Esa hora YA PASÓ — el mensaje saldría en el próximo barrido (minutos). ¿Seguro?')) return;
+  btn.disabled = true; btn.textContent = '…';
+  const r = await postAccion({ action:'prog_crear', telefono: tel.slice(-10), texto, cuando_ts: cuando, con_foto: document.getElementById('rec-foto').checked, nombre: REC_NOMBRE });
+  btn.disabled = false; btn.textContent = '📨 Programar envío';
+  if (r && r.ok) { cerrarRec(); alert('📨 Programado — sale el ' + f + ' a las ' + h + '\n(lo ves y lo cancelas también en el Calendar 🛟 MENSAJES)'); }
+  else alert('⚠️ ' + ((r && r.error) || 'no se pudo programar'));
 }
 </script>
 </body>
