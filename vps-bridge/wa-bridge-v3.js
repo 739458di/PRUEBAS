@@ -82,6 +82,8 @@ function emitir(obj) {
 // Logger silencioso (Baileys lo pide; pino-like mínimo).
 const logger = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return logger; } };
 
+// Identificador de chat para LOGS: hash corto, jamás el número (Fase 2: logs sin payload)
+const jidHash = (t) => require('crypto').createHash('sha256').update(String(t || '')).digest('hex').slice(0, 8);
 // Limpia el teléfono a solo dígitos (quita @s.whatsapp.net / @lid)
 function limpiaTel(jid) {
     return String(jid || '').split('@')[0].split(':')[0].replace(/\D/g, '');
@@ -214,20 +216,22 @@ function tipoDeMsg(message) {
 // FASE 2 — escribe cada mensaje como RENGLÓN con FOLIO en la libreta nueva (conversaciones + mensajes).
 // Dedup por (conversacion_id, msg_id): si llega 2 veces (re-entrega), INSERT OR IGNORE no lo duplica.
 // Usa la HORA REAL del mensaje (ts en ms), no la de ingesta → arregla el desfase.
-async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, tipo, nombre, ai_generated }) {
+async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, tipo, nombre, ai_generated, tenantId }) {
     if (!tel || !msgId) return;
-    const thread = 'whatsapp:' + tel;
+    const tId = Number(tenantId) || 0;
+    // Hilo por tenant (Ley 1): el tenant 0 conserva su llave histórica; los demás llevan sufijo #t<id>
+    const thread = 'whatsapp:' + tel + (tId ? ('#t' + tId) : '');
     try {
         // 1) carpeta: crear si no existe; subir su actividad solo si este mensaje es el más nuevo
         await db.execute({
-            sql: `INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, source, created_at)
-                  VALUES (?,?,?,?,?,?, 0, 'whatsapp', ?)
+            sql: `INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, source, created_at, tenant_id)
+                  VALUES (?,?,?,?,?,?, 0, 'whatsapp', ?, ?)
                   ON CONFLICT(channel_thread_id) DO UPDATE SET
                     nombre = COALESCE(excluded.nombre, nombre),
                     ult_texto = CASE WHEN excluded.ult_msg_ts >= ult_msg_ts THEN excluded.ult_texto ELSE ult_texto END,
                     ult_dir   = CASE WHEN excluded.ult_msg_ts >= ult_msg_ts THEN excluded.ult_dir ELSE ult_dir END,
                     ult_msg_ts = MAX(excluded.ult_msg_ts, ult_msg_ts)`,
-            args: [thread, tel, nombre || null, String(texto || '').slice(0, 120), direccion, ts, ts]
+            args: [thread, tel, nombre || null, String(texto || '').slice(0, 120), direccion, ts, ts, tId]
         });
         const row = (await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [thread] })).rows[0];
         if (!row) return;
@@ -314,6 +318,7 @@ function crearUniverso(tenant) {
         lidAPhone: new Map(), phoneALid: new Map(), colasPorTel: new Map(),
         autoOpenerTimers: new Map(), autoOpenerEnVuelo: new Set(), autoOpenerPendiente: new Set(),
         ilegibleAvisado: new Map(), ghostEnCurso: false,
+        chatsActivos: new Map(),                                     // tel → fila de chats_activos (Fase 2: delegación)
     };
 async function resetearSesionContacto(jid) {
     try {
@@ -562,7 +567,28 @@ async function conectar() {
         if (type !== 'notify' && type !== 'append') return;
         for (const m of messages) {
             U.ultimoRecibido = Date.now();                                   // latido de la sesión
-            if (tenant.id !== 0) continue;                                    // Fase 1: universos != 0 NO procesan nada (Ley 2) — la delegación llega en Fase 2
+            if (tenant.id !== 0) {
+                // ══ CAMINO ÚNICO (Fase 2, Ley 2): grupo/estado/broadcast → fin; delegado → persistir
+                // (sin Seb hasta la Fase 5, sin Sales Brain); NO delegado → fin, sin log ni rastro.
+                const jidD = String(m.key.remoteJid || '');
+                if (jidD.endsWith('@g.us') || jidD.endsWith('@broadcast') || jidD === 'status@broadcast' || jidD.endsWith('@newsletter')) continue;
+                if (m.messageStubType === STUB_CIPHERTEXT) continue;              // cifrado ilegible: ni siquiera se registra
+                const telD = telefonoReal(m);
+                const chatD = telD ? U.chatsActivos.get(String(telD)) : null;
+                if (!chatD) continue;                                              // lo no delegado NO EXISTE
+                const mkD = Object.keys(m.message || {});
+                if (!m.message || (mkD.length && mkD.every(k => k === 'senderKeyDistributionMessage' || k === 'messageContextInfo'))) continue;
+                const fromMeD = !!m.key.fromMe;
+                if (fromMeD && U.enviadosPorPanel.has(m.key.id)) { U.enviadosPorPanel.delete(m.key.id); continue; }   // eco de lo que mandó el puente
+                const textoD = textoDeMensaje(m.message);
+                const tsD = (() => { const t = m.messageTimestamp; const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t); return (isFinite(n) && n > 1e9) ? n * 1000 : Date.now(); })();
+                if (fromMeD) chatD.ultimo_from_me = tsD; else chatD.ultimo_entrante = tsD;
+                db.execute({ sql: 'UPDATE chats_activos SET ' + (fromMeD ? 'ultimo_from_me' : 'ultimo_entrante') + '=? WHERE id=?', args: [tsD, chatD.id] }).catch(() => {});
+                guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id }).catch(() => {});
+                emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: telD, mensaje: textoD, direccion: fromMeD ? 'out' : 'in', timestamp: Math.floor(tsD / 1000), msg_id: m.key.id, ai_generated: 0 });
+                console.log('[t' + tenant.id + '] ' + (fromMeD ? 'salida dueño' : 'entrada') + ' · chat ' + jidHash(telD) + ' · ' + tipoDeMsg(m.message));
+                continue;
+            }
             if (m.key.remoteJid?.endsWith('@g.us')) continue;     // ignorar grupos
             if (m.key.remoteJid === 'status@broadcast') continue; // ignorar estados
             // AUTO-RECUPERACIÓN: si este mensaje NO se pudo descifrar (Bad MAC / "Esperando el
@@ -680,7 +706,7 @@ async function conectar() {
             }));
             // 🔔 TIMBRE: empuja el mensaje a FyraChat al instante (con FOLIO + hora real)
             emitir({ tipo: 'mensaje', telefono: tel, mensaje: texto, direccion: esSaliente ? 'out' : 'in', timestamp: Math.floor(msgTs / 1000), nombre: esSaliente ? null : (m.pushName || null), msg_id: m.key.id });
-            console.log((esSaliente ? '→ ' : '← ') + tel + ': ' + String(texto).slice(0, 50) + (adContext ? '  [ANUNCIO]' : ''));
+            console.log('[t0] ' + (esSaliente ? 'salida' : 'entrada') + ' · chat ' + jidHash(tel) + ' · ' + tipoMsg + (adContext ? ' · anuncio' : ''));
             // AUTOPILOT: primer mensaje de un COMPRADOR → el bot contesta solo (ráfaga).
             // El cerebro (/opener_auto, reset-aware) decide si aplica; aquí solo debounce.
             if (!esSaliente) programarAutoOpener(tel);
@@ -706,10 +732,10 @@ async function autoEnviarTexto(p, text) {
         setTimeout(() => { U.enviadosPorPanel.delete(r.key.id); U.sentStore.delete(r.key.id); }, 60 * 60000);
     }
     const ts = Date.now();
-    await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: 1 }).catch(() => {});
-    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: text, tipo: 'text', nombre: null, ai_generated: 1 }).catch(() => {});
-    emitir({ tipo: 'mensaje', telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id });
-    encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
+    if (!tenant.id) await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: 1 }).catch(() => {});
+    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: tenant.id ? 'asistente' : 'SRS010904', texto: text, tipo: 'text', nombre: null, ai_generated: 1, tenantId: tenant.id }).catch(() => {});
+    emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: 1 });
+    if (!tenant.id) encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
     return r;
 }
 
@@ -881,7 +907,7 @@ async function correrGhostScan() {
                 try {
                     if (g.foto) await autoEnviarFotos(p, [g.foto]);
                     else await autoEnviarTexto(p, g.texto);
-                    console.log('[rescate] →', p.slice(-4), g.foto ? '📸' : String(g.texto || '').slice(0, 40));
+                    console.log('[rescate] → chat ' + jidHash(p) + (g.foto ? ' · foto' : ' · texto'));
                 } catch (e) { console.error('[rescate] envío:', e.message); }
                 await new Promise(s => setTimeout(s, 1500));
             }
@@ -910,6 +936,7 @@ async function registrarManualIlegible(m) {
 }
 
     U.apiSend = async (res, body) => {
+        const tenantId = tenant.id;
         {
             try {
                 const { phone, text, image, location, manual } = JSON.parse(body || '{}');
@@ -955,9 +982,9 @@ async function registrarManualIlegible(m) {
                     }
                     if (persistir) {
                         const ts = Date.now();
-                        await guardar({ telefono: p, mensaje: repTexto, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
-                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: aiFlag }).catch(() => {});
-                        emitir({ tipo: 'mensaje', telefono: p, mensaje: repTexto, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag });
+                        if (!tenantId) await guardar({ telefono: p, mensaje: repTexto, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
+                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: tenantId ? 'dueno' : 'SRS010904', texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: aiFlag, tenantId }).catch(() => {});
+                        emitir({ tipo: 'mensaje', tenant_id: tenantId, telefono: p, mensaje: repTexto, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag });
                     }
                     return r;
                 };
@@ -973,7 +1000,7 @@ async function registrarManualIlegible(m) {
                 if (text) {
                     const r = await enviarUno({ text }, text, 'text', true);
                     lastId = r?.key?.id || lastId;
-                    encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
+                    if (!tenantId) encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
                 }
                 // 3) PIN de ubicación nativo — SOLO a WhatsApp (no se muestra en FyraChat)
                 if (location && location.lat != null && location.lng != null) {
@@ -1001,6 +1028,45 @@ async function registrarManualIlegible(m) {
             } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ ok: false, error: e.message })); }
         }
     };
+    // ══ DELEGACIÓN (Fase 2): activa un chat en ESTE universo y manda el opener UNA sola vez (Ley 4)
+    U.delegar = async ({ tel, car_id, car_nombre, comprador_nombre, opener_texto, activado_por }) => {
+        let p = String(tel || '').replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
+        if (!/^521\d{10}$/.test(p)) return { ok: false, error: 'teléfono inválido' };
+        const now = Date.now();
+        let fila = U.chatsActivos.get(p);
+        if (!fila) {
+            const ins = await db.execute({ sql: 'INSERT INTO chats_activos (tenant_id, tel, car_id, car_nombre, comprador_nombre, activado_por, desde, opener_pendiente, opener_texto, created) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                args: [tenant.id, p, car_id || null, car_nombre || null, comprador_nombre || null, activado_por || 'fyrachat', now, opener_texto ? 1 : 0, opener_texto || null, now] });
+            fila = { id: Number(ins.lastInsertRowid), tel: p, car_id, car_nombre, comprador_nombre, opener_pendiente: opener_texto ? 1 : 0, ultimo_from_me: 0, ultimo_entrante: 0 };
+            U.chatsActivos.set(p, fila);
+        } else {
+            await db.execute({ sql: 'UPDATE chats_activos SET car_id=COALESCE(?,car_id), car_nombre=COALESCE(?,car_nombre), comprador_nombre=COALESCE(?,comprador_nombre) WHERE id=?', args: [car_id || null, car_nombre || null, comprador_nombre || null, fila.id] }).catch(() => {});
+            Object.assign(fila, { car_id: car_id || fila.car_id, car_nombre: car_nombre || fila.car_nombre, comprador_nombre: comprador_nombre || fila.comprador_nombre });
+        }
+        // conversación visible en el FyraChat del vendedor aunque nadie haya escrito
+        await guardarMensajeNuevo({ tel: p, msgId: 'deleg_' + fila.id, ts: now, direccion: 'out', emisor: 'sistema', texto: '🤝 Chat delegado' + (car_nombre ? ' · ' + car_nombre : ''), tipo: 'text', nombre: comprador_nombre || null, ai_generated: 1, tenantId: tenant.id }).catch(() => {});
+        let enviado = false, error = null;
+        if (opener_texto && fila.opener_pendiente) {
+            if (U.estado !== 'conectado') error = 'sesión no conectada — el opener queda pendiente';
+            else {
+                try {
+                    const r = await autoEnviarTexto(p, String(opener_texto));
+                    enviado = !!(r && r.key && r.key.id);
+                    if (enviado) { fila.opener_pendiente = 0; await db.execute({ sql: 'UPDATE chats_activos SET opener_pendiente=0 WHERE id=?', args: [fila.id] }).catch(() => {}); }
+                } catch (e) { error = e.message; }
+            }
+        }
+        console.log('[t' + tenant.id + '] delegado chat ' + jidHash(p) + (enviado ? ' · opener enviado' : ''));
+        return { ok: true, chat_id: fila.id, opener_enviado: enviado, error };
+    };
+    U.soltar = async ({ tel }) => {
+        let p = String(tel || '').replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
+        const fila = U.chatsActivos.get(p); if (!fila) return { ok: false, error: 'no delegado' };
+        await db.execute({ sql: 'UPDATE chats_activos SET hasta=? WHERE id=?', args: [Date.now(), fila.id] }).catch(() => {});
+        U.chatsActivos.delete(p);
+        console.log('[t' + tenant.id + '] soltado chat ' + jidHash(p));
+        return { ok: true };
+    };
     U.conectar = conectar;
     U.cerrar = async (motivo) => {
         try { if (U.ghostTimer) clearInterval(U.ghostTimer); } catch (e) {}
@@ -1015,10 +1081,19 @@ async function registrarManualIlegible(m) {
 }
 
 // Abrir / cerrar universos en caliente (sin reiniciar el proceso; los demás ni se enteran)
+async function cargarChatsActivos(U) {
+    try {
+        const r = await db.execute({ sql: 'SELECT * FROM chats_activos WHERE tenant_id=? AND hasta IS NULL', args: [U.tenant.id] });
+        U.chatsActivos.clear();
+        for (const row of r.rows) U.chatsActivos.set(String(row.tel), { id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
+        console.log('[delegación] tenant ' + U.tenant.id + ': ' + U.chatsActivos.size + ' chats activos');
+    } catch (e) { console.error('[delegación] carga:', e.message); }
+}
 async function abrirUniverso(tenant) {
     if (universos.has(tenant.id)) return universos.get(tenant.id);
     const U = crearUniverso(tenant);
     universos.set(tenant.id, U);
+    await cargarChatsActivos(U);
     await U.conectar();
     return U;
 }
@@ -1089,6 +1164,16 @@ const server = http.createServer(async (req, res) => {
             const b = JSON.parse((await leerBody(req)) || '{}');
             const ok = await cerrarUniverso(id, b.borrar_credenciales !== false);
             return res.end(JSON.stringify({ ok, tenant_id: id }));
+        } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ ok: false, error: e.message })); }
+    }
+    if ((m = url.pathname.match(/^\/tenant\/(\d+)\/(delegar|soltar)$/)) && req.method === 'POST') {   // Fase 2 (con key)
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        const U = universos.get(Number(m[1]));
+        if (!U) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant sin universo abierto' })); }
+        try {
+            const b = JSON.parse((await leerBody(req)) || '{}');
+            const r = m[2] === 'delegar' ? await U.delegar(b) : await U.soltar(b);
+            return res.end(JSON.stringify(r));
         } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ ok: false, error: e.message })); }
     }
     if (url.pathname === '/api/send' && req.method === 'POST') {
