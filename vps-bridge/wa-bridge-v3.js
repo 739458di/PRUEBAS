@@ -160,13 +160,24 @@ function adLinkDe(m) {
     const ci = m.message?.extendedTextMessage?.contextInfo;
     return ci?.externalAdReply?.sourceUrl || ci?.matchedText || ci?.canonicalUrl || null;
 }
+// ¿Es un mensaje INVISIBLE de WhatsApp (protocolo/llaves/reacción/pin…)? Llegan al puente pero en
+// el chat del teléfono no existen como burbuja → aquí tampoco (caso Mario 2026-09-07).
+const TIPOS_INVISIBLES = new Set(['protocolMessage', 'senderKeyDistributionMessage', 'messageContextInfo', 'reactionMessage', 'encReactionMessage', 'pollUpdateMessage', 'keepInChatMessage', 'pinInChatMessage', 'stickerSyncRmrMessage', 'associatedChildMessage', 'encCommentMessage', 'bcallMessage', 'callLogMesssage', 'scheduledCallCreationMessage', 'scheduledCallEditMessage', 'placeholderMessage', 'secretEncryptedMessage']);
+function esInvisible(message) {
+    if (!message) return true;
+    const wrap = message.ephemeralMessage?.message || message.viewOnceMessage?.message || message.viewOnceMessageV2?.message || message.viewOnceMessageV2Extension?.message || message.deviceSentMessage?.message;
+    if (wrap) return esInvisible(wrap);
+    const keys = Object.keys(message);
+    return keys.length > 0 && keys.every(k => TIPOS_INVISIBLES.has(k));
+}
 // Saca el texto de CUALQUIER tipo de mensaje. NUNCA regresa vacío → cero pérdidas.
 function textoDeMensaje(message) {
     if (!message) return '[mensaje]';
     // desenvolver mensajes "envueltos" (efímeros, ver-una-vez, editados, etc.)
     const wrap = message.ephemeralMessage?.message || message.viewOnceMessage?.message
         || message.viewOnceMessageV2?.message || message.viewOnceMessageV2Extension?.message
-        || message.documentWithCaptionMessage?.message || message.editedMessage?.message;
+        || message.documentWithCaptionMessage?.message || message.editedMessage?.message
+        || message.deviceSentMessage?.message;   // lo que el dueño manda desde su teléfono viaja envuelto aquí
     if (wrap) return textoDeMensaje(wrap);
     return message.conversation
         || message.extendedTextMessage?.text
@@ -184,7 +195,7 @@ function textoDeMensaje(message) {
         || message.templateButtonReplyMessage?.selectedDisplayText
         || (message.reactionMessage ? (message.reactionMessage.text || '[reacción]') : null)
         || (message.pollCreationMessage ? ('[encuesta] ' + (message.pollCreationMessage.name || '')).trim() : null)
-        || '[mensaje]';                                  // ÚLTIMO recurso: nunca vacío
+        || (console.log('[tipo-desconocido] ' + Object.keys(message).join(',')), '[mensaje]');   // ÚLTIMO recurso: nunca vacío (y aprendemos el tipo)
 }
 
 // Guarda un mensaje (entrante o saliente) en wa_messages (respaldo).
@@ -585,7 +596,7 @@ async function conectar() {
                 const chatD = telD ? U.chatsActivos.get(String(telD)) : null;
                 if (!chatD) continue;                                              // lo no delegado NO EXISTE
                 const mkD = Object.keys(m.message || {});
-                if (!m.message || (mkD.length && mkD.every(k => k === 'senderKeyDistributionMessage' || k === 'messageContextInfo'))) continue;
+                if (!m.message || esInvisible(m.message)) continue;               // protocolo/llaves/reacciones: sin burbuja
                 const fromMeD = !!m.key.fromMe;
                 if (fromMeD && U.enviadosPorPanel.has(m.key.id)) { U.enviadosPorPanel.delete(m.key.id); continue; }   // eco de lo que mandó el puente
                 const textoD = textoDeMensaje(m.message);
@@ -629,7 +640,7 @@ async function conectar() {
             }
             // saltar SOLO mensajes de sistema sin contenido (distribución de llaves) — JAMÁS un mensaje real
             const mk = Object.keys(m.message || {});
-            if (!m.message || (mk.length && mk.every(k => k === 'senderKeyDistributionMessage' || k === 'messageContextInfo'))) continue;
+            if (!m.message || esInvisible(m.message)) continue;                    // protocolo/llaves/reacciones: sin burbuja
             let texto = textoDeMensaje(m.message);                // robusto: cualquier tipo, nunca vacío → cero pérdidas
             const tel = telefonoReal(m);                          // TELÉFONO REAL (no @lid)
             // ══ CARGA DE LOTE: lo que mande el OWNER desde su número también se acarrea
