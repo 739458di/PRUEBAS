@@ -4,7 +4,7 @@ require('dotenv').config({ path: '/root/wa-bridge/.env' });
 module.exports = {
   apps: [{
     name: 'fyra-bridge',
-    script: 'wa-bridge-v2.js',
+    script: 'wa-bridge-v3.js',   // Fase 1: multi-universo (rollback: wa-bridge-v2.js)
     cwd: '/root/wa-bridge',
     node_args: '--max-old-space-size=512',
     max_memory_restart: '600M',

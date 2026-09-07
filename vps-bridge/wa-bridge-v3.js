@@ -1,0 +1,1130 @@
+// wa-bridge-v3.js — El cartero MULTI-UNIVERSO de Fyradrive (Fase 1, 2026-09-07).
+// Un universo = un WhatsApp de un vendedor (tenant): carpeta auth/<tenantId>, socket propio,
+// memoria propia, handlers con el tenant capturado en closure. Mapa `universos`.
+// Tenant 0 = el número principal: TODO su comportamiento v2 vive intacto dentro de su universo.
+// Universos != 0: en Fase 1 NO procesan ni guardan nada (solo latido) — Ley 2 hasta la Fase 2.
+// Vive en el VPS. Hace:
+//   1. Conecta WhatsApp por Baileys (muestra QR para vincular).
+//   2. Cada mensaje (entrante y saliente tuyo) → lo reenvía a SALES-BRAIN /api/upload
+//      (raw_conversations = fuente única) y guarda copia en wa_messages (respaldo).
+//   3. Expone HTTP /api/send para que FyraChat mande mensajes SALIENTES.
+//
+// NO tiene agentes ni lógica de venta — el cerebro (Seb v2) vive aparte.
+// Config por variables de entorno (nada hardcodeado).
+
+const baileys = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = baileys;
+const { createClient } = require('@libsql/client');
+const qrcode = require('qrcode-terminal');
+const http = require('http');
+const { Boom } = require('@hapi/boom');
+let NodeCache; try { NodeCache = require('node-cache'); } catch (e) { NodeCache = null; }
+
+const TURSO_URL = process.env.TURSO_URL || 'libsql://crm-fyradrive-739458di.aws-us-west-2.turso.io';
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || '';
+const SEND_KEY = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2';
+const PORT = Number(process.env.PORT || 3000);
+const PLATFORM = 'whatsapp';
+const SB_UPLOAD_URL = process.env.SALESBRAIN_UPLOAD_URL || 'https://sales-brain-theta.vercel.app/api/upload';
+const SB_KEY = process.env.SALESBRAIN_KEY || 'fyradrive-sb-2026';
+// MODO PRUEBA: estos números (por últimos 10 dígitos), cuando contestan un anuncio,
+// REINICIAN su conversación (contexto fresco, como comprador nuevo).
+const TEST_NUMEROS = new Set((process.env.TEST_NUMEROS || '8120066355').split(',').map(s => s.trim()).filter(Boolean));
+// AUTOPILOT del PRIMER mensaje: el bot contesta solo la ráfaga (default ON; AUTO_OPENER=0 lo apaga).
+const AUTO_OPENER = process.env.AUTO_OPENER !== '0';
+const OPENER_AUTO_URL = process.env.OPENER_AUTO_URL || 'https://fyrachat.vercel.app/api/seb-panel';
+const AUTO_OPENER_DELAY = Number(process.env.AUTO_OPENER_DELAY || 6000);   // espera para juntar la ráfaga del comprador
+const AUTO_OPENER_GAP = Number(process.env.AUTO_OPENER_GAP || 1000);       // ~1s entre cada burbuja
+
+const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
+
+
+
+// CANDADO DE CONEXIÓN ÚNICA (F1): cada socket lleva un número de GENERACIÓN.
+// Un socket viejo ("zombi") que siga emitiendo eventos se ignora por completo —
+// antes 2-3 sockets vivos procesaban lo mismo en paralelo, se pisaban las llaves
+// Signal (→ epidemia de Bad MAC / mensajes ilegibles) y duplicaban envíos.
+
+
+
+
+// ── Cachés a NIVEL MÓDULO (sobreviven reconexiones) ──────────────────────────
+// IDs/textos de mensajes que mandó FyraChat: para saltar su eco fromMe (no duplicar).
+
+// Mensajes salientes propios, para responder los retry-receipts de Signal (getMessage).
+
+// Cuántas veces nos han pedido REENVIAR cada mensaje (si 2+, la sesión del destinatario
+// está rota y el reenvío también fallaría → hay que resetear la sesión antes).
+
+// Reintentos de descifrado (clave del arreglo #1: sin esto se pierden mensajes).
+const msgRetryCounterCache = NodeCache ? new NodeCache() : undefined;
+
+// AUTO-RECUPERACIÓN "Bad MAC / Esperando el mensaje": el tipo de mensaje que WhatsApp
+// emite cuando NO se pudo descifrar (la sesión de cifrado de ese contacto se rompió).
+const WAStub = baileys.WAMessageStubType || (baileys.proto && baileys.proto.WebMessageInfo && baileys.proto.WebMessageInfo.StubType) || {};
+const STUB_CIPHERTEXT = (WAStub.CIPHERTEXT != null) ? WAStub.CIPHERTEXT : 2;
+// Resetea la sesión Signal de un contacto → fuerza renegociar una llave limpia en el
+// siguiente mensaje (así el cifrado se arregla solo y deja de salir "Esperando el mensaje").
+
+// Mapas @lid ↔ teléfono real (se persisten en Turso, ver más abajo).
+
+
+// Cola de envío a SALES-BRAIN POR teléfono: garantiza ORDEN y evita lost-update.
+
+// EL TIMBRE (WebSocket): FyraChat se conecta y recibe empujones de mensajes nuevos.
+let wss = null;   // servidor WebSocket; se crea junto al http server (abajo).
+// Empuja un evento a todos los FyraChat conectados (estilo WhatsApp: avisar, no preguntar).
+function emitir(obj) {
+    if (!wss) return;
+    const data = JSON.stringify(obj);
+    for (const client of wss.clients) { if (client.readyState === 1) { try { client.send(data); } catch (e) {} } }
+}
+// Logger silencioso (Baileys lo pide; pino-like mínimo).
+const logger = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return logger; } };
+
+// Limpia el teléfono a solo dígitos (quita @s.whatsapp.net / @lid)
+function limpiaTel(jid) {
+    return String(jid || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Une la conversación que quedó bajo el @lid con la del teléfono real (cero pérdidas).
+// - Mueve el contexto del anuncio (auto/link) al teléfono.
+// - Si NO existe la del teléfono → re-apunta el huérfano al teléfono.
+// - Si existen AMBAS → fusiona los mensajes (huérfano primero, es más viejo) y borra el huérfano.
+// Fusiona la LIBRETA NUEVA (conversaciones + mensajes) cuando una conversación quedó bajo
+// el @lid y luego se aprende su teléfono. Sin esto, la conversación se ve PARTIDA en FyraChat.
+async function fusionarLibretaNueva(lid, phone) {
+    const orfanoT = 'whatsapp:' + lid, canonT = 'whatsapp:' + phone;
+    try {
+        const L = await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [orfanoT] });
+        if (!L.rows.length) return;
+        const lidId = L.rows[0].id;
+        const P = await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [canonT] });
+        if (!P.rows.length) {                                          // no existe la del teléfono → re-apuntar
+            await db.execute({ sql: 'UPDATE conversaciones SET channel_thread_id=?, telefono=? WHERE id=?', args: [canonT, phone, lidId] });
+            console.log('[FUSION-nueva] re-apuntada conv ' + lidId + ' → ' + canonT);
+            return;
+        }
+        const phoneId = P.rows[0].id;                                  // existen ambas → mover mensajes + borrar @lid
+        await db.execute({ sql: 'UPDATE OR IGNORE mensajes SET conversacion_id=? WHERE conversacion_id=?', args: [phoneId, lidId] });
+        await db.execute({ sql: 'DELETE FROM mensajes WHERE conversacion_id=?', args: [lidId] });
+        await db.execute({ sql: 'DELETE FROM conversaciones WHERE id=?', args: [lidId] });
+        const last = await db.execute({ sql: 'SELECT direccion, texto, ts FROM mensajes WHERE conversacion_id=? ORDER BY ts DESC, id DESC LIMIT 1', args: [phoneId] });
+        if (last.rows.length) { const m = last.rows[0]; await db.execute({ sql: 'UPDATE conversaciones SET ult_texto=?, ult_dir=?, ult_msg_ts=? WHERE id=?', args: [String(m.texto || '').slice(0, 200), m.direccion, m.ts, phoneId] }); }
+        console.log('[FUSION-nueva] fusionada conv ' + lidId + ' → ' + phoneId);
+    } catch (e) { console.error('[FUSION-nueva] error:', e.message); }
+}
+
+async function fusionarSiHuerfano(lid, phone) {
+    const orfanoT = 'whatsapp:' + lid, canonT = 'whatsapp:' + phone;
+    fusionarLibretaNueva(lid, phone).catch(() => {});   // NUEVO: fusiona también la libreta nueva (FyraChat)
+    // 1) el anuncio (qué auto + link) sigue al teléfono
+    db.execute({
+        sql: 'INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) SELECT ?, ad_context, updated_at FROM ad_por_telefono WHERE telefono=? ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at',
+        args: [phone, lid]
+    }).catch(() => {});
+    let o; try { o = await db.execute({ sql: 'SELECT * FROM raw_conversations WHERE channel_thread_id=? LIMIT 1', args: [orfanoT] }); } catch (e) { return; }
+    if (!o.rows.length) return;                                   // no hay huérfano → nada que unir
+    const orf = o.rows[0];
+    const c = await db.execute({ sql: 'SELECT * FROM raw_conversations WHERE channel_thread_id=? LIMIT 1', args: [canonT] });
+    if (!c.rows.length) {                                          // no existe la del teléfono → re-apuntar
+        await db.execute({ sql: 'UPDATE raw_conversations SET channel_thread_id=? WHERE id=?', args: [canonT, orf.id] }).catch(() => {});
+        console.log('[FUSION] re-apuntada conv ' + orf.id + ': ' + orfanoT + ' → ' + canonT);
+        return;
+    }
+    const can = c.rows[0];                                         // existen ambas → fusionar mensajes
+    let a = [], b = [];
+    try { a = JSON.parse(orf.cleaned_text || '[]'); } catch (e) {}
+    try { b = JSON.parse(can.cleaned_text || '[]'); } catch (e) {}
+    const merged = a.concat(b).map((x, i) => ({ ...x, index: i + 1 }));
+    const rawMerged = [orf.raw_text, can.raw_text].filter(Boolean).join('\n\n--- CONTINUACIÓN ---\n\n');
+    await db.execute({ sql: 'UPDATE raw_conversations SET cleaned_text=?, raw_text=? WHERE id=?', args: [JSON.stringify(merged), rawMerged, can.id] }).catch(() => {});
+    await db.execute({ sql: 'DELETE FROM raw_conversations WHERE id=?', args: [orf.id] }).catch(() => {});
+    console.log('[FUSION] unida conv ' + orf.id + ' → ' + can.id + ' (' + merged.length + ' msgs)');
+}
+
+// Saca el contexto del anuncio (auto + link) si el mensaje vino de un anuncio de Facebook.
+function adContextDe(m) {
+    const ci = m.message?.extendedTextMessage?.contextInfo;
+    const ad = ci?.externalAdReply;
+    if (!ad) return null;
+    const partes = [ad.title, ad.body, ad.sourceUrl, ci?.matchedText].filter(Boolean);
+    return partes.length ? partes.join(' | ').slice(0, 1200) : null;
+}
+// Saca SOLO el link del anuncio, para mostrarlo en FyraChat tal cual en WhatsApp.
+function adLinkDe(m) {
+    const ci = m.message?.extendedTextMessage?.contextInfo;
+    return ci?.externalAdReply?.sourceUrl || ci?.matchedText || ci?.canonicalUrl || null;
+}
+// Saca el texto de CUALQUIER tipo de mensaje. NUNCA regresa vacío → cero pérdidas.
+function textoDeMensaje(message) {
+    if (!message) return '[mensaje]';
+    // desenvolver mensajes "envueltos" (efímeros, ver-una-vez, editados, etc.)
+    const wrap = message.ephemeralMessage?.message || message.viewOnceMessage?.message
+        || message.viewOnceMessageV2?.message || message.viewOnceMessageV2Extension?.message
+        || message.documentWithCaptionMessage?.message || message.editedMessage?.message;
+    if (wrap) return textoDeMensaje(wrap);
+    return message.conversation
+        || message.extendedTextMessage?.text
+        || message.imageMessage?.caption || (message.imageMessage ? '[imagen]' : null)
+        || message.videoMessage?.caption || (message.videoMessage ? '[video]' : null)
+        || message.documentMessage?.caption || (message.documentMessage ? '[documento]' : null)
+        || (message.audioMessage ? (message.audioMessage.ptt ? '[nota de voz]' : '[audio]') : null)
+        || (message.stickerMessage ? '[sticker]' : null)
+        || (message.locationMessage ? '[ubicación]' : null)
+        || (message.liveLocationMessage ? '[ubicación en vivo]' : null)
+        || (message.contactMessage ? ('[contacto] ' + (message.contactMessage.displayName || '')).trim() : null)
+        || (message.contactsArrayMessage ? '[contactos]' : null)
+        || message.buttonsResponseMessage?.selectedDisplayText
+        || message.listResponseMessage?.title
+        || message.templateButtonReplyMessage?.selectedDisplayText
+        || (message.reactionMessage ? (message.reactionMessage.text || '[reacción]') : null)
+        || (message.pollCreationMessage ? ('[encuesta] ' + (message.pollCreationMessage.name || '')).trim() : null)
+        || '[mensaje]';                                  // ÚLTIMO recurso: nunca vacío
+}
+
+// Guarda un mensaje (entrante o saliente) en wa_messages (respaldo).
+async function guardar({ telefono, nombre, mensaje, direccion, tipo, mensaje_id, ai_generated }) {
+    try {
+        await db.execute({
+            sql: `INSERT INTO wa_messages (wa_id, telefono, nombre, mensaje, tipo, direccion, timestamp, mensaje_id, leido, created_at, ai_generated, platform)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+            args: [mensaje_id || null, telefono, nombre || null, mensaje, tipo || 'text', direccion,
+                   Math.floor(Date.now() / 1000), mensaje_id || null, Date.now(), ai_generated ? 1 : 0, PLATFORM]
+        });
+    } catch (e) { console.error('[GUARDAR]', e.message); }
+}
+
+// Deriva el tipo de mensaje para la libreta nueva.
+function tipoDeMsg(message) {
+    const w = message?.ephemeralMessage?.message || message?.viewOnceMessage?.message
+        || message?.viewOnceMessageV2?.message || message?.documentWithCaptionMessage?.message || message || {};
+    if (w.imageMessage) return 'image';
+    if (w.videoMessage) return 'video';
+    if (w.audioMessage) return 'audio';
+    if (w.documentMessage) return 'document';
+    if (w.stickerMessage) return 'sticker';
+    if (w.locationMessage || w.liveLocationMessage) return 'location';
+    if (w.contactMessage || w.contactsArrayMessage) return 'contact';
+    return 'text';
+}
+
+// FASE 2 — escribe cada mensaje como RENGLÓN con FOLIO en la libreta nueva (conversaciones + mensajes).
+// Dedup por (conversacion_id, msg_id): si llega 2 veces (re-entrega), INSERT OR IGNORE no lo duplica.
+// Usa la HORA REAL del mensaje (ts en ms), no la de ingesta → arregla el desfase.
+async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, tipo, nombre, ai_generated }) {
+    if (!tel || !msgId) return;
+    const thread = 'whatsapp:' + tel;
+    try {
+        // 1) carpeta: crear si no existe; subir su actividad solo si este mensaje es el más nuevo
+        await db.execute({
+            sql: `INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, source, created_at)
+                  VALUES (?,?,?,?,?,?, 0, 'whatsapp', ?)
+                  ON CONFLICT(channel_thread_id) DO UPDATE SET
+                    nombre = COALESCE(excluded.nombre, nombre),
+                    ult_texto = CASE WHEN excluded.ult_msg_ts >= ult_msg_ts THEN excluded.ult_texto ELSE ult_texto END,
+                    ult_dir   = CASE WHEN excluded.ult_msg_ts >= ult_msg_ts THEN excluded.ult_dir ELSE ult_dir END,
+                    ult_msg_ts = MAX(excluded.ult_msg_ts, ult_msg_ts)`,
+            args: [thread, tel, nombre || null, String(texto || '').slice(0, 120), direccion, ts, ts]
+        });
+        const row = (await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [thread] })).rows[0];
+        if (!row) return;
+        // 2) papelito con folio (dedup por folio → JAMÁS duplica)
+        await db.execute({
+            sql: 'INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+            args: [row.id, msgId, ts, direccion, emisor || null, texto || '', tipo || 'text', ai_generated ? 1 : 0, Date.now()]
+        });
+    } catch (e) { console.error('[mensajes-nuevo]', e.message); }
+}
+
+// Reenvía un mensaje a SALES-BRAIN /api/upload. El router de SALES-BRAIN decide
+// solo: conversación nueva o append (por external_id = teléfono real).
+async function mandarASalesBrain({ external_id, text, from_name, direction, ad_context, message_timestamp }) {
+    if (!external_id) return;                              // sin identidad no hay dónde guardar
+    if (!text) text = '[mensaje]';                         // jamás descartar por texto vacío
+    const body = JSON.stringify({
+        text, channel: 'whatsapp', external_id,
+        from_name: from_name || null, from_phone: external_id,
+        source: 'whatsapp', message_timestamp: message_timestamp || Date.now(),
+        direction, ad_context: ad_context || null
+    });
+    // REINTENTOS: si SALES-BRAIN falla (red/timeout/5xx), reintenta. Así un mensaje
+    // SIEMPRE termina en raw_conversations y jamás se pierde por un hipo de red.
+    for (let intento = 1; intento <= 4; intento++) {
+        try {
+            const r = await fetch(SB_UPLOAD_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': SB_KEY },
+                body
+            });
+            if (!r.ok) {
+                console.error('[SALESBRAIN] HTTP ' + r.status + ' (intento ' + intento + '/4)');
+                if (r.status >= 400 && r.status < 500) return;            // error del cliente → no insistir
+                await sleep(1000 * intento); continue;                    // 5xx → reintentar
+            }
+            // Subir la fecha de ACTIVIDAD + la FICHA (último texto/dir/nombre) para que la
+            // lista de FyraChat lea ligero y el chat brinque arriba.
+            const d = await r.json().catch(() => null);
+            if (d && d.conversation_id) {
+                db.execute({
+                    sql: 'UPDATE raw_conversations SET last_ingested_at=?, ult_texto=?, ult_dir=?, ult_nombre=COALESCE(?, ult_nombre) WHERE id=?',
+                    args: [Date.now(), String(text || '').slice(0, 120), direction === 'inbound' ? 'in' : 'out', from_name || null, d.conversation_id]
+                }).catch(() => {});
+            }
+            return;                                                        // éxito
+        } catch (e) {
+            console.error('[SALESBRAIN] ' + e.message + ' (intento ' + intento + '/4)');
+            if (intento < 4) await sleep(1000 * intento);
+        }
+    }
+    console.error('[SALESBRAIN] ⚠️ NO entregado tras 4 intentos: ' + external_id + ' "' + String(text).slice(0, 40) + '"');
+}
+
+let reintentos = 0;
+// ═══════════════════════ EL UNIVERSO (uno por tenant) ═══════════════════════
+const universos = new Map();                      // tenantId → U
+const fs = require('fs');
+const path = require('path');
+function authDirDe(tenant) {
+    const dir = path.join(__dirname, 'auth', String(tenant.id));
+    // MIGRACIÓN Fase 1: la carpeta vieja del número principal pasa a ser auth/0 (sin reescanear)
+    if (tenant.id === 0 && !fs.existsSync(dir) && fs.existsSync(path.join(__dirname, 'auth_info_baileys'))) {
+        fs.mkdirSync(path.join(__dirname, 'auth'), { recursive: true });
+        fs.renameSync(path.join(__dirname, 'auth_info_baileys'), dir);
+        try { fs.symlinkSync(dir, path.join(__dirname, 'auth_info_baileys')); } catch (e) {}   // v2 (rollback) sigue encontrando su carpeta
+        console.log('[auth] migrada auth_info_baileys → auth/0 (+symlink de compatibilidad)');
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+// Estado de sesión → Sales Brain (Turso wa_sessions; la Fase 6 lo vuelve endpoint)
+function reportarSesion(tenantId, estado, motivo) {
+    db.execute({ sql: 'INSERT INTO wa_sessions (tenant_id, estado, motivo, ultimo_evento, updated) VALUES (?,?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET estado=excluded.estado, motivo=excluded.motivo, ultimo_evento=excluded.ultimo_evento, updated=excluded.updated',
+        args: [tenantId, estado, motivo || null, Date.now(), Date.now()] }).catch(() => {});
+    console.log('[sesión] tenant ' + tenantId + ' → ' + estado + (motivo ? ' (' + motivo + ')' : ''));
+}
+
+function crearUniverso(tenant) {
+    const U = {
+        tenant, sock: null, estado: 'arrancando', ultimoQR: null, ultimoRecibido: 0,
+        genConexion: 0, reconectTimer: null, conectando: false, ghostTimer: null, reintentos: 0,
+        enviadosPorPanel: new Set(), sentStore: new Map(), getMsgRetries: new Map(), sesionReseteada: new Map(),
+        lidAPhone: new Map(), phoneALid: new Map(), colasPorTel: new Map(),
+        autoOpenerTimers: new Map(), autoOpenerEnVuelo: new Set(), autoOpenerPendiente: new Set(),
+        ilegibleAvisado: new Map(), ghostEnCurso: false,
+    };
+async function resetearSesionContacto(jid) {
+    try {
+        if (!jid || !U.sock) return;
+        const user = String(jid).split('@')[0].split(':')[0].split('.')[0];
+        if (!user) return;
+        const ahora = Date.now();
+        if (U.sesionReseteada.get(user) && ahora - U.sesionReseteada.get(user) < 60000) return; // máx 1/min
+        U.sesionReseteada.set(user, ahora);
+        const updates = {};
+        for (let d = 0; d <= 9; d++) updates[user + '.' + d] = null;  // borra sesiones de todos sus dispositivos
+        await U.sock.authState.keys.set({ session: updates });
+        console.log('[recuperación] sesión reseteada para ' + user + ' (Bad MAC) → renegocia sola');
+    } catch (e) { console.error('[recuperación] no pude resetear sesión:', e.message); }
+}
+
+// Encola fn por teléfono para que los mensajes del MISMO hilo se procesen en orden.
+function encolar(tel, fn) {
+    const prev = U.colasPorTel.get(tel) || Promise.resolve();
+    const next = prev.then(fn).catch(e => console.error('[cola]', e && e.message));
+    U.colasPorTel.set(tel, next);
+    return next;
+}
+
+
+// Persiste un mapeo @lid → teléfono (sobrevive reinicios).
+function recordarLid(lid, phone) {
+    if (!lid || !phone || lid === phone) return;
+    const nuevo = U.lidAPhone.get(lid) !== phone;          // ¿mapeo que NO conocíamos?
+    U.lidAPhone.set(lid, phone);
+    U.phoneALid.set(phone, lid);
+    db.execute({
+        sql: 'INSERT INTO lid_phone_map (lid, phone, updated_at, tenant_id) VALUES (?, ?, ?, ?) ON CONFLICT(lid) DO UPDATE SET phone=excluded.phone, updated_at=excluded.updated_at, tenant_id=excluded.tenant_id',
+        args: [lid, phone, Date.now(), tenant.id]
+    }).catch(() => {});
+    // AUTO-CURACIÓN: si justo aprendimos este @lid↔teléfono, unir la conversación
+    // huérfana (la que quedó bajo el @lid) con la del teléfono real. Evita el "split".
+    if (nuevo) fusionarSiHuerfano(lid, phone).catch(() => {});
+}
+
+
+// Devuelve el TELÉFONO REAL del comprador (no el @lid). Aprende el mapeo de los entrantes.
+function telefonoReal(m) {
+    const jid = m.key.remoteJid || '';
+    if (jid.endsWith('@s.whatsapp.net')) return limpiaTel(jid);   // ya es teléfono
+    const lid = limpiaTel(jid);                                    // es @lid
+    if (!m.key.fromMe) {                                           // ENTRANTE: senderPn = teléfono real
+        // senderPn/participantPn YA son el teléfono real; remoteJidAlt lo es cuando es @s.whatsapp.net.
+        let pn = m.key.senderPn || m.key.participantPn;
+        if (!pn && String(m.key.remoteJidAlt || '').endsWith('@s.whatsapp.net')) pn = m.key.remoteJidAlt;
+        if (pn) { const ph = limpiaTel(pn); if (ph) { recordarLid(lid, ph); return ph; } }
+    }
+    if (U.lidAPhone.has(lid)) return U.lidAPhone.get(lid);             // resolver por mapa persistido
+    return lid;                                                    // último recurso: el @lid
+}
+
+
+async function conectar() {
+    // ── CANDADO F1: una sola conexión viva, siempre ──
+    if (U.conectando) { console.log('[conexión] ya hay un conectar() en curso — ignorado'); return; }
+    U.conectando = true;
+    setTimeout(() => { U.conectando = false; }, 30000);   // seguro: si algo truena a media conexión, el candado se libera solo
+    const gen = ++U.genConexion;                       // este socket = generación N
+    if (U.reconectTimer) { clearTimeout(U.reconectTimer); U.reconectTimer = null; }
+    // Matar el socket anterior ANTES de crear el nuevo (si quedó medio vivo).
+    try {
+        if (U.sock) {
+            try { U.sock.ev.removeAllListeners('messages.upsert'); } catch (e) {}
+            try { U.sock.ev.removeAllListeners('connection.update'); } catch (e) {}
+            try { U.sock.ev.removeAllListeners('creds.update'); } catch (e) {}
+            try { U.sock.end(undefined); } catch (e) {}
+        }
+    } catch (e) { /* el viejo ya estaba muerto */ }
+
+    // Cargar el mapa @lid → teléfono desde Turso (sobrevive reinicios).
+    try {
+        await db.execute('CREATE TABLE IF NOT EXISTS lid_phone_map (lid TEXT PRIMARY KEY, phone TEXT, updated_at INTEGER)');
+        try { await db.execute('ALTER TABLE lid_phone_map ADD COLUMN tenant_id INTEGER'); } catch (e) {}
+        // Anuncio (auto+link) por teléfono → el cerebro lo mete a la mochila como [DESC:]
+        await db.execute('CREATE TABLE IF NOT EXISTS ad_por_telefono (telefono TEXT PRIMARY KEY, ad_context TEXT, updated_at INTEGER)');
+        // Modo prueba: punto de reinicio por teléfono (solo se ven mensajes posteriores)
+        await db.execute('CREATE TABLE IF NOT EXISTS prueba_reset (telefono TEXT PRIMARY KEY, reset_ts INTEGER)');
+        const cached = await db.execute({ sql: 'SELECT lid, phone FROM lid_phone_map WHERE COALESCE(tenant_id, 0) = ?', args: [tenant.id] });
+        for (const row of cached.rows) { U.lidAPhone.set(String(row.lid), String(row.phone)); U.phoneALid.set(String(row.phone), String(row.lid)); }
+        console.log('[lid-map] cargados ' + U.lidAPhone.size + ' mapeos');
+    } catch (e) { console.error('[lid-map] no pude cargar:', e.message); }
+
+    const { state, saveCreds } = await useMultiFileAuthState(authDirDe(tenant));
+    let version;
+    try { ({ version } = await fetchLatestBaileysVersion()); console.log('WA version:', version?.join('.')); }
+    catch (e) { console.log('No pude obtener versión WA, uso default:', e.message); }
+
+    const keys = (typeof makeCacheableSignalKeyStore === 'function')
+        ? makeCacheableSignalKeyStore(state.keys, logger) : state.keys;
+
+    U.sock = makeWASocket({
+        version,
+        auth: { creds: state.creds, keys },
+        logger,
+        printQRInTerminal: false,
+        syncFullHistory: false,
+        browser: ['Fyradrive · Asistente', 'Chrome', '120.0.0'],
+        shouldSyncHistoryMessage: () => false,   // Ley 2: nada de historial
+        markOnlineOnConnect: true,
+        msgRetryCounterCache,
+        // LA PESTE DE LOS GRUPOS (2026-08-06): el lid 213400550379606 —participante
+        // de un grupo— acumuló ~250 mil Bad MAC en DOS brotes y tumbó la recepción
+        // dos veces (sobrevivió incluso al re-enlace por QR). El bot NO trabaja
+        // grupos: se ignoran DE RAÍZ (ni se descifran) — y el dispositivo apestado
+        // queda en LISTA NEGRA directa (también ataca como mensaje 1 a 1; su tráfico
+        // es 100% indescifrable, no se pierde nada real).
+        shouldIgnoreJid: jid => typeof jid === 'string' && (
+            jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid === 'status@broadcast' || jid.endsWith('@newsletter') ||
+            jid.startsWith('213400550379606@') || jid.includes('213400550379606:')
+        ),
+        // ARREGLO #1: responder los retry-receipts de Signal con el mensaje original.
+        getMessage: async (key) => {
+            // Si nos piden reenviar el MISMO mensaje 2+ veces, el destinatario no lo pudo
+            // descifrar (sesión rota) → resetea su sesión ANTES de reenviar para que renegocie.
+            const n = (U.getMsgRetries.get(key.id) || 0) + 1;
+            U.getMsgRetries.set(key.id, n);
+            setTimeout(() => U.getMsgRetries.delete(key.id), 60 * 60000);
+            if (n >= 2 && key.remoteJid) { await resetearSesionContacto(key.remoteJid).catch(() => {}); }
+            const m = U.sentStore.get(key.id);
+            if (m) return m.message;
+            // G1 (badmac 2026-08-03): U.sentStore es RAM — cada pm2 restart lo vacía y los
+            // retry-receipts regresaban undefined → el saliente se quedaba en UNA palomita
+            // para siempre. Respaldo: el TEXTO vive en Turso (wa_messages) — re-servirlo.
+            // ⚠️ CAMISA DE FUERZA (2026-08-06): esta consulta corre DENTRO del tubo de
+            // recepción de Baileys — si Turso se cuelga, el puente queda conectado pero
+            // SORDO (así se murió la recepción 6 horas hoy). Máximo 1.5s y suelta.
+            try {
+                const r = await Promise.race([
+                    db.execute({ sql: "SELECT mensaje FROM wa_messages WHERE mensaje_id=? AND direccion='out' ORDER BY created_at DESC LIMIT 1", args: [key.id] }),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('turso_lento')), 1500))
+                ]);
+                if (r.rows.length && r.rows[0].mensaje && !/^\[/.test(String(r.rows[0].mensaje))) return { conversation: String(r.rows[0].mensaje) };
+            } catch (e) { console.error('[getMessage] fallback Turso:', e.message); }
+            return undefined;
+        }
+    });
+
+    // G3 (badmac 2026-08-03): si escribir el auth a disco FALLA, hay que verlo en el log —
+    // llaves en RAM ≠ llaves en disco es la semilla de la epidemia de Bad MAC.
+    U.sock.ev.on('creds.update', () => { Promise.resolve(saveCreds()).catch(e => console.error('[creds] ⚠️ NO pude guardar auth:', e.message)); });
+    U.conectando = false;   // el socket de esta generación ya existe; liberar el candado
+
+    U.sock.ev.on('connection.update', (u) => {
+        if (gen !== U.genConexion) return;   // evento de un socket ZOMBI → ignorar por completo
+        const { connection, lastDisconnect, qr } = u;
+        if (qr) {
+            U.ultimoQR = qr; U.estado = 'esperando_qr'; reportarSesion(tenant.id, 'esperando_qr', 'escanea el QR');
+            console.log('\n================ ESCANEA ESTE QR CON WHATSAPP ================\n');
+            qrcode.generate(qr, { small: true });
+            console.log('\nWhatsApp → Dispositivos vinculados → Vincular un dispositivo\n');
+        }
+        if (connection === 'open') { U.estado = 'conectado'; U.ultimoQR = null; U.reintentos = 0; reportarSesion(tenant.id, 'vinculado', 'open'); console.log('\n✅ WHATSAPP CONECTADO (gen ' + gen + ')\n'); }
+        if (connection === 'close') {
+            const code = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
+            const reconectar = code !== DisconnectReason.loggedOut;
+            reportarSesion(tenant.id, reconectar ? 'reconectando' : 'desvinculado', 'close code ' + code + (reconectar ? '' : ' — requiere reescaneo'));
+            U.estado = 'cerrado';
+            U.reintentos++;
+            const espera = Math.min(30000, 3000 * U.reintentos);
+            console.log('Conexión cerrada (code ' + code + ', gen ' + gen + '). ' + (reconectar ? 'Reconectando en ' + (espera / 1000) + 's…' : 'Sesión cerrada — re-vincular.'));
+            // UN solo reconnect agendado a la vez (el timer previo se cancela).
+            if (reconectar) {
+                if (U.reconectTimer) clearTimeout(U.reconectTimer);
+                U.reconectTimer = setTimeout(conectar, espera);
+            }
+        }
+    });
+
+    // MENSAJES → guardar (ENTRANTES del comprador y SALIENTES tuyos), en orden.
+    // ══ CARGA DE LOTE (owner 2026-07-13): piezas desde el número del OWNER →
+    // fyrachat las acumula y publica en la web (lotes/agencias verificadas).
+    // Imagen: descargar de WhatsApp → subir al Blob de la web → mandar la URL.
+    let cargaCola = Promise.resolve();   // cola FIFO: una pieza a la vez, orden de WhatsApp intacto
+    async function manejarPiezaCarga(m, texto, remitente) {
+        try {
+            const w = m.message || {};
+            const post = (b) => fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'carga_pieza', key: 'fyra-bridge-v2-2026', remitente: remitente || '5218120066355' }, b)) }).catch(() => {});
+            if (w.imageMessage) {
+                const cap = String(w.imageMessage.caption || '').trim();
+                if (cap) await post({ tipo: 'texto', texto: cap });
+                const buff = await baileys.downloadMediaMessage(m, 'buffer', {});
+                const fd = new FormData();
+                fd.append('code', 'AUTOS LOZANO');
+                fd.append('filename', 'carga-' + Date.now() + '.jpg');
+                fd.append('file', new Blob([buff], { type: w.imageMessage.mimetype || 'image/jpeg' }));
+                const up = await fetch('https://www.fyradrive.com/api/agency/upload-photo', { method: 'POST', body: fd });
+                const du = await up.json().catch(() => ({}));
+                if (du && du.ok && du.url) { await post({ tipo: 'foto', url: du.url }); console.log('[carga] foto subida'); }
+                else console.error('[carga] upload-photo fallo:', du && du.error);
+                return;
+            }
+            const t = String(texto || '').trim();
+            if (t && t !== '[imagen]') await post({ tipo: 'texto', texto: t });
+        } catch (e) { console.error('[carga pieza]', e && e.message); }
+    }
+
+
+    // ══ EL OJO DEL COMPRADOR (2026-07-22, caso 7721443373: contestó con una FOTO y el
+    // bot quedó mudo): la imagen del comprador se sube y su URL viaja EN EL TEXTO —
+    // el cerebro la lee (identifica el auto) y contesta como si nada.
+    async function subirImagenComprador(m) {
+        try {
+            const w = m.message || {};
+            const buff = await baileys.downloadMediaMessage(m, 'buffer', {});
+            const fd = new FormData();
+            fd.append('code', 'AUTOS LOZANO');
+            fd.append('filename', 'comprador-' + Date.now() + '.jpg');
+            fd.append('file', new Blob([buff], { type: (w.imageMessage && w.imageMessage.mimetype) || 'image/jpeg' }));
+            const up = await fetch('https://www.fyradrive.com/api/agency/upload-photo', { method: 'POST', body: fd });
+            const du = await up.json().catch(() => ({}));
+            return (du && du.ok && du.url) ? du.url : null;
+        } catch (e) { return null; }
+    }
+
+    // ══ IGNACIO RECEPCIÓN (2026-07-16): fotos de VENDEDORES particulares. El puente
+    // pregunta a fyrachat si el chat tiene sesión de recepción ANTES de bajar nada —
+    // así las fotos de compradores normales jamás se tocan.
+    let recepCola = Promise.resolve();
+    async function manejarFotoRecepcion(m, tel) {
+        try {
+            const t10 = String(tel).replace(/\D/g, '');
+            const chk = await fetch('https://fyrachat.vercel.app/api/seb-panel?action=recepcion_activa&telefono=' + t10).then(r => r.json()).catch(() => null);
+            if (!chk || !chk.activa) return;
+            const w = m.message || {};
+            const buff = await baileys.downloadMediaMessage(m, 'buffer', {});
+            const fd = new FormData();
+            fd.append('code', 'AUTOS LOZANO');
+            fd.append('filename', 'recepcion-' + Date.now() + '.jpg');
+            fd.append('file', new Blob([buff], { type: (w.imageMessage && w.imageMessage.mimetype) || 'image/jpeg' }));
+            const up = await fetch('https://www.fyradrive.com/api/agency/upload-photo', { method: 'POST', body: fd });
+            const du = await up.json().catch(() => ({}));
+            if (du && du.ok && du.url) {
+                await fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'recepcion_foto', key: 'fyra-bridge-v2-2026', telefono: t10, url: du.url }) });
+                console.log('[recepcion] foto subida ' + t10);
+            } else console.error('[recepcion] upload-photo fallo:', du && du.error);
+        } catch (e) { console.error('[recepcion foto]', e && e.message); }
+    }
+
+    U.sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (gen !== U.genConexion) return;   // socket zombi → jamás procesar (doble proceso = Bad MAC + duplicados)
+        if (type !== 'notify' && type !== 'append') return;
+        for (const m of messages) {
+            U.ultimoRecibido = Date.now();                                   // latido de la sesión
+            if (tenant.id !== 0) continue;                                    // Fase 1: universos != 0 NO procesan nada (Ley 2) — la delegación llega en Fase 2
+            if (m.key.remoteJid?.endsWith('@g.us')) continue;     // ignorar grupos
+            if (m.key.remoteJid === 'status@broadcast') continue; // ignorar estados
+            // AUTO-RECUPERACIÓN: si este mensaje NO se pudo descifrar (Bad MAC / "Esperando el
+            // mensaje"), resetea la sesión de ese contacto para que renegocie una llave limpia.
+            // Y YA NO SE TIRA EN SILENCIO (mataba leads: Adrián, el 2061, el Sahara): se deja
+            // burbuja visible en FyraChat, se le pide al comprador que lo reenvíe (con la sesión
+            // ya reseteada, el reenvío SÍ descifra) y se avisa al personal del owner.
+            if (m.messageStubType === STUB_CIPHERTEXT) {
+                resetearSesionContacto(m.key.remoteJid).catch(() => {});
+                if (!m.key.fromMe) manejarMensajeIlegible(m).catch(e => console.error('[ilegible]', e && e.message));
+                else registrarManualIlegible(m).catch(e => console.error('[ilegible-out]', e && e.message));
+                continue;
+            }
+            const esSaliente = !!m.key.fromMe;                    // lo mandaste TÚ
+            // Eco de un mensaje que ya mandó FyraChat → ya quedó registrado, saltar
+            if (esSaliente && U.enviadosPorPanel.has(m.key.id)) { U.enviadosPorPanel.delete(m.key.id); continue; }
+            // 🛟 PIN MANUAL TUYO (máquina de rescate): el pin nativo que mandas desde tu
+            // teléfono acredita carril ubicación (24h) — timbre y sigue el skip normal.
+            if (esSaliente && (m.message?.locationMessage || m.message?.liveLocationMessage) && !U.enviadosPorPanel.has(m.key.id)) {
+                const telPin = telefonoReal(m);
+                if (telPin) fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_manual', key: 'fyra-bridge-v2-2026', telefono: telPin, texto: '', es_pin: true }) }).catch(() => {});
+            }
+            // Eco SALIENTE de MEDIA (imagen/pin/video/doc/audio): NO crear burbuja en FyraChat.
+            // Lo que mandamos (p.ej. el paquete de ubicación) ya está representado por su texto;
+            // el eco de la imagen/pin se vería como "[imagen]"/"[ubicación]". Race-proof: por TIPO,
+            // no por folio (el anti-eco por folio falla por carrera de tiempos con media).
+            if (esSaliente) {
+                const w = m.message || {};
+                if (w.imageMessage || w.videoMessage || w.documentMessage || w.audioMessage || w.stickerMessage || w.locationMessage || w.liveLocationMessage) continue;
+            }
+            // saltar SOLO mensajes de sistema sin contenido (distribución de llaves) — JAMÁS un mensaje real
+            const mk = Object.keys(m.message || {});
+            if (!m.message || (mk.length && mk.every(k => k === 'senderKeyDistributionMessage' || k === 'messageContextInfo'))) continue;
+            let texto = textoDeMensaje(m.message);                // robusto: cualquier tipo, nunca vacío → cero pérdidas
+            const tel = telefonoReal(m);                          // TELÉFONO REAL (no @lid)
+            // ══ CARGA DE LOTE: lo que mande el OWNER desde su número también se acarrea
+            // al publicador (su flujo normal — posesión, señales — sigue intacto).
+            const telCarga = String(tel).replace(/\D/g, '');
+            if (!esSaliente && /(8120066355|8129405001)$/.test(telCarga)) {
+                // OWNER o MARCELO (AUTOS LOZANO): sus piezas van al publicador de lote
+                const remitCarga = telCarga.endsWith('8129405001') ? '5218129405001' : '5218120066355';
+                cargaCola = cargaCola.then(() => manejarPiezaCarga(m, texto, remitCarga)).catch(() => {});
+            } else if (!esSaliente && (m.message || {}).imageMessage) {
+                // ══ IGNACIO RECEPCIÓN: foto de un posible VENDEDOR particular — solo se
+                // procesa si fyrachat confirma sesión de recepción abierta para ese tel.
+                recepCola = recepCola.then(() => manejarFotoRecepcion(m, tel)).catch(() => {});
+                // ══ EL OJO DEL COMPRADOR (2026-07-22): la URL de la imagen entra al texto.
+                // 8s máximo; si la subida falla queda '[imagen]' y el cerebro ESCALA al
+                // owner (ley: una imagen jamás deja mudo al bot).
+                try {
+                    const urlImg = await Promise.race([subirImagenComprador(m), new Promise(r => setTimeout(() => r(null), 8000))]);
+                    if (urlImg) texto = (texto && texto !== '[imagen]' ? texto + ' ' : '') + '[imagen] ' + urlImg;
+                } catch (e) { }
+            }
+            const adContext = esSaliente ? null : adContextDe(m); // contexto del anuncio (auto + link)
+            const adLink = esSaliente ? null : adLinkDe(m);       // link del anuncio
+            if (adLink && !texto.includes(adLink)) texto = '🔗 ' + adLink + '\n' + texto;  // mostrarlo en FyraChat como en WhatsApp
+            // Guardar el anuncio por teléfono → el cerebro lo usará para saber QUÉ AUTO
+            if (adContext) db.execute({
+                sql: 'INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at',
+                args: [tel, adContext, Date.now()]
+            }).catch(() => {});
+            // MODO PRUEBA: si un número de prueba contesta un anuncio → REINICIAR contexto
+            // (solo se verán los mensajes de aquí en adelante, como comprador nuevo).
+            if (adContext && TEST_NUMEROS.has(tel.slice(-10))) {
+                db.execute({
+                    sql: 'INSERT INTO prueba_reset (telefono, reset_ts) VALUES (?,?) ON CONFLICT(telefono) DO UPDATE SET reset_ts=excluded.reset_ts',
+                    args: [tel, Date.now() - 3000]
+                }).catch(() => {});
+                console.log('[PRUEBA] reinicio de contexto para ' + tel);
+            }
+            // HORA REAL del mensaje (Baileys m.messageTimestamp, segundos) — no la de ingesta.
+            const msgTs = (() => { const t = m.messageTimestamp; const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t); return (isFinite(n) && n > 1e9) ? n * 1000 : Date.now(); })();
+            const tipoMsg = tipoDeMsg(m.message);
+            await guardar({
+                telefono: tel,
+                nombre: esSaliente ? null : (m.pushName || null),
+                mensaje: texto,
+                direccion: esSaliente ? 'out' : 'in',
+                tipo: tipoMsg,
+                mensaje_id: m.key.id,
+                ai_generated: 0
+            });
+            // FASE 2 — LIBRETA NUEVA: renglón con FOLIO + hora real (dedup por folio → JAMÁS duplica)
+            guardarMensajeNuevo({
+                tel, msgId: m.key.id, ts: msgTs,
+                direccion: esSaliente ? 'out' : 'in',
+                emisor: esSaliente ? 'SRS010904' : (m.pushName || null),
+                texto, tipo: tipoMsg,
+                nombre: esSaliente ? null : (m.pushName || null),
+                ai_generated: 0
+            }).catch(() => {});
+            // 🛟 MANUAL TUYO (máquina de rescate): tu texto escrito a mano re-arma el
+            // reloj del silencio (jamás toca una promesa del comprador).
+            if (esSaliente) {
+                fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_manual', key: 'fyra-bridge-v2-2026', telefono: tel, texto: String(texto || '') }) }).catch(() => {});
+            }
+            // ══ TIMBRE DE CIERRE (lógica del timbre, orden owner 2026-07-16): "cita
+            // confirmada" MANUAL tuyo → fyrachat ejecuta la máquina AL INSTANTE (paquete
+            // determinista + casillas CRM/Calendar/solicitud). El cron queda de barredor
+            // de respaldo por la MISMA puerta idempotente — jamás duplica.
+            if (esSaliente && /cita confirmada/i.test(texto)) {
+                fetch('https://fyrachat.vercel.app/api/seb-panel?action=cierre_timbre', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'fyra-bridge-v2-2026', telefono: String(tel).replace(/\D/g, ''), texto, ts: msgTs })
+                }).then(r => r.json()).then(j => console.log('[timbre-cierre]', tel, JSON.stringify(j).slice(0, 120))).catch(e => console.error('[timbre-cierre]', e.message));
+            }
+            // Reenviar a SALES-BRAIN EN ORDEN por teléfono (cola). Sigue llenando lo VIEJO en paralelo.
+            encolar(tel, () => mandarASalesBrain({
+                external_id: tel,
+                text: texto,
+                from_name: esSaliente ? null : m.pushName,
+                direction: esSaliente ? 'outbound' : 'inbound',
+                ad_context: adContext
+            }));
+            // 🔔 TIMBRE: empuja el mensaje a FyraChat al instante (con FOLIO + hora real)
+            emitir({ tipo: 'mensaje', telefono: tel, mensaje: texto, direccion: esSaliente ? 'out' : 'in', timestamp: Math.floor(msgTs / 1000), nombre: esSaliente ? null : (m.pushName || null), msg_id: m.key.id });
+            console.log((esSaliente ? '→ ' : '← ') + tel + ': ' + String(texto).slice(0, 50) + (adContext ? '  [ANUNCIO]' : ''));
+            // AUTOPILOT: primer mensaje de un COMPRADOR → el bot contesta solo (ráfaga).
+            // El cerebro (/opener_auto, reset-aware) decide si aplica; aquí solo debounce.
+            if (!esSaliente) programarAutoOpener(tel);
+        }
+    });
+}
+
+// ── AUTOPILOT DEL PRIMER MENSAJE ─────────────────────────────────────────────
+// Cuando un comprador escribe por PRIMERA vez (no hemos respondido), el bot manda
+// SOLO la ráfaga del playbook (1 burbuja por mensaje, ~1s de diferencia). Una vez
+// por conversación. El cerebro (FyraChat /opener_auto) decide si aplica.
+U.autoOpenerTimers = new Map();   // tel → timeout (debounce: junta su ráfaga)
+U.autoOpenerEnVuelo = new Set();  // tel → procesando ahora (anti-concurrencia)
+U.autoOpenerPendiente = new Set();// tel → llegó mensaje MIENTRAS respondíamos → reprocesar al terminar
+
+// Envía UN texto saliente del bot y lo registra/emite a FyraChat (igual que /api/send).
+async function autoEnviarTexto(p, text) {
+    const destino = U.phoneALid.has(p) ? (U.phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+    const r = await U.sock.sendMessage(destino, { text });
+    if (r?.key?.id) {
+        U.enviadosPorPanel.add(r.key.id);
+        U.sentStore.set(r.key.id, r);
+        setTimeout(() => { U.enviadosPorPanel.delete(r.key.id); U.sentStore.delete(r.key.id); }, 60 * 60000);
+    }
+    const ts = Date.now();
+    await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: 1 }).catch(() => {});
+    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: text, tipo: 'text', nombre: null, ai_generated: 1 }).catch(() => {});
+    emitir({ tipo: 'mensaje', telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id });
+    encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
+    return r;
+}
+
+// Debounce: cada entrante reinicia el reloj; al expirar (no llegaron más) dispara una vez.
+function programarAutoOpener(tel) {
+    if (!AUTO_OPENER) return;
+    if (U.autoOpenerTimers.has(tel)) clearTimeout(U.autoOpenerTimers.get(tel));
+    U.autoOpenerTimers.set(tel, setTimeout(() => {
+        U.autoOpenerTimers.delete(tel);
+        dispararAutoOpener(tel).catch(e => console.error('[auto-opener]', e && e.message));
+    }, AUTO_OPENER_DELAY));
+}
+
+// Manda el PIN del punto (captura branded + ubicación nativa) — para la continuación de
+// ubicación. No crea burbuja en FyraChat (el eco de media saliente se salta por tipo).
+async function autoEnviarUbicacion(p, autoId) {
+    try {
+        const pe = await db.execute({ sql: "SELECT image_b64, name, lat, lng FROM punto_envio WHERE auto_id=?", args: [Number(autoId)] });
+        if (!pe.rows.length) return;
+        const e = pe.rows[0];
+        const destino = U.phoneALid.has(p) ? (U.phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+        const marca = (r) => { if (r && r.key && r.key.id) { U.enviadosPorPanel.add(r.key.id); U.sentStore.set(r.key.id, r); setTimeout(() => { U.enviadosPorPanel.delete(r.key.id); U.sentStore.delete(r.key.id); }, 60 * 60000); } };
+        if (e.image_b64) { const buf = Buffer.from(String(e.image_b64).replace(/^data:[^,]+,/, ''), 'base64'); marca(await U.sock.sendMessage(destino, { image: buf })); }
+        if (e.lat != null && e.lng != null) { const loc = { degreesLatitude: Number(e.lat), degreesLongitude: Number(e.lng) }; if (e.name) loc.name = String(e.name); marca(await U.sock.sendMessage(destino, { location: loc })); }
+    } catch (err) { console.error('[auto-opener] pin:', err.message); }
+}
+
+// Descarga cada URL de foto (Vercel Blob, pública) y la manda como imagen por WhatsApp.
+async function autoEnviarFotos(p, urls) {
+    const destino = U.phoneALid.has(p) ? (U.phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+    for (const url of (urls || [])) {
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) continue;
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const m = await U.sock.sendMessage(destino, { image: buf });
+            if (m && m.key && m.key.id) { U.enviadosPorPanel.add(m.key.id); U.sentStore.set(m.key.id, m); setTimeout(() => { U.enviadosPorPanel.delete(m.key.id); U.sentStore.delete(m.key.id); }, 60 * 60000); }
+            await sleep(900);
+        } catch (e) { console.error('[auto-opener] foto:', e.message); }
+    }
+}
+
+// ── AVISO DE ESCALA al WhatsApp personal del owner (como la lista de ghosting): cuando
+// el bot en automático NO debe/puede contestar (long-tail, algo que necesita su criterio),
+// le manda "🔔 Escaló Fulano — pidió: …" para que él conteste a mano. NO se persiste.
+async function avisarEscalaOwner({ tel, nombre, motivo, ultimo }) {
+    try {
+        const tel10 = String(tel).replace(/\D/g, '').slice(-10);
+        const txt = '🔔 Seb escaló contigo\n'
+            + '• ' + (nombre || 'Sin nombre') + ' — ' + tel10 + '\n'
+            + '• Motivo: ' + (motivo || 'requiere tu criterio') + '\n'
+            + (ultimo ? '• Escribió: "' + String(ultimo).slice(0, 140) + '"\n' : '')
+            + 'Contéstale tú directo en FyraChat.';
+        const dest = U.phoneALid.has(OWNER_PERSONAL) ? (U.phoneALid.get(OWNER_PERSONAL) + '@lid') : (OWNER_PERSONAL + '@s.whatsapp.net');
+        const rr = await U.sock.sendMessage(dest, { text: txt });
+        if (rr?.key?.id) { U.enviadosPorPanel.add(rr.key.id); U.sentStore.set(rr.key.id, rr); setTimeout(() => { U.enviadosPorPanel.delete(rr.key.id); U.sentStore.delete(rr.key.id); }, 60 * 60000); }
+        console.log('[escala-owner] avisado por', tel10, '·', motivo);
+    } catch (e) { console.error('[escala-owner]', e.message); }
+}
+
+async function dispararAutoOpener(tel) {
+    if (U.estado !== 'conectado') return;
+    // Si ya estamos respondiendo a ESTE teléfono, NO tiramos este disparo: lo marcamos
+    // pendiente para reprocesar en cuanto termine (así el 2º mensaje del comprador —el que
+    // llegó a media respuesta— SÍ se contesta, con la respuesta al 1º ya en el contexto).
+    if (U.autoOpenerEnVuelo.has(tel)) { U.autoOpenerPendiente.add(tel); return; }
+    U.autoOpenerEnVuelo.add(tel);   // lock anti-concurrencia mientras procesa/envía
+    try {
+        // El cerebro (reset-aware) decide TODO: primer contacto (opener), primera respuesta
+        // (continuación fin/ubic), o silencio. Si no aplica → no manda nada (queda manual).
+        let d = null;
+        try {
+            const r = await fetch(OPENER_AUTO_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'opener_auto', telefono: tel })
+            });
+            d = await r.json().catch(() => ({}));
+        } catch (e) { console.error('[auto-opener] cerebro:', e.message); }
+        // ¿El cerebro escaló? → avísale al owner a su personal (con o sin puente al comprador).
+        if (d && d.escalar_owner) await avisarEscalaOwner({ tel, nombre: d.escala_nombre, motivo: d.escala_motivo, ultimo: d.escala_ultimo });
+        if (!(d && d.ok && Array.isArray(d.segmentos) && d.segmentos.length)) return;
+        const segmentos = d.segmentos;
+        let p = tel.replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
+        const envTexto = async (s) => { try { await autoEnviarTexto(p, s); } catch (e) { console.error('[auto-opener] envío:', e.message); } };
+
+        if (d.ubicacion_auto_id && d.pin_primero) {
+            // "Pásame la ubicación" → PIN primero, luego texto.
+            await autoEnviarUbicacion(p, d.ubicacion_auto_id); await sleep(AUTO_OPENER_GAP);
+            for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
+        } else if (d.ubicacion_auto_id) {
+            // El PIN va DESPUÉS del segmento pin_after_index (default 0 = tras la maquillada;
+            // en el combo crédito+ubicación = 2, tras la línea de ubicación).
+            const pinIdx = Number.isInteger(d.pin_after_index) ? d.pin_after_index : 0;
+            for (let i = 0; i < segmentos.length; i++) {
+                await envTexto(segmentos[i]);
+                if (i === pinIdx) { await sleep(AUTO_OPENER_GAP); await autoEnviarUbicacion(p, d.ubicacion_auto_id); }
+                if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
+            }
+        } else if (d.fotos && d.fotos.length) {
+            // FOTOS: manda el texto y, tras fotos_after_index, las fotos descargadas.
+            const fi = Number.isInteger(d.fotos_after_index) ? d.fotos_after_index : 0;
+            for (let i = 0; i < segmentos.length; i++) {
+                await envTexto(segmentos[i]);
+                if (i === fi) { await sleep(AUTO_OPENER_GAP); await autoEnviarFotos(p, d.fotos); }
+                if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP);
+            }
+        } else {
+            // Opener / financiamiento: solo texto, 1s entre cada burbuja.
+            for (let i = 0; i < segmentos.length; i++) { await envTexto(segmentos[i]); if (i < segmentos.length - 1) await sleep(AUTO_OPENER_GAP); }
+        }
+        console.log('[auto-opener] ' + (d.modo || 'opener') + ' → ' + tel + ' (' + segmentos.length + ' msgs' + (d.ubicacion_auto_id ? ' +pin' : '') + (d.fotos ? ' +' + d.fotos.length + 'fotos' : '') + ')');
+        // 🛟 LA MÁQUINA DE RESCATE: turno cerrado → el cerebro re-evalúa folios
+        // (promesa del comprador / cancha / arma el reloj del silencio con su carril)
+        fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_turno', key: 'fyra-bridge-v2-2026', telefono: tel, segmentos: segmentos, pin: !!d.ubicacion_auto_id }) }).catch(() => {});
+    } finally {
+        U.autoOpenerEnVuelo.delete(tel);
+        // ¿Llegó algún mensaje mientras respondíamos? → reprocesar (leerá el nuevo contexto
+        // completo, incluida nuestra respuesta anterior). El debounce vuelve a juntar la ráfaga.
+        if (U.autoOpenerPendiente.has(tel)) { U.autoOpenerPendiente.delete(tel); programarAutoOpener(tel); }
+    }
+}
+
+// ── MENSAJE ILEGIBLE (Bad MAC) — registro SILENCIOSO (decisión del owner) ─────
+// NO se le manda nada al comprador ni aviso al owner. Solo queda la burbuja en
+// FyraChat (para que la conversación exista y no sea un lead invisible) y el log.
+// La cura REAL es que las sesiones no se rompan: candado de conexión única (abajo).
+U.ilegibleAvisado = new Map();   // tel → ts (throttle SOLO del log, no del registro)
+async function manejarMensajeIlegible(m) {
+    const tel = telefonoReal(m);
+    if (!tel) {
+        // G4 (badmac 2026-08-03, caso lid 213400550379606 con 235 mil errores): un @lid
+        // SIN mapeo perdía sus mensajes en silencio TOTAL. Que al menos grite en el log.
+        console.error('[ilegible] ⚠️ SIN TELÉFONO — lid/jid: ' + (m.key && (m.key.senderLid || m.key.participant || m.key.remoteJid) || '?') + ' push: ' + (m.pushName || '?'));
+        return;
+    }
+    const ahora = Date.now();
+    // G2 (badmac 2026-08-03, caso 445 110 9070 / 81 1792 8244): el throttle de 6h TRAGABA
+    // el 2º+ mensaje ilegible del mismo contacto — perdido sin rastro. Ahora CADA mensaje
+    // perdido deja su burbuja (el dedup real lo da el msg_id); el throttle es solo del log.
+    const yaLog = U.ilegibleAvisado.get(tel) && ahora - U.ilegibleAvisado.get(tel) < 6 * 3600000;
+    U.ilegibleAvisado.set(tel, ahora);
+    const placeholder = '⚠️ [mensaje no descifrado]';
+    await guardar({ telefono: tel, nombre: m.pushName || null, mensaje: placeholder, direccion: 'in', tipo: 'text', mensaje_id: m.key.id, ai_generated: 0 }).catch(() => {});
+    guardarMensajeNuevo({ tel, msgId: m.key.id, ts: ahora, direccion: 'in', emisor: m.pushName || null, texto: placeholder, tipo: 'text', nombre: m.pushName || null, ai_generated: 0 }).catch(() => {});
+    emitir({ tipo: 'mensaje', telefono: tel, mensaje: placeholder, direccion: 'in', timestamp: Math.floor(ahora / 1000), nombre: m.pushName || null, msg_id: m.key.id });
+    if (!yaLog) console.log('[ilegible] Bad MAC de ' + tel.slice(-4) + ' (registro silencioso)');
+}
+
+// ── GHOSTING ETAPA 3: el toque de las 3 HORAS (único auto-envío de etapa 3) ──
+// Cada ~15 min pregunta al cerebro (ghost_scan) quién lleva 3h sin contestar tras algo
+// que le mandamos; el cerebro aplica TODOS los candados y devuelve la frase exacta.
+// Además manda al personal del owner la lista (nombre+tel) para que les marque.
+const GHOST_SCAN = process.env.GHOST_SCAN !== '0';
+const GHOST_SCAN_MS = Number(process.env.GHOST_SCAN_MS || 15 * 60000);
+const OWNER_PERSONAL = (process.env.OWNER_PERSONAL || '5218120066355');
+U.ghostEnCurso = false;
+async function correrGhostScan() {
+    if (!GHOST_SCAN || U.estado !== 'conectado' || U.ghostEnCurso) return;
+    U.ghostEnCurso = true;
+    try {
+        const r = await fetch(OPENER_AUTO_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'ghost_scan' })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (d && d.ok && Array.isArray(d.enviar) && d.enviar.length) {
+            for (const g of d.enviar) {
+                let p = String(g.telefono).replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
+                try {
+                    if (g.foto) await autoEnviarFotos(p, [g.foto]);
+                    else await autoEnviarTexto(p, g.texto);
+                    console.log('[rescate] →', p.slice(-4), g.foto ? '📸' : String(g.texto || '').slice(0, 40));
+                } catch (e) { console.error('[rescate] envío:', e.message); }
+                await new Promise(s => setTimeout(s, 1500));
+            }
+            // Lista al personal del owner — envío directo (NO se persiste en FyraChat/SalesBrain).
+            if (d.reporte) {
+                try {
+                    const dest = U.phoneALid.has(OWNER_PERSONAL) ? (U.phoneALid.get(OWNER_PERSONAL) + '@lid') : (OWNER_PERSONAL + '@s.whatsapp.net');
+                    const rr = await U.sock.sendMessage(dest, { text: d.reporte });
+                    if (rr?.key?.id) { U.enviadosPorPanel.add(rr.key.id); U.sentStore.set(rr.key.id, rr); setTimeout(() => { U.enviadosPorPanel.delete(rr.key.id); U.sentStore.delete(rr.key.id); }, 60 * 60000); }
+                } catch (e) { console.error('[ghost-3h] reporte:', e.message); }
+            }
+        }
+    } catch (e) { console.error('[ghost-3h] scan:', e.message); }
+    U.ghostEnCurso = false;
+}
+if (tenant.id === 0) U.ghostTimer = setInterval(correrGhostScan, GHOST_SCAN_MS);
+async function registrarManualIlegible(m) {
+    const tel = telefonoReal(m);
+    if (!tel) return;
+    const t = m.messageTimestamp;
+    const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t);
+    const ts = (isFinite(n) && n > 1e9) ? n * 1000 : Date.now();
+    console.log('[ilegible-out] manual tuyo cifrado en ' + tel + ' — registrado como marcador');
+    await guardar({ telefono: tel, nombre: null, mensaje: '[mensaje tuyo — no se pudo leer]', direccion: 'out', tipo: 'text', mensaje_id: m.key.id, ai_generated: 0 }).catch(() => {});
+    await guardarMensajeNuevo({ tel, msgId: m.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: '[mensaje tuyo — no se pudo leer]', tipo: 'text', nombre: null, ai_generated: 0 }).catch(() => {});
+}
+
+    U.apiSend = async (res, body) => {
+        {
+            try {
+                const { phone, text, image, location, manual } = JSON.parse(body || '{}');
+                // FIRMA MANUAL (caso Gerardo 2026-09-05): manual:true = lo tecleó el owner en FyraChat → copia firmada como SUYA (ai_generated=0)
+                const aiFlag = manual === true ? 0 : 1;
+                // Ahora se acepta texto Y/O imagen Y/O pin de ubicación (paquete de ubicación).
+                if (!phone || (!text && !image && !location)) { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'phone y (text|image|location) requeridos' })); }
+                if (U.estado !== 'conectado') { res.statusCode = 503; return res.end(JSON.stringify({ ok: false, error: 'whatsapp no conectado' })); }
+                let p = String(phone).replace(/\D/g, '');
+                if (U.lidAPhone.has(p)) p = U.lidAPhone.get(p);        // si llegó un @lid, traducir a teléfono real
+                if (p.length === 10) p = '521' + p;
+                // MANDAR al @lid si lo conocemos (WhatsApp migró a direccionamiento LID).
+                let destino = U.phoneALid.has(p) ? (U.phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
+                // ENVÍO EN FRÍO (vendedores): si NO tenemos el @lid cacheado, resolver el JID REAL
+                // con onWhatsApp antes de mandar. Sin esto, un @s.whatsapp.net a un contacto que
+                // WhatsApp migró a LID (o con el "1" mexicano que ya no usa) se marca "enviado"
+                // pero WhatsApp lo TIRA → nunca llega. Probamos con y sin el "1".
+                if (!U.phoneALid.has(p)) {
+                    try {
+                        const variantes = /^521\d{10}$/.test(p) ? [p, '52' + p.slice(3)] : [p];
+                        let hit = null;
+                        for (const v of variantes) {
+                            const wa = await U.sock.onWhatsApp(v).catch(() => null);
+                            const h = Array.isArray(wa) && wa[0] ? wa[0] : null;
+                            if (h && (h.lid || h.jid) && h.exists !== false) { hit = h; break; }
+                        }
+                        if (hit) {
+                            destino = hit.lid || hit.jid;           // JID canónico (incluye @lid si aplica)
+                            if (String(destino).endsWith('@lid')) { const lid = String(destino).split('@')[0]; U.phoneALid.set(p, lid); U.lidAPhone.set(lid, p); }
+                        }
+                    } catch (e) { console.error('[send] onWhatsApp resolve falló:', e.message); }  // fallback al destino por defecto
+                }
+
+                // Envía UN mensaje. persistir=true → lo guarda/emite a FyraChat (texto).
+                // persistir=false → SOLO lo manda a WhatsApp (imagen/pin del paquete: no se
+                // muestran como burbuja en FyraChat; el texto formal ya representa el paquete).
+                const enviarUno = async (content, repTexto, tipo, persistir) => {
+                    const r = await U.sock.sendMessage(destino, content);
+                    if (r?.key?.id) {
+                        U.enviadosPorPanel.add(r.key.id);
+                        U.sentStore.set(r.key.id, r);
+                        setTimeout(() => { U.enviadosPorPanel.delete(r.key.id); U.sentStore.delete(r.key.id); }, 60 * 60000);  // 60 min: ventana amplia para reenviar en retry-receipts
+                    }
+                    if (persistir) {
+                        const ts = Date.now();
+                        await guardar({ telefono: p, mensaje: repTexto, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
+                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: aiFlag }).catch(() => {});
+                        emitir({ tipo: 'mensaje', telefono: p, mensaje: repTexto, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag });
+                    }
+                    return r;
+                };
+
+                let lastId = null;
+                // 1) CAPTURA branded del mapa — SOLO a WhatsApp (no se muestra en FyraChat)
+                if (image) {
+                    const buf = Buffer.from(String(image).replace(/^data:[^,]+,/, ''), 'base64');
+                    const r = await enviarUno({ image: buf, caption: undefined }, '', 'image', false);
+                    lastId = r?.key?.id || lastId;
+                }
+                // 2) TEXTO (mensaje formal + cita) — este SÍ se muestra en FyraChat
+                if (text) {
+                    const r = await enviarUno({ text }, text, 'text', true);
+                    lastId = r?.key?.id || lastId;
+                    encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
+                }
+                // 3) PIN de ubicación nativo — SOLO a WhatsApp (no se muestra en FyraChat)
+                if (location && location.lat != null && location.lng != null) {
+                    const loc = { degreesLatitude: Number(location.lat), degreesLongitude: Number(location.lng) };
+                    if (location.name) loc.name = String(location.name);
+                    if (location.address) loc.address = String(location.address);
+                    const r = await enviarUno({ location: loc }, '', 'location', false);
+                    lastId = r?.key?.id || lastId;
+                }
+                res.end(JSON.stringify({ ok: true, messageId: lastId }));
+            } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ ok: false, error: e.message })); }
+        }
+    };
+    U.apiSendFotos = async (res, body) => {
+        {
+            try {
+                const { phone, urls } = JSON.parse(body || '{}');
+                if (!phone || !Array.isArray(urls) || !urls.length) { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'phone y urls[] requeridos' })); }
+                if (U.estado !== 'conectado') { res.statusCode = 503; return res.end(JSON.stringify({ ok: false, error: 'whatsapp no conectado' })); }
+                let p = String(phone).replace(/\D/g, '');
+                if (U.lidAPhone.has(p)) p = U.lidAPhone.get(p);
+                if (p.length === 10) p = '521' + p;
+                await autoEnviarFotos(p, urls);
+                res.end(JSON.stringify({ ok: true, n: urls.length }));
+            } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ ok: false, error: e.message })); }
+        }
+    };
+    U.conectar = conectar;
+    U.cerrar = async (motivo) => {
+        try { if (U.ghostTimer) clearInterval(U.ghostTimer); } catch (e) {}
+        try { if (U.reconectTimer) clearTimeout(U.reconectTimer); } catch (e) {}
+        U.genConexion++;                                             // cualquier evento del socket viejo se ignora
+        try { if (U.sock) await U.sock.logout(); } catch (e) {}
+        try { if (U.sock) U.sock.end(undefined); } catch (e) {}
+        U.estado = 'desvinculado';
+        reportarSesion(tenant.id, 'desvinculado', motivo || 'baja');
+    };
+    return U;
+}
+
+// Abrir / cerrar universos en caliente (sin reiniciar el proceso; los demás ni se enteran)
+async function abrirUniverso(tenant) {
+    if (universos.has(tenant.id)) return universos.get(tenant.id);
+    const U = crearUniverso(tenant);
+    universos.set(tenant.id, U);
+    await U.conectar();
+    return U;
+}
+async function cerrarUniverso(tenantId, borrarCredenciales) {
+    const U = universos.get(tenantId); if (!U) return false;
+    await U.cerrar('baja');
+    universos.delete(tenantId);
+    if (borrarCredenciales) {
+        const dir = path.join(__dirname, 'auth', String(tenantId));
+        try {   // borrado REAL: sobrescribir cada archivo y luego eliminar (Fase 7 lo cifra en reposo)
+            for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); const n = fs.statSync(p).size; fs.writeFileSync(p, Buffer.alloc(n, 0)); fs.unlinkSync(p); }
+            fs.rmdirSync(dir);
+        } catch (e) { console.error('[baja] borrando auth/' + tenantId + ':', e.message); }
+    }
+    return true;
+}
+async function cargarTenants() {
+    await db.execute('CREATE TABLE IF NOT EXISTS tenants (id INTEGER PRIMARY KEY, telefono TEXT UNIQUE, nombre TEXT, activo INTEGER DEFAULT 1, config_json TEXT, created_at INTEGER)');
+    await db.execute('CREATE TABLE IF NOT EXISTS wa_sessions (tenant_id INTEGER PRIMARY KEY, estado TEXT, motivo TEXT, ultimo_evento INTEGER, ultimo_mensaje INTEGER, qr_pendiente INTEGER DEFAULT 0, updated INTEGER)');
+    const r = await db.execute('SELECT id, telefono, nombre, config_json FROM tenants WHERE activo = 1 ORDER BY id');
+    let rows = r.rows.map(x => ({ id: Number(x.id), telefono: String(x.telefono || ''), nombre: String(x.nombre || ''), config: (() => { try { return JSON.parse(x.config_json || '{}'); } catch (e) { return {}; } })() }));
+    // TENANTS_SOLO=99,100 → arranque acotado (pruebas locales: JAMÁS abrir el tenant 0 fuera del VPS)
+    if (process.env.TENANTS_SOLO) { const solo = new Set(process.env.TENANTS_SOLO.split(',').map(Number)); rows = rows.filter(t => solo.has(t.id)); }
+    return rows;
+}
+// LATIDO: cada 60s persiste el último mensaje recibido por sesión (detecta zombis desde Sales Brain)
+setInterval(() => {
+    for (const [id, U] of universos) {
+        if (U.ultimoRecibido) db.execute({ sql: 'UPDATE wa_sessions SET ultimo_mensaje=?, updated=? WHERE tenant_id=?', args: [U.ultimoRecibido, Date.now(), id] }).catch(() => {});
+    }
+}, 60000);
+
+// ═══════════════════════ SERVIDOR HTTP (una puerta, muchos universos) ═══════════════════════
+const leerBody = (req) => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => r(b)); });
+const tenantDe = (body) => { const t = Number(body && body.tenant_id); return universos.get(Number.isInteger(t) ? t : 0); };
+const server = http.createServer(async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    const url = new URL(req.url, 'http://x');
+    const conKey = req.headers['x-api-key'] === SEND_KEY;
+    if (url.pathname === '/status') {
+        const lista = [...universos.values()].map(U => ({ tenant_id: U.tenant.id, nombre: U.tenant.nombre, estado: U.estado, conectado: U.estado === 'conectado', lid_map: U.lidAPhone.size, ultimo_mensaje: U.ultimoRecibido || null }));
+        const U0 = universos.get(0);
+        return res.end(JSON.stringify({ ok: true, estado: U0 ? U0.estado : 'sin_tenant_0', conectado: !!(U0 && U0.estado === 'conectado'), lid_map: U0 ? U0.lidAPhone.size : 0, universos: lista }));
+    }
+    let m;
+    if ((m = url.pathname.match(/^\/qr\/(\d+)$/))) {                                   // GET /qr/<tenantId> (con key)
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        const U = universos.get(Number(m[1]));
+        if (!U) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant sin universo abierto' })); }
+        return res.end(JSON.stringify({ ok: true, tenant_id: U.tenant.id, estado: U.estado, qr: U.ultimoQR }));
+    }
+    if (url.pathname === '/qr') {                                                          // compat: tenant 0
+        const U = universos.get(0);
+        return res.end(JSON.stringify({ ok: true, estado: U ? U.estado : 'sin_tenant_0', qr: U ? U.ultimoQR : null }));
+    }
+    if ((m = url.pathname.match(/^\/tenant\/(\d+)\/(open|close)$/)) && req.method === 'POST') {   // alta/baja en caliente (con key)
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        const id = Number(m[1]);
+        try {
+            if (m[2] === 'open') {
+                const r = await db.execute({ sql: 'SELECT id, telefono, nombre, config_json FROM tenants WHERE id=? AND activo=1', args: [id] });
+                if (!r.rows.length) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant no existe o inactivo' })); }
+                const t = r.rows[0];
+                const U = await abrirUniverso({ id, telefono: String(t.telefono || ''), nombre: String(t.nombre || ''), config: (() => { try { return JSON.parse(t.config_json || '{}'); } catch (e) { return {}; } })() });
+                return res.end(JSON.stringify({ ok: true, tenant_id: id, estado: U.estado }));
+            }
+            if (id === 0) { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'el tenant 0 no se da de baja por HTTP' })); }
+            const b = JSON.parse((await leerBody(req)) || '{}');
+            const ok = await cerrarUniverso(id, b.borrar_credenciales !== false);
+            return res.end(JSON.stringify({ ok, tenant_id: id }));
+        } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ ok: false, error: e.message })); }
+    }
+    if (url.pathname === '/api/send' && req.method === 'POST') {
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        const body = await leerBody(req);
+        let parsed = {}; try { parsed = JSON.parse(body || '{}'); } catch (e) {}
+        const U = tenantDe(parsed);                                        // Fase 1: default tenant 0; Fase 3 = guardia de salida
+        if (!U) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant sin universo' })); }
+        return U.apiSend(res, body);
+    }
+    if (url.pathname === '/api/send-fotos' && req.method === 'POST') {
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        const body = await leerBody(req);
+        let parsed = {}; try { parsed = JSON.parse(body || '{}'); } catch (e) {}
+        const U = tenantDe(parsed);
+        if (!U) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant sin universo' })); }
+        return U.apiSendFotos(res, body);
+    }
+    res.statusCode = 404; res.end(JSON.stringify({ ok: false }));
+});
+
+// ═══════════════════════ ARRANQUE: un universo por tenant activo ═══════════════════════
+async function arrancar() {
+    const tenants = await cargarTenants();
+    console.log('[arranque] tenants activos: ' + tenants.map(t => t.id + ':' + (t.nombre || t.telefono)).join(', '));
+    for (const t of tenants) { try { await abrirUniverso(t); } catch (e) { console.error('[arranque] tenant ' + t.id + ':', e.message); } }
+}
+// EL TIMBRE: WebSocket sobre el mismo servidor/puerto. FyraChat se conecta aquí.
+try {
+    const { WebSocketServer } = require('ws');
+    wss = new WebSocketServer({ server });
+    wss.on('connection', (c) => { try { c.send(JSON.stringify({ tipo: 'hola' })); } catch (e) {} });
+    console.log('🔔 Timbre WebSocket listo');
+} catch (e) { console.error('ws no disponible:', e.message); }
+server.listen(PORT, () => console.log('Bridge HTTP en puerto ' + PORT));
+
+arrancar().catch(e => { console.error('FATAL', e); process.exit(1); });
+
+
