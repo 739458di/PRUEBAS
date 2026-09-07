@@ -528,6 +528,7 @@ async function conectar() {
             if (m.messageStubType === STUB_CIPHERTEXT) {
                 resetearSesionContacto(m.key.remoteJid).catch(() => {});
                 if (!m.key.fromMe) manejarMensajeIlegible(m).catch(e => console.error('[ilegible]', e && e.message));
+                else registrarManualIlegible(m).catch(e => console.error('[ilegible-out]', e && e.message));
                 continue;
             }
             const esSaliente = !!m.key.fromMe;                    // lo mandaste TÚ
@@ -868,7 +869,9 @@ const server = http.createServer(async (req, res) => {
         req.on('data', c => body += c);
         req.on('end', async () => {
             try {
-                const { phone, text, image, location } = JSON.parse(body || '{}');
+                const { phone, text, image, location, manual } = JSON.parse(body || '{}');
+                // FIRMA MANUAL (caso Gerardo 2026-09-05): manual:true = lo tecleó el owner en FyraChat → copia firmada como SUYA (ai_generated=0)
+                const aiFlag = manual === true ? 0 : 1;
                 // Ahora se acepta texto Y/O imagen Y/O pin de ubicación (paquete de ubicación).
                 if (!phone || (!text && !image && !location)) { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'phone y (text|image|location) requeridos' })); }
                 if (estado !== 'conectado') { res.statusCode = 503; return res.end(JSON.stringify({ ok: false, error: 'whatsapp no conectado' })); }
@@ -909,9 +912,9 @@ const server = http.createServer(async (req, res) => {
                     }
                     if (persistir) {
                         const ts = Date.now();
-                        await guardar({ telefono: p, mensaje: repTexto, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: 1 }).catch(() => {});
-                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: 1 }).catch(() => {});
-                        emitir({ tipo: 'mensaje', telefono: p, mensaje: repTexto, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id });
+                        await guardar({ telefono: p, mensaje: repTexto, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
+                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: aiFlag }).catch(() => {});
+                        emitir({ tipo: 'mensaje', telefono: p, mensaje: repTexto, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag });
                     }
                     return r;
                 };
@@ -973,3 +976,20 @@ try {
 server.listen(PORT, () => console.log('Bridge HTTP en puerto ' + PORT));
 
 conectar().catch(e => { console.error('FATAL', e); process.exit(1); });
+
+
+// ══ TU MANUAL NO DESCIFRADO (orden owner 2026-08-25, caso Arturo/Mauro): tu saliente
+// escrito del teléfono llegaba cifrado ilegible y se tiraba en silencio — el chat
+// quedaba sin rastro tuyo y el bot le abría al lead como si fuera nuevo. Ahora queda
+// registrado como manual tuyo (ai=0, texto marcador) → la posesión, el candado de
+// chat-iniciado-por-ti y el candado STANDBY trabajan aunque el texto no se pueda leer.
+async function registrarManualIlegible(m) {
+    const tel = telefonoReal(m);
+    if (!tel) return;
+    const t = m.messageTimestamp;
+    const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t);
+    const ts = (isFinite(n) && n > 1e9) ? n * 1000 : Date.now();
+    console.log('[ilegible-out] manual tuyo cifrado en ' + tel + ' — registrado como marcador');
+    await guardar({ telefono: tel, nombre: null, mensaje: '[mensaje tuyo — no se pudo leer]', direccion: 'out', tipo: 'text', mensaje_id: m.key.id, ai_generated: 0 }).catch(() => {});
+    await guardarMensajeNuevo({ tel, msgId: m.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: '[mensaje tuyo — no se pudo leer]', tipo: 'text', nombre: null, ai_generated: 0 }).catch(() => {});
+}
