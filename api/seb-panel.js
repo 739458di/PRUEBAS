@@ -190,19 +190,26 @@ module.exports = async function handler(req, res) {
         // del último mensaje (ult_msg_ts). Orden correcto y sin duplicados.
         if (action === 'chats') {
             const duenos = await telefonosDueno();
+            // Fase 2: ?vendedor=<tenant> → SOLO sus chats delegados (hilos con sufijo #t<id>); sin vendedor = tenant 0 (todo lo de siempre)
+            let tenantIdChats = 0;
+            if (req.query.vendedor) {
+                const tR = await query("SELECT id FROM tenants WHERE (id = ? OR telefono = ?) AND activo=1", [/^\d{1,4}$/.test(String(req.query.vendedor)) ? Number(req.query.vendedor) : -1, (() => { const d = String(req.query.vendedor).replace(/\D/g, ''); return d.length === 10 ? '521' + d : d; })()]);
+                if (!tR.length) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+                tenantIdChats = Number(tR[0].id);
+            }
             const rows = await query(
                 "SELECT channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, is_dueno_chat " +
-                "FROM conversaciones WHERE source='whatsapp' AND ult_msg_ts IS NOT NULL " +
-                "ORDER BY ult_msg_ts DESC LIMIT 120");
+                "FROM conversaciones WHERE source='whatsapp' AND ult_msg_ts IS NOT NULL AND COALESCE(tenant_id,0) = ? " +
+                "ORDER BY ult_msg_ts DESC LIMIT 120", [tenantIdChats]);
             const pend = await query("SELECT telefono, COUNT(*) n FROM seb_queue WHERE estado='pendiente' GROUP BY telefono");
             const pendMap = {}; pend.forEach(p => pendMap[p.telefono] = p.n);
             const porTel = new Map();
             for (const row of rows) {
                 if (row.is_dueno_chat === 1) continue;                 // chat de dueño → ocultar
-                const tel = row.telefono || (row.channel_thread_id || '').split(':')[1] || '';
+                const tel = row.telefono || (row.channel_thread_id || '').split(':')[1].split('#')[0] || '';
                 if (!tel) continue;
                 const tel10 = String(tel).replace(/\D/g, '').slice(-10);
-                if (duenos.has(tel10)) continue;                       // dueño por teléfono → ocultar
+                if (!tenantIdChats && duenos.has(tel10)) continue;     // dueño por teléfono → ocultar (solo en el FyraChat del owner)
                 if (porTel.has(tel)) continue;
                 porTel.set(tel, {
                     telefono: tel,
@@ -241,13 +248,16 @@ module.exports = async function handler(req, res) {
             const tel = String(req.query.telefono || '');
             const resets = await cargarResets();
             const resetTs = Number(resets[tel] || 0);   // MODO PRUEBA: todo lo ANTERIOR a esto se ignora (lead nuevo)
-            const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+            const tChat = req.query.vendedor ? await tenantDeParam(req.query.vendedor) : { id: 0 };
+            if (!tChat) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", [hiloDe(tel, tChat.id)]);
             let mensajes = [];
             if (conv.length) {
                 const rows = await query(
-                    "SELECT direccion, texto, ts, msg_id, tipo FROM mensajes WHERE conversacion_id = ? ORDER BY ts ASC, id ASC",
+                    "SELECT direccion, texto, ts, msg_id, tipo, ai_generated FROM mensajes WHERE conversacion_id = ? ORDER BY ts ASC, id ASC",
                     [conv[0].id]);
-                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id, tipo: m.tipo || 'text' }));
+                // ai: 0 = lo escribió el owner (teléfono o FyraChat), 1 = lo escribió el bot — FyraChat lo etiqueta
+                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id, tipo: m.tipo || 'text', ai: Number(m.ai_generated) || 0 }));
                 // MODO PRUEBA: solo mensajes posteriores al reinicio
                 if (resetTs) mensajes = mensajes.filter(m => (m.timestamp * 1000) >= resetTs);
             }
@@ -399,6 +409,24 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(rT);
         }
 
+        // ============ MATCH DIRECTO DESDE EL CALENDAR (orden owner 2026-08-24) ============
+        // Agendar en el Calendar = la confirmación del dueño ya viene acreditada por
+        // el owner → LA MISMA máquina del match arranca los recordatorios de una vez
+        // (víspera, día D, 1h antes). Distinto timbre, mismo funcionamiento.
+        if (action === 'match_directo' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
+                return res.status(401).json({ ok: false, error: 'key invalida' });
+            }
+            const rMD = await citasVivas.matchDirectoCalendar({
+                comprador_tel: req.body.comprador_tel, comprador_nombre: req.body.comprador_nombre || null,
+                dueno_tel: req.body.dueno_tel || '', dueno: req.body.dueno || null,
+                auto_id: req.body.auto_id || null, auto_nombre: req.body.auto_nombre || null,
+                fecha: req.body.fecha || '', hora: req.body.hora || '', cita_ts: Number(req.body.cita_ts) || null,
+                avisar: !!req.body.avisar
+            });
+            return res.status(200).json(rMD);
+        }
+
         // ============ CANCELAR MATCH MANUAL (orden owner 2026-07-18) ============
         // El botón ✕ del Calendar entra por LA MISMA máquina que la cancelación por
         // WhatsApp del comprador (ejecutarCancelacion): marca la fila y le avisa al
@@ -420,6 +448,126 @@ module.exports = async function handler(req, res) {
         // El bridge llama aquí cuando llega un primer contacto. Decide si aplica
         // (comprador, primer contacto, auto resuelto, no vendedor) y devuelve la
         // RÁFAGA del playbook. NO crea sugerencia pendiente: es para enviar solo.
+        // ══════════ FASE 2 — FYRACHAT POR VENDEDOR (tenant) ══════════
+        // ?vendedor=<tenant id o teléfono>. El tenant 0 (owner) = FyraChat de siempre.
+        const BRIDGE_BASE = (process.env.BRIDGE_SEND_URL || 'http://137.184.199.19:3000/api/send').replace(/\/api\/send$/, '');
+        const BRIDGE_KEY_T = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2-2026';
+        async function tenantDeParam(v) {
+            const raw = String(v == null ? '' : v).trim();
+            if (!raw) return { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
+            const digits = raw.replace(/\D/g, '');
+            let rows;
+            if (/^\d{1,4}$/.test(raw)) rows = await query("SELECT id, telefono, nombre, config_json FROM tenants WHERE id=? AND activo=1", [Number(raw)]);
+            else { const t = digits.length === 10 ? '521' + digits : digits; rows = await query("SELECT id, telefono, nombre, config_json FROM tenants WHERE telefono=? AND activo=1", [t]); }
+            if (!rows.length) return null;
+            return { id: Number(rows[0].id), telefono: String(rows[0].telefono || ''), nombre: String(rows[0].nombre || ''), config: (() => { try { return JSON.parse(rows[0].config_json || '{}'); } catch (e) { return {}; } })() };
+        }
+        // Autos del tenant: los suyos (dueño por teléfono); el tenant 0 ve todo el inventario activo
+        async function autosDeTenant(t) {
+            if (!t.id) return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
+            return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' AND replace(replace(replace(COALESCE(dueno_telefono,''),'+',''),' ',''),'-','') LIKE ? ORDER BY marca COLLATE NOCASE", ['%' + t.telefono.slice(-10)]);
+        }
+        const hiloDe = (tel, tenantId) => 'whatsapp:' + tel + (tenantId ? '#t' + tenantId : '');
+        if (action === 'tenant_info') {
+            const t = await tenantDeParam(req.query.vendedor);
+            if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
+            const autos = await autosDeTenant(t);
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+        }
+        // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
+        // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
+        if (action === 'delegar' && req.method === 'POST') {
+            const t = await tenantDeParam(req.body.vendedor);
+            if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
+            if (!/^521\d{10}$/.test(telD)) return res.status(400).json({ ok: false, error: 'teléfono inválido — 10 dígitos' });
+            const autos = await autosDeTenant(t);
+            const auto = autos.find(a => Number(a.id) === Number(req.body.auto_id) || Number(a.fyradrive_web_id) === Number(req.body.auto_id));
+            if (!auto) return res.status(400).json({ ok: false, error: 'ese auto no es del vendedor' });
+            const autoNombre = [auto.marca, auto.modelo, auto.anio].filter(Boolean).join(' ');
+            const nomC = String(req.body.nombre || '').trim();
+            const primerNombre = (t.nombre || 'el vendedor').split(/\s+/)[0];
+            // MACHOTE del opener (propuesto; el owner lo ajusta en config_json.opener_texto si quiere)
+            const plantilla = (t.config && t.config.opener_texto) || 'Hola{nombre}, soy el asistente de {vendedor} para el {auto}. ¿En qué te puedo ayudar?';
+            const opener = String(req.body.opener_texto || plantilla).replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').replace('{vendedor}', primerNombre).replace('{auto}', autoNombre);
+            // tenant 0: chat delegado = chat del owner de siempre (nuevo_chat) — sin universo aparte
+            if (!t.id) {
+                const ex = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + telD]);
+                if (!ex.length) await run("INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, is_dueno_chat, source, created_at, tenant_id) VALUES (?,?,?,?,?,?,0,0,'whatsapp',?,0)", ['whatsapp:' + telD, telD, nomC || null, '', 'out', Date.now(), Date.now()]);
+                try { await require('../lib/seb/canal-messenger.js').marcarOwner(telD); } catch (e) { }
+                try { await run("UPDATE wa_conversations SET auto_id_activo=? WHERE telefono=?", [auto.fyradrive_web_id || auto.id, telD]); } catch (e) { }
+            }
+            let r = null;
+            try {
+                const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/delegar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD, car_id: auto.fyradrive_web_id || auto.id, car_nombre: autoNombre, comprador_nombre: nomC || null, opener_texto: t.id ? opener : null, activado_por: 'fyrachat' }) });
+                r = await fr.json().catch(() => ({ ok: false, error: 'puente ilegible' }));
+            } catch (e) { r = { ok: false, error: 'puente: ' + e.message }; }
+            // tenant 0: el opener sale por la puerta manual de siempre (firmado como bot)
+            if (!t.id) {
+                try {
+                    const fr2 = await fetch(BRIDGE_BASE + '/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ phone: telD, text: opener }) });
+                    const d2 = await fr2.json().catch(() => ({})); r = Object.assign({ ok: true }, r || {}, { opener_enviado: fr2.ok && d2.ok !== false });
+                } catch (e) { r = Object.assign({ ok: true }, r || {}, { opener_enviado: false, error: e.message }); }
+            }
+            return res.status(200).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener }, r || {}));
+        }
+        if (action === 'soltar' && req.method === 'POST') {
+            const t = await tenantDeParam(req.body.vendedor);
+            if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
+            try {
+                const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/soltar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD }) });
+                return res.status(200).json(await fr.json().catch(() => ({ ok: false, error: 'puente ilegible' })));
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+
+        // ══ VENDEDOR ASIGNADO A LA CITA (orden owner 2026-08-25): agregar desde el
+        // Calendar, confirmar (él por WhatsApp o el owner aquí) y listar.
+        // ══ NUEVO CHAT desde FyraChat (orden owner 2026-09-06): él agrega el contacto y le
+        // manda el PRIMER mensaje desde aquí. Nace la conversación (con nombre si lo da) y el
+        // chat queda marcado como SUYO (canal 'owner') → el bot no se mete; el primer envío
+        // sale por el puente firmado como manual (ai=0).
+        if (action === 'nuevo_chat' && req.method === 'POST') {
+            let telN = String(req.body.telefono || '').replace(/\D/g, '');
+            if (telN.length === 10) telN = '521' + telN;
+            if (telN.length === 12 && telN.startsWith('52')) telN = '521' + telN.slice(2);
+            if (!/^521\d{10}$/.test(telN)) return res.status(400).json({ ok: false, error: 'teléfono inválido — 10 dígitos' });
+            const nombreN = String(req.body.nombre || '').trim() || null;
+            try {
+                const ex = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + telN]);
+                let creado = false;
+                if (!ex.length) {
+                    await run("INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, is_dueno_chat, source, created_at) VALUES (?,?,?,?,?,?,0,0,'whatsapp',?)",
+                        ['whatsapp:' + telN, telN, nombreN, '', 'out', Date.now(), Date.now()]);
+                    creado = true;
+                } else if (nombreN && !String(ex[0].nombre || '').trim()) {
+                    await run("UPDATE conversaciones SET nombre=? WHERE id=?", [nombreN, ex[0].id]);
+                }
+                try { await require('../lib/seb/canal-messenger.js').marcarOwner(telN); } catch (e) { }
+                return res.status(200).json({ ok: true, telefono: telN, nombre: nombreN || (ex[0] && ex[0].nombre) || null, creado });
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+
+        if (action === 'cita_vendedor_agregar' && req.method === 'POST') {
+            try {
+                const r = await citasVivas.staffInvitar({ cita_id: req.body.cita_id, nombre: req.body.nombre, tel: req.body.tel });
+                return res.status(200).json(r);
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        if (action === 'cita_vendedor_confirmar' && req.method === 'POST') {
+            try {
+                const r = await citasVivas.staffConfirmar(req.body.id);
+                return res.status(200).json(r);
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        if (action === 'cita_vendedor_lista') {
+            try {
+                const filas = await citasVivas.staffLista(req.query.cita_id);
+                return res.status(200).json({ ok: true, vendedores: filas });
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+
         if (action === 'opener_auto' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             if (!tel) return res.status(400).json({ ok: false, error: 'telefono requerido' });
@@ -467,6 +615,16 @@ module.exports = async function handler(req, res) {
             }
             const entrantes = mensajes.filter(m => m.direccion === 'in');
             if (!entrantes.length) return res.status(200).json({ ok: false, motivo: 'sin_entrantes' });
+            // ══ VENDEDOR ASIGNADO (staff, orden owner 2026-08-25): si este tel tiene una
+            // silla de vendedor viva, su mensaje entra a ESA máquina (sí→confirma, no→
+            // escala, resto→escala) — jamás al flujo de comprador.
+            try {
+                const segsSt = await citasVivas.manejarMensajeStaff(tel, entrantes[entrantes.length - 1].mensaje);
+                if (segsSt !== null) {
+                    if (segsSt && segsSt.length) return res.status(200).json({ ok: true, modo: 'staff', tipo: 'cita_staff', segmentos: segsSt });
+                    return res.status(200).json({ ok: false, motivo: 'staff — escalado al owner' });
+                }
+            } catch (e) { console.error('[staff]', e.message); }
             // ══ COMPRADOR CON MATCH VIVO (WhatsApp real): cancelación / "ya voy en camino"
             // se interpretan ANTES del pipeline (idéntico al sandbox).
             try {
@@ -499,6 +657,39 @@ module.exports = async function handler(req, res) {
                     }
                 }
             } catch (e) { console.error('[campana]', e.message); }
+
+            // ══ CANAL MESSENGER 🔵 (orden owner 2026-08-24): "soy Sebastian de facebook"
+            // manual tuyo = lead de TU canal de Messenger y TÚ llevas el chat — el bot NO
+            // habla (solo lee y registra), el funnel ya quedó adelantado a calificación,
+            // y el "cita confirmada ✅" sigue entrando por su timbre de siempre.
+            try {
+                const cm = require('../lib/seb/canal-messenger.js');
+                const telCM = tel.replace(/\D/g, '');
+                const conClave = cm.tieneClave(mensajes);
+                // ARRANQUE ATÍPICO: solo cuenta si el lead NO viene de un anuncio
+                // (un lead de anuncio con "si me interesa" corto es NORMAL, no atípico)
+                let atipico = false;
+                if (cm.esArranqueAtipico(mensajes)) {
+                    try {
+                        const adRow = await query("SELECT 1 FROM ad_por_telefono WHERE telefono LIKE ? LIMIT 1", ['%' + telCM.slice(-10)]);
+                        atipico = !adRow.length;
+                    } catch (e) { atipico = true; }
+                }
+                const iniciadoOwner = cm.esChatIniciadoPorOwner(mensajes) || atipico;
+                if (conClave || iniciadoOwner || await cm.esMessenger(telCM)) {
+                    // sin clave pero iniciado por el owner (o arranque atípico sin
+                    // anuncio: te conoce/contesta como si ya hubieran hablado) →
+                    // igual queda mudo persistente
+                    if (!conClave && iniciadoOwner) await cm.marcarOwner(telCM);
+                    const regCM = await cm.detectarYRegistrar(telCM);
+                    const nomCM = (regCM && regCM.nombre) || (convRow.length && convRow[0].nombre) || null;
+                    return res.status(200).json({
+                        ok: false, escalar_owner: true,
+                        escala_motivo: 'LEAD TUYO 🔵 — ' + (conClave || (regCM && regCM.messenger) ? 'canal Messenger' : (atipico ? 'contestó como si ya hubieran hablado (tu 1er mensaje no pasó por el puente)' : 'tú iniciaste este chat')) + '; el bot solo lee y registra' + (regCM && regCM.foco ? ' · foco: ' + regCM.foco : ''),
+                        escala_nombre: nomCM, escala_ultimo: entrantes[entrantes.length - 1].mensaje
+                    });
+                }
+            } catch (e) { console.error('[canal-messenger]', e.message); }
 
             // ══ CANDADO STANDBY (🚩fyrachat#8, caso Gustavo 2026-07-12): si TU último mensaje
             // MANUAL (ai_generated=0, escrito por ti desde el teléfono o FyraChat) es un
@@ -1275,7 +1466,7 @@ module.exports = async function handler(req, res) {
                     const r = await fetch(bridgeUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'x-api-key': bridgeKey },
-                        body: JSON.stringify({ phone, text: final, ...extra })
+                        body: JSON.stringify({ phone, text: final, ...extra, manual: resolucion === 'manual' })
                     });
                     const d = await r.json().catch(() => ({}));
                     enviado = r.ok && d.ok !== false;
@@ -1669,7 +1860,10 @@ module.exports = async function handler(req, res) {
                     const r = await fetch(bridgeUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'x-api-key': bridgeKey },
-                        body: JSON.stringify({ phone, text: texto })
+                        // FIRMA MANUAL (caso Gerardo 2026-09-05): texto libre del owner → el puente
+                        // lo guarda como suyo (ai_generated=0) y NO lo retoca. Una sugerencia del
+                        // bot que él aprueba (consume_qid) sigue firmada IA: el texto es del bot.
+                        body: JSON.stringify({ phone, text: texto, manual: (!consumeQid && req.body.manual === true), tenant_id: Number(req.body.tenant_id) || 0 })
                     });
                     const d = await r.json().catch(() => ({}));
                     enviado = r.ok && d.ok !== false;
