@@ -54,7 +54,7 @@ expect {
   eof {}
 }
 EXP
-)
+) || true
 if ! echo "$OUT" | grep -q 'VPS: status'; then
   echo "   (SSH directo no respondió → relay de Vercel)"
   BODY=$(python3 -c "import json,sys; print(json.dumps({'key':sys.argv[1],'cmd':'echo '+sys.argv[2]+' | base64 -d | bash'}))" "${VPS_EXEC_KEY:-fyra-vpsexec-2026-0905}" "$REM64")
