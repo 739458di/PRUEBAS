@@ -425,7 +425,7 @@ async function conectar() {
         logger,
         printQRInTerminal: false,
         syncFullHistory: false,
-        browser: ['Fyradrive · Asistente', 'Chrome', '120.0.0'],
+        browser: tenant.id === 0 ? ['Fyradrive', 'Chrome', '120.0.0'] : baileys.Browsers.ubuntu('Chrome'),   // código de vinculación: WhatsApp exige identidad estándar
         shouldSyncHistoryMessage: () => false,   // Ley 2: nada de historial
         markOnlineOnConnect: true,
         msgRetryCounterCache,
