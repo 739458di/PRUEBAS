@@ -467,7 +467,7 @@ module.exports = async function handler(req, res) {
             if (!t.id) return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
             return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' AND replace(replace(replace(COALESCE(dueno_telefono,''),'+',''),' ',''),'-','') LIKE ? ORDER BY marca COLLATE NOCASE", ['%' + t.telefono.slice(-10)]);
         }
-        const hiloDe = (tel, tenantId) => 'whatsapp:' + tel + (tenantId ? '#t' + tenantId : '');
+        function hiloDe(tel, tenantId) { return 'whatsapp:' + tel + (tenantId ? '#t' + tenantId : ''); }
         if (action === 'tenant_info') {
             const t = await tenantDeParam(req.query.vendedor);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });

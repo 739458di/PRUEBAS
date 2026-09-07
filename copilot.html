@@ -441,6 +441,7 @@ function onTimbre(d){
   } else { unread[d.telefono]=0; persistUnread(); }                         // saliente → leído
   if (!document.getElementById('scr-chat').classList.contains('open')) pintarLista();
   // 2) CHAT ABIERTO: pintar la burbuja nueva al instante (con dedup)
+  if (Number(d.tenant_id || 0) !== (TENANT ? Number(TENANT.id) : 0)) return;   // Fase 2: el timbre solo pinta eventos de ESTE universo
   if (TEL === d.telefono){
     // si es el ECO de un mensaje que YO acabo de mandar (ya pintado optimista) → saltar
     if (d.direccion==='out' && recienEnviado.has(d.mensaje) && (Date.now()-recienEnviado.get(d.mensaje) < 30000)){
