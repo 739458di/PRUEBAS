@@ -1067,6 +1067,21 @@ async function registrarManualIlegible(m) {
         console.log('[t' + tenant.id + '] soltado chat ' + jidHash(p));
         return { ok: true };
     };
+    // ══ VINCULACIÓN POR CÓDIGO (sin QR): WhatsApp → Dispositivos vinculados → Vincular con número
+    // de teléfono. El vendedor teclea el código en SU teléfono. Solo mientras no esté registrado.
+    U.codigoVinculacion = async () => {
+        if (!U.sock) return { ok: false, error: 'universo sin socket' };
+        if (U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered) return { ok: false, error: 'ya está vinculado' };
+        const tel = String(tenant.telefono || '').replace(/\D/g, '');
+        if (!tel) return { ok: false, error: 'tenant sin teléfono' };
+        try {
+            const raw = await U.sock.requestPairingCode(tel);
+            const code = String(raw || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+            U.ultimoCodigo = code; U.estado = 'esperando_codigo';
+            reportarSesion(tenant.id, 'esperando_codigo', 'código pedido');
+            return { ok: true, codigo: code.length === 8 ? code.slice(0, 4) + '-' + code.slice(4) : code };
+        } catch (e) { return { ok: false, error: e.message }; }
+    };
     U.conectar = conectar;
     U.cerrar = async (motivo) => {
         try { if (U.ghostTimer) clearInterval(U.ghostTimer); } catch (e) {}
@@ -1165,6 +1180,13 @@ const server = http.createServer(async (req, res) => {
             const ok = await cerrarUniverso(id, b.borrar_credenciales !== false);
             return res.end(JSON.stringify({ ok, tenant_id: id }));
         } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ ok: false, error: e.message })); }
+    }
+    if ((m = url.pathname.match(/^\/tenant\/(\d+)\/codigo$/)) && req.method === 'POST') {           // vinculación por código (con key)
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        const U = universos.get(Number(m[1]));
+        if (!U) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant sin universo abierto' })); }
+        try { return res.end(JSON.stringify(Object.assign({ tenant_id: U.tenant.id, telefono: U.tenant.telefono }, await U.codigoVinculacion()))); }
+        catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ ok: false, error: e.message })); }
     }
     if ((m = url.pathname.match(/^\/tenant\/(\d+)\/(delegar|soltar)$/)) && req.method === 'POST') {   // Fase 2 (con key)
         if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
