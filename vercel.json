@@ -11,6 +11,9 @@
     },
     "api/seb-panel.js": {
       "maxDuration": 60
+    },
+    "api/vps-exec.js": {
+      "maxDuration": 60
     }
   }
 }

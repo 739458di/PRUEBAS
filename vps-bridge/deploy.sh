@@ -7,7 +7,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/wa-bridge-v2.js"
 VPS_HOST="${VPS_HOST:-137.184.199.19}"
-VPS_PASS="${VPS_PASS:-$(grep -E '^VPS_PASS=' "$HERE/../.vps-creds" 2>/dev/null | cut -d= -f2- || true)}"
+VPS_PASS="${VPS_PASS:-$(grep -E "^VPS_PASSWORD=" "$HERE/../.vps-creds" 2>/dev/null | cut -d= -f2- || true)}"
 [ -z "$VPS_PASS" ] && { echo "✗ falta VPS_PASS (env o PRUEBAS/.vps-creds)"; exit 1; }
 node --check "$SRC" || { echo "✗ sintaxis inválida en el repo — no se despliega"; exit 1; }
 SIZE=$(wc -c < "$SRC" | tr -d ' ')
@@ -21,12 +21,38 @@ put('deploy/wa-bridge-v2-' + Date.now() + '.js', fs.readFileSync(process.argv[1]
 echo "   $URL"
 echo "② en el VPS: bajar → verificar → respaldar → reiniciar (UNA sesión SSH)…"
 STAMP=$(date +%Y%m%d-%H%M)
-expect <<EXP 2>/dev/null | tr -d '\r' | grep -E '^\[VPS\]'
-set timeout 90
-spawn ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 root@$VPS_HOST "cd /root/wa-bridge && curl -s -o /tmp/wb.new '$URL' && S=\\\$(wc -c < /tmp/wb.new) && echo \"[VPS] bytes recibidos: \\\$S (esperados $SIZE)\" && [ \"\\\$S\" = \"$SIZE\" ] && node --check /tmp/wb.new && echo '[VPS] sintaxis ok' && cp wa-bridge-v2.js wa-bridge-v2.js.bak-$STAMP && cp /tmp/wb.new wa-bridge-v2.js && pm2 restart fyra-bridge >/dev/null && sleep 8 && echo \"[VPS] status: \\\$(curl -s --max-time 5 http://127.0.0.1:3000/status)\" || echo '[VPS] ✗ FALLÓ una verificación — NO se reinició'"
+# El guion remoto viaja en base64: sin comillas anidadas ni corchetes que expect/Tcl malinterprete.
+REMOTE=$(cat <<REM
+cd /root/wa-bridge || exit 1
+curl -s -o /tmp/wb-new.js '$URL' || { echo 'VPS: curl fallo'; exit 1; }
+S=\$(wc -c < /tmp/wb-new.js)
+echo "VPS: bytes recibidos \$S (esperados $SIZE)"
+[ "\$S" = "$SIZE" ] || { echo 'VPS: FALLO tamano — NO se reinicia'; exit 1; }
+node --check /tmp/wb-new.js || { echo 'VPS: FALLO sintaxis — NO se reinicia'; exit 1; }
+cp wa-bridge-v2.js wa-bridge-v2.js.bak-$STAMP
+cp /tmp/wb-new.js wa-bridge-v2.js
+pm2 restart fyra-bridge >/dev/null 2>&1
+sleep 8
+echo "VPS: status \$(curl -s --max-time 5 http://127.0.0.1:3000/status)"
+echo "VPS: respaldo wa-bridge-v2.js.bak-$STAMP"
+REM
+)
+REM64=$(printf '%s' "$REMOTE" | base64 | tr -d '\n')
+# Canal 1: SSH directo desde la Mac. Canal 2 (si el puerto 22 no responde desde esta red):
+# el relay de Vercel /api/vps-exec (solo key; la contraseña vive en Vercel).
+OUT=$(expect <<EXP 2>/dev/null | tr -d '\r' | grep -E '^VPS:'
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 root@$VPS_HOST "echo $REM64 | base64 -d | bash"
 expect {
   "password:" { send "$VPS_PASS\r"; exp_continue }
-  timeout { puts "[VPS] ✗ timeout" }
+  timeout { puts "VPS: timeout" }
   eof {}
 }
 EXP
+)
+if ! echo "$OUT" | grep -q 'VPS: status'; then
+  echo "   (SSH directo no respondió → relay de Vercel)"
+  BODY=$(python3 -c "import json,sys; print(json.dumps({'key':sys.argv[1],'cmd':'echo '+sys.argv[2]+' | base64 -d | bash'}))" "${VPS_EXEC_KEY:-fyra-vpsexec-2026-0905}" "$REM64")
+  OUT=$(curl -s --max-time 90 -X POST https://fyrachat.vercel.app/api/vps-exec -H 'Content-Type: application/json' -d "$BODY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('stdout','')+('\n[error] '+str(d.get('error')) if not d.get('ok') else ''))")
+fi
+echo "$OUT"
