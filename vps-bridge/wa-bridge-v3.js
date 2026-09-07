@@ -303,6 +303,10 @@ function authDirDe(tenant) {
     fs.mkdirSync(dir, { recursive: true });
     return dir;
 }
+// Limpia las credenciales de un universo NO registrado (vinculación fallida) para reintentar en limpio
+function limpiarAuth(tenant) {
+    try { const dir = path.join(__dirname, 'auth', String(tenant.id)); for (const f of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, f)); } catch (e) {}
+}
 // Estado de sesión → Sales Brain (Turso wa_sessions; la Fase 6 lo vuelve endpoint)
 function reportarSesion(tenantId, estado, motivo) {
     db.execute({ sql: 'INSERT INTO wa_sessions (tenant_id, estado, motivo, ultimo_evento, updated) VALUES (?,?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET estado=excluded.estado, motivo=excluded.motivo, ultimo_evento=excluded.ultimo_evento, updated=excluded.updated',
@@ -405,6 +409,7 @@ async function conectar() {
         for (const row of cached.rows) { U.lidAPhone.set(String(row.lid), String(row.phone)); U.phoneALid.set(String(row.phone), String(row.lid)); }
         console.log('[lid-map] cargados ' + U.lidAPhone.size + ' mapeos');
     } catch (e) { console.error('[lid-map] no pude cargar:', e.message); }
+    U.sockDesde = Date.now();
 
     const { state, saveCreds } = await useMultiFileAuthState(authDirDe(tenant));
     let version;
@@ -478,8 +483,11 @@ async function conectar() {
         if (connection === 'open') { U.estado = 'conectado'; U.ultimoQR = null; U.reintentos = 0; reportarSesion(tenant.id, 'vinculado', 'open'); console.log('\n✅ WHATSAPP CONECTADO (gen ' + gen + ')\n'); }
         if (connection === 'close') {
             const code = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : 0;
-            const reconectar = code !== DisconnectReason.loggedOut;
-            reportarSesion(tenant.id, reconectar ? 'reconectando' : 'desvinculado', 'close code ' + code + (reconectar ? '' : ' — requiere reescaneo'));
+            const registrado = !!(U.sock && U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered);
+            const vinculacionFallida = code === DisconnectReason.loggedOut && !registrado;   // 401 sin haberse vinculado nunca
+            const reconectar = code !== DisconnectReason.loggedOut || vinculacionFallida;
+            if (vinculacionFallida) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }
+            reportarSesion(tenant.id, reconectar ? (vinculacionFallida ? 'esperando_qr' : 'reconectando') : 'desvinculado', 'close code ' + code + (vinculacionFallida ? ' — vinculación fallida, se reabre limpio' : (reconectar ? '' : ' — requiere reescaneo')));
             U.estado = 'cerrado';
             U.reintentos++;
             const espera = Math.min(30000, 3000 * U.reintentos);
@@ -1072,8 +1080,18 @@ async function registrarManualIlegible(m) {
     U.codigoVinculacion = async () => {
         if (!U.sock) return { ok: false, error: 'universo sin socket' };
         if (U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered) return { ok: false, error: 'ya está vinculado' };
-        const tel = String(tenant.telefono || '').replace(/\D/g, '');
+        const tel = String(tenant.telefono || '').replace(/\D/g, '').replace(/^521(\d{10})$/, '52$1');   // WhatsApp MX: 52 + 10 dígitos
         if (!tel) return { ok: false, error: 'tenant sin teléfono' };
+        // Conexión FRESCA: WhatsApp corta a los ~60-100 s de espera; el código debe nacer recién conectado
+        const fresca = U.sockDesde && (Date.now() - U.sockDesde) < 25000 && U.ultimoQR;
+        if (!fresca) {
+            limpiarAuth(tenant); U.ultimoQR = null; U.estado = 'reconectando';
+            try { if (U.reconectTimer) clearTimeout(U.reconectTimer); } catch (e) {}
+            U.conectando = false;
+            await conectar();
+            for (let i = 0; i < 40 && !U.ultimoQR; i++) await sleep(500);   // hasta 20 s a que WhatsApp abra la puerta
+            if (!U.ultimoQR) return { ok: false, error: 'WhatsApp no abrió la conexión para pedir el código; intenta de nuevo' };
+        }
         try {
             const raw = await U.sock.requestPairingCode(tel);
             const code = String(raw || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
