@@ -56,6 +56,16 @@ async function ddlArranque() {
     await db.execute('CREATE TABLE IF NOT EXISTS ad_por_telefono (telefono TEXT PRIMARY KEY, ad_context TEXT, updated_at INTEGER)');
     // Modo prueba: punto de reinicio por teléfono (solo se ven mensajes posteriores)
     await db.execute('CREATE TABLE IF NOT EXISTS prueba_reset (telefono TEXT PRIMARY KEY, reset_ts INTEGER)');
+    // ETAPA 2 (orden owner 2026-09-08, base por universo): la DELEGACIÓN chat → auto vive en `delegaciones`
+    // (con historial); `chats_activos` sigue en DUAL-WRITE hasta la Etapa 3. Mismo DDL que PRUEBAS/lib/seb/universo.js.
+    await db.execute(`CREATE TABLE IF NOT EXISTS delegaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL,
+        auto_id INTEGER, auto_nombre TEXT, activado_por TEXT, desde INTEGER NOT NULL, hasta INTEGER,
+        opener_pendiente INTEGER DEFAULT 0, opener_texto TEXT, motivo TEXT, created INTEGER)`);
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_deleg_chat_hasta ON delegaciones(chat_id, hasta)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_deleg_tenant_hasta ON delegaciones(tenant_id, hasta)');
+    try { await db.execute('ALTER TABLE conversaciones ADD COLUMN auto_id_activo INTEGER'); } catch (e) {}   // el foco también como columna del chat (espejo)
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_conv_tenant_tel ON conversaciones(tenant_id, telefono)');
     _ddlArranqueHecho = true;
 }
 const adUltimo = new Map();                // tel → { ctx, ts }: mismo anuncio del mismo tel en <5 min → no re-upsert (se marca SOLO si la escritura tuvo éxito)
@@ -738,7 +748,7 @@ async function conectar() {
                 const textoD = textoDeMensaje(m.message);
                 const tsD = (() => { const t = m.messageTimestamp; const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t); return (isFinite(n) && n > 1e9) ? n * 1000 : Date.now(); })();
                 if (fromMeD) chatD.ultimo_from_me = tsD; else chatD.ultimo_entrante = tsD;
-                db.execute({ sql: 'UPDATE chats_activos SET ' + (fromMeD ? 'ultimo_from_me' : 'ultimo_entrante') + '=? WHERE id=?', args: [tsD, chatD.id] }).catch(() => {});
+                if (chatD.ca_id) db.execute({ sql: 'UPDATE chats_activos SET ' + (fromMeD ? 'ultimo_from_me' : 'ultimo_entrante') + '=? WHERE id=?', args: [tsD, chatD.ca_id] }).catch(() => {});   // dual-write (Etapa 2); conversaciones.ult_msg_ts/ult_dir ya lo llevan
                 guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id }).catch(() => {});
                 emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: telD, mensaje: textoD, direccion: fromMeD ? 'out' : 'in', timestamp: Math.floor(tsD / 1000), msg_id: m.key.id, ai_generated: 0 });
                 console.log('[t' + tenant.id + '] ' + (fromMeD ? 'salida dueño' : 'entrada') + ' · chat ' + jidHash(telD) + ' · ' + tipoDeMsg(m.message));
@@ -1201,22 +1211,49 @@ async function registrarManualIlegible(m) {
         }
     };
     // ══ DELEGACIÓN (Fase 2): activa un chat en ESTE universo y manda el opener UNA sola vez (Ley 4)
+    // ETAPA 2 (base por universo): la delegación es universo → chat (conversaciones) → auto, en `delegaciones` con
+    // historial (cambiar de auto = cerrar la activa y abrir otra). DUAL-WRITE: `chats_activos` se sigue escribiendo
+    // igual que antes hasta la Etapa 3. La fila en memoria lleva `id` (delegación) y `ca_id` (chats_activos).
     U.delegar = async ({ tel, car_id, car_nombre, comprador_nombre, opener_texto, activado_por }) => {
         let p = String(tel || '').replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
         if (!/^521\d{10}$/.test(p)) return { ok: false, error: 'teléfono inválido' };
         const now = Date.now();
         let fila = U.chatsActivos.get(p);
-        if (!fila) {
-            const ins = await db.execute({ sql: 'INSERT INTO chats_activos (tenant_id, tel, car_id, car_nombre, comprador_nombre, activado_por, desde, opener_pendiente, opener_texto, created) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                args: [tenant.id, p, car_id || null, car_nombre || null, comprador_nombre || null, activado_por || 'fyrachat', now, opener_texto ? 1 : 0, opener_texto || null, now] });
-            fila = { id: Number(ins.lastInsertRowid), tel: p, car_id, car_nombre, comprador_nombre, opener_pendiente: opener_texto ? 1 : 0, ultimo_from_me: 0, ultimo_entrante: 0 };
-            U.chatsActivos.set(p, fila);
-        } else {
-            await db.execute({ sql: 'UPDATE chats_activos SET car_id=COALESCE(?,car_id), car_nombre=COALESCE(?,car_nombre), comprador_nombre=COALESCE(?,comprador_nombre) WHERE id=?', args: [car_id || null, car_nombre || null, comprador_nombre || null, fila.id] }).catch(() => {});
-            Object.assign(fila, { car_id: car_id || fila.car_id, car_nombre: car_nombre || fila.car_nombre, comprador_nombre: comprador_nombre || fila.comprador_nombre });
-        }
-        // conversación visible en el FyraChat del vendedor aunque nadie haya escrito
-        await guardarMensajeNuevo({ tel: p, msgId: 'deleg_' + fila.id, ts: now, direccion: 'out', emisor: 'sistema', texto: '🤝 Chat delegado' + (car_nombre ? ' · ' + car_nombre : ''), tipo: 'text', nombre: comprador_nombre || null, ai_generated: 1, tenantId: tenant.id }).catch(() => {});
+        const esNueva = !fila;
+        if (!fila) fila = { id: null, ca_id: null, tel: p, car_id: car_id || null, car_nombre: car_nombre || null, comprador_nombre: comprador_nombre || null, opener_pendiente: opener_texto ? 1 : 0, ultimo_from_me: 0, ultimo_entrante: 0 };
+        // ── espejo viejo: chats_activos (igual que antes)
+        try {
+            if (!fila.ca_id) {
+                const ins = await db.execute({ sql: 'INSERT INTO chats_activos (tenant_id, tel, car_id, car_nombre, comprador_nombre, activado_por, desde, opener_pendiente, opener_texto, created) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    args: [tenant.id, p, car_id || null, car_nombre || null, comprador_nombre || null, activado_por || 'fyrachat', now, opener_texto ? 1 : 0, opener_texto || null, now] });
+                fila.ca_id = Number(ins.lastInsertRowid);
+            } else {
+                await db.execute({ sql: 'UPDATE chats_activos SET car_id=COALESCE(?,car_id), car_nombre=COALESCE(?,car_nombre), comprador_nombre=COALESCE(?,comprador_nombre) WHERE id=?', args: [car_id || null, car_nombre || null, comprador_nombre || null, fila.ca_id] }).catch(() => {});
+            }
+        } catch (e) { console.error('[t' + tenant.id + '] chats_activos:', e.message); }
+        if (!esNueva) Object.assign(fila, { car_id: car_id || fila.car_id, car_nombre: car_nombre || fila.car_nombre, comprador_nombre: comprador_nombre || fila.comprador_nombre });
+        U.chatsActivos.set(p, fila);
+        // ── el chat existe en su universo (conversación visible en el FyraChat del vendedor aunque nadie haya escrito)
+        await guardarMensajeNuevo({ tel: p, msgId: 'deleg_' + (fila.ca_id || now), ts: now, direccion: 'out', emisor: 'sistema', texto: '🤝 Chat delegado' + (car_nombre ? ' · ' + car_nombre : ''), tipo: 'text', nombre: comprador_nombre || null, ai_generated: 1, tenantId: tenant.id }).catch(() => {});
+        // ── la DELEGACIÓN (verdad nueva): por chat_id, idempotente; otro auto → historial
+        try {
+            const thread = 'whatsapp:' + p + (tenant.id ? ('#t' + tenant.id) : '');
+            const cv = (await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [thread] })).rows[0];
+            if (cv) {
+                const chatId = Number(cv.id);
+                const act = (await db.execute({ sql: 'SELECT id, auto_id FROM delegaciones WHERE chat_id=? AND hasta IS NULL ORDER BY id DESC LIMIT 1', args: [chatId] })).rows[0];
+                if (act && (!car_id || Number(act.auto_id) === Number(car_id))) {
+                    fila.id = Number(act.id);
+                    await db.execute({ sql: 'UPDATE delegaciones SET auto_nombre=COALESCE(?,auto_nombre), opener_texto=COALESCE(?,opener_texto) WHERE id=?', args: [car_nombre || null, opener_texto || null, fila.id] }).catch(() => {});
+                } else {
+                    if (act) await db.execute({ sql: 'UPDATE delegaciones SET hasta=?, motivo=? WHERE id=?', args: [now, 'delegar', act.id] }).catch(() => {});
+                    const insD = await db.execute({ sql: 'INSERT INTO delegaciones (chat_id, tenant_id, auto_id, auto_nombre, activado_por, desde, hasta, opener_pendiente, opener_texto, motivo, created) VALUES (?,?,?,?,?,?,NULL,?,?,NULL,?)',
+                        args: [chatId, tenant.id, car_id || null, car_nombre || null, activado_por || 'fyrachat', now, fila.opener_pendiente ? 1 : 0, opener_texto || null, now] });
+                    fila.id = Number(insD.lastInsertRowid);
+                }
+                if (car_id) await db.execute({ sql: 'UPDATE conversaciones SET auto_id_activo=? WHERE id=?', args: [Number(car_id), chatId] }).catch(() => {});   // el foco como columna del chat
+            }
+        } catch (e) { console.error('[t' + tenant.id + '] delegaciones:', e.message); }
         let enviado = false, error = null;
         if (opener_texto && fila.opener_pendiente) {
             if (U.estado !== 'conectado') error = 'sesión no conectada — el opener queda pendiente';
@@ -1224,17 +1261,28 @@ async function registrarManualIlegible(m) {
                 try {
                     const r = await autoEnviarTexto(p, String(opener_texto));
                     enviado = !!(r && r.key && r.key.id);
-                    if (enviado) { fila.opener_pendiente = 0; await db.execute({ sql: 'UPDATE chats_activos SET opener_pendiente=0 WHERE id=?', args: [fila.id] }).catch(() => {}); }
+                    if (enviado) {
+                        fila.opener_pendiente = 0;
+                        if (fila.ca_id) await db.execute({ sql: 'UPDATE chats_activos SET opener_pendiente=0 WHERE id=?', args: [fila.ca_id] }).catch(() => {});
+                        if (fila.id) await db.execute({ sql: 'UPDATE delegaciones SET opener_pendiente=0 WHERE id=?', args: [fila.id] }).catch(() => {});
+                    }
                 } catch (e) { error = e.message; }
             }
         }
         console.log('[t' + tenant.id + '] delegado chat ' + jidHash(p) + (enviado ? ' · opener enviado' : ''));
-        return { ok: true, chat_id: fila.id, opener_enviado: enviado, error };
+        return { ok: true, chat_id: fila.ca_id || fila.id, delegacion_id: fila.id, opener_enviado: enviado, error };
     };
     U.soltar = async ({ tel }) => {
         let p = String(tel || '').replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
         const fila = U.chatsActivos.get(p); if (!fila) return { ok: false, error: 'no delegado' };
-        await db.execute({ sql: 'UPDATE chats_activos SET hasta=? WHERE id=?', args: [Date.now(), fila.id] }).catch(() => {});
+        const now = Date.now();
+        // dual-write: se cierra la delegación (por chat, robusto a ids) Y la fila vieja de chats_activos
+        await db.execute({ sql: 'UPDATE chats_activos SET hasta=? WHERE tenant_id=? AND tel=? AND hasta IS NULL', args: [now, tenant.id, p] }).catch(() => {});
+        try {
+            const thread = 'whatsapp:' + p + (tenant.id ? ('#t' + tenant.id) : '');
+            const cv = (await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [thread] })).rows[0];
+            if (cv) await db.execute({ sql: 'UPDATE delegaciones SET hasta=?, motivo=COALESCE(motivo, ?) WHERE chat_id=? AND hasta IS NULL', args: [now, 'soltar', Number(cv.id)] });
+        } catch (e) { console.error('[t' + tenant.id + '] soltar delegaciones:', e.message); }
         U.chatsActivos.delete(p);
         console.log('[t' + tenant.id + '] soltado chat ' + jidHash(p));
         return { ok: true };
@@ -1278,19 +1326,32 @@ async function registrarManualIlegible(m) {
 }
 
 // Abrir / cerrar universos en caliente (sin reiniciar el proceso; los demás ni se enteran)
+// ETAPA 2: la verdad es `delegaciones` (por índice tenant_id, hasta; el teléfono viene del chat). Mientras dure el
+// dual-write también se lee `chats_activos` y se UNEN por teléfono (una delegación creada antes del backfill solo
+// vive ahí; si la tabla nueva no existe todavía, queda el camino viejo). Etapa 3 = quitar la segunda lectura.
 async function cargarChatsActivos(U) {
     try {
+        const filas = new Map();   // tel → fila en memoria
+        let rD = { rows: [] };
+        try { rD = await db.execute({ sql: 'SELECT d.id, d.auto_id, d.auto_nombre, d.opener_pendiente, c.telefono AS tel, c.nombre AS comprador_nombre FROM delegaciones d JOIN conversaciones c ON c.id=d.chat_id WHERE d.tenant_id=? AND d.hasta IS NULL', args: [U.tenant.id] }); }
+        catch (e) { if (!/no such table/i.test(String(e.message))) throw e; }
+        for (const row of rD.rows) filas.set(String(row.tel), { id: Number(row.id), ca_id: null, tel: String(row.tel), car_id: row.auto_id, car_nombre: row.auto_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: 0, ultimo_entrante: 0 });
         const r = await db.execute({ sql: 'SELECT * FROM chats_activos WHERE tenant_id=? AND hasta IS NULL', args: [U.tenant.id] });
-        cacheEscribir('chats.' + U.tenant.id + '.json', r.rows.map(x => Object.assign({}, x)));
+        for (const row of r.rows) {
+            const f = filas.get(String(row.tel));
+            if (f) { f.ca_id = Number(row.id); f.ultimo_from_me = Number(row.ultimo_from_me) || 0; f.ultimo_entrante = Number(row.ultimo_entrante) || 0; if (!f.car_id) f.car_id = row.car_id; if (!f.car_nombre) f.car_nombre = row.car_nombre; if (!f.comprador_nombre) f.comprador_nombre = row.comprador_nombre; }
+            else filas.set(String(row.tel), { id: null, ca_id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
+        }
+        cacheEscribir('chats.' + U.tenant.id + '.json', [...filas.values()]);
         U.chatsActivos.clear();
-        for (const row of r.rows) U.chatsActivos.set(String(row.tel), { id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
-        console.log('[delegación] tenant ' + U.tenant.id + ': ' + U.chatsActivos.size + ' chats activos');
+        for (const [tel, f] of filas) U.chatsActivos.set(tel, f);
+        console.log('[delegación] tenant ' + U.tenant.id + ': ' + U.chatsActivos.size + ' chats activos (' + rD.rows.length + ' en delegaciones, ' + r.rows.length + ' en chats_activos)');
         U.chatsCargados = true;
     } catch (e) {
         console.error('[delegación] carga:', e.message);
         // MODO SIN BASE: última lista conocida desde caché; se reintenta cada minuto hasta que la base vuelva
         const cache = cacheLeer('chats.' + U.tenant.id + '.json') || [];
-        if (cache.length && !U.chatsActivos.size) for (const row of cache) U.chatsActivos.set(String(row.tel), { id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
+        if (cache.length && !U.chatsActivos.size) for (const row of cache) U.chatsActivos.set(String(row.tel), { id: row.id != null ? Number(row.id) : null, ca_id: row.ca_id != null ? Number(row.ca_id) : (row.id != null && row.ca_id === undefined ? Number(row.id) : null), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
         U.chatsCargados = false;
     }
 }

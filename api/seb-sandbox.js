@@ -13,6 +13,7 @@
 //        cerebro y devuelve { etapa, segmentos, fotos, pin, escala, motivo }
 
 const { query, run } = require('../lib/seb/db.js');
+const U = require('../lib/seb/universo.js');   // ETAPA 2 (paridad: el mismo cerebro que el panel)
 // CUOTA TURSO (2026-09-08): inventario activo cacheado 15 s; estadoConv por request (ver olvidar en el handler)
 const { memoQuery, olvidar, INV_TTL } = require('../lib/seb/memo.js');
 const { entender } = require('../lib/seb/clasificador.js');
@@ -86,11 +87,11 @@ async function guardarOferta(telO, segs) {
     try {
         const mm = require('../lib/seb/mesa.js');
         const of = mm.ofertaDeSegmentos(segs);
-        const cur = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [telO]);
-        if (!cur.length) return;
-        let ej = {}; try { ej = JSON.parse(cur[0].estado_json || '{}'); } catch (e) { }
+        const stO = await U.leerEstado(0, telO);
+        if (!stO.existe) return;
+        const ej = stO.ej;
         if (of) ej.oferta = of; else delete ej.oferta;
-        await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), Date.now(), telO]);
+        await U.guardarEstado(0, telO, { estado_json: ej });
     } catch (e) { }
 }
 
@@ -126,7 +127,7 @@ module.exports = async function handler(req, res) {
             await run("DELETE FROM mensajes WHERE conversacion_id=?", [convId]);
             await run("UPDATE conversaciones SET ult_texto='', ult_dir='in', ult_msg_ts=? WHERE id=?", [Date.now(), convId]);
             await run("DELETE FROM wa_messages WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
-            await run("DELETE FROM wa_conversations WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
+            await U.borrarEstado(0, SANDBOX_TEL, 'reset_sandbox').catch(() => {});   // estado del bot + delegación + espejo wa_conversations
             await run("DELETE FROM ad_por_telefono WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seguimientos_ghost WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
             await run("DELETE FROM seb_queue WHERE telefono=?", [SANDBOX_TEL]).catch(() => {});
@@ -304,8 +305,7 @@ module.exports = async function handler(req, res) {
                         const rowFS = autosFS.find(a => a.id === absFS.auto.auto_id);
                         if (rowFS) {
                             const { guardarMesa } = require('../lib/seb/mesa.js');
-                            const curFS = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [TEL_LANE]);
-                            let ejFS = {}; try { ejFS = JSON.parse((curFS[0] && curFS[0].estado_json) || '{}'); } catch (e) { }
+                            const ejFS = (await U.leerEstado(0, TEL_LANE)).ej;
                             ejFS.escena = [rowFS.id];
                             await guardarMesa(TEL_LANE, ejFS, [rowFS.id], rowFS.id);
                             const limpioFS = String(absFS.texto || '').replace(rowFS.nombre, ' ').replace(/\$+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -404,8 +404,7 @@ module.exports = async function handler(req, res) {
             if (bursts === 0) {
                 autoActivo = clasif.auto_id || null;
                 if (autoActivo) {
-                    await run("UPDATE wa_conversations SET auto_id_activo=?, updated_at=? WHERE telefono=?", [autoActivo, Date.now(), SANDBOX_TEL]).catch(() => {});
-                    await run("INSERT INTO wa_conversations (telefono, auto_id_activo, updated_at) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [SANDBOX_TEL, autoActivo, Date.now(), SANDBOX_TEL]).catch(() => {});
+                    await U.guardarEstado(0, SANDBOX_TEL, { auto_id_activo: autoActivo }).catch(() => {});
                 }
             } else {
                 autoActivo = await require('../lib/seb/mesa.js').alinearAuto({ tel: SANDBOX_TEL, texto: textoFamilia, clasif });
@@ -521,11 +520,9 @@ module.exports = async function handler(req, res) {
                         if (!out) {
                             try {
                                 if (require('../lib/seb/aparador.js').rolAmbiguo({ texto: textoFamilia, adCtx })) {
-                                    const curRol = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [SANDBOX_TEL]);
-                                    let ejRol = {}; try { ejRol = JSON.parse((curRol[0] && curRol[0].estado_json) || '{}'); } catch (e) { }
+                                    const ejRol = (await U.leerEstado(0, SANDBOX_TEL)).ej;
                                     ejRol.pregunta_rol = 1;
-                                    await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ejRol), Date.now(), SANDBOX_TEL]).catch(() => { });
-                                    await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [SANDBOX_TEL, 'opener', JSON.stringify(ejRol), Date.now(), SANDBOX_TEL]).catch(() => { });
+                                    await U.guardarEstado(0, SANDBOX_TEL, { estado_json: ejRol, estado: 'opener' }).catch(() => { });
                                     out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', '¿Andas buscando comprar un auto, o vender el tuyo? Para atenderte como va 👍'], tipo: 'opener_rol' };
                                 }
                             } catch (e) { }
@@ -767,7 +764,7 @@ module.exports = async function handler(req, res) {
                 const cierre = parseCierreOwner(texto);
                 if (cierre) {
                     let autoActivoMO = null;
-                    try { const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [SANDBOX_TEL]); if (wc[0] && wc[0].auto_id_activo) autoActivoMO = Number(wc[0].auto_id_activo); } catch (e) { }
+                    try { autoActivoMO = await U.autoActivoDe(0, SANDBOX_TEL); } catch (e) { }
                     let autoNom = 'tu auto', duenoNom = '';
                     if (autoActivoMO) {
                         const a = await query("SELECT marca, modelo, anio, dueno_nombre FROM inventario_autos WHERE id=?", [autoActivoMO]).catch(() => []);

@@ -9,6 +9,7 @@
 // lotes usa eso para afinar la biblioteca donde Seb falla.
 
 const { query, run } = require('../lib/seb/db.js');
+const U = require('../lib/seb/universo.js');   // ETAPA 2: universo → chat → estado/delegación (puerta única)
 // CUOTA TURSO (2026-09-08): caché en memoria del proceso — dueños (5 min), inventario activo (15 s),
 // y lo que es "por request" se olvida al entrar (ver olvidar en el handler).
 const { telefonosDueno, memoQuery, olvidar, INV_TTL } = require('../lib/seb/memo.js');
@@ -132,11 +133,11 @@ async function guardarOferta(telO, segs) {
     try {
         const mm = require('../lib/seb/mesa.js');
         const of = mm.ofertaDeSegmentos(segs);
-        const cur = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [telO]);
-        if (!cur.length) return;
-        let ej = {}; try { ej = JSON.parse(cur[0].estado_json || '{}'); } catch (e) { }
+        const stO = await U.leerEstado(0, telO);
+        if (!stO.existe) return;
+        const ej = stO.ej;
         if (of) ej.oferta = of; else delete ej.oferta;
-        await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ej), Date.now(), telO]);
+        await U.guardarEstado(0, telO, { estado_json: ej });
     } catch (e) { }
 }
 
@@ -288,15 +289,15 @@ module.exports = async function handler(req, res) {
             }
             // ESTADO: si es ANTERIOR al reinicio de prueba, se ignora → arranca de 0
             // (sin enganche/plazo/auto_id/pregunta_pendiente arrastrados).
-            const est = await query("SELECT estado_json, auto_id_activo, updated_at FROM wa_conversations WHERE telefono=?", [tel]);
-            const estadoFresco = est[0] && Number(est[0].updated_at || 0) >= resetTs;
+            const est = await U.leerEstado(tChat.id, tel);   // el estado del UNIVERSO de este chat (no cruza universos)
+            const estadoFresco = est.existe && est.updated_at >= resetTs;
             let focoChat = null; try { focoChat = await focoDe(tChat, tel); } catch (e) { }
             return res.status(200).json({
                 ok: true,
                 mensajes,
                 foco: focoChat,
                 borrador,
-                estado: estadoFresco ? { ...JSON.parse(est[0].estado_json || '{}'), auto_id_activo: est[0].auto_id_activo } : {}
+                estado: estadoFresco ? { ...est.ej, auto_id_activo: est.auto_id_activo } : {}
             });
         }
 
@@ -480,34 +481,45 @@ module.exports = async function handler(req, res) {
         }
         // Autos del tenant: los suyos (dueño por teléfono); el tenant 0 ve todo el inventario activo
         async function autosDeTenant(t) {
-            // Catálogo por tenant: tenant 0 = todo Fyradrive; config.catalogo='fyradrive' = ACREDITADO para trabajar todo el
-            // inventario de Fyradrive desde su universo (orden owner 2026-09-08: su número personal vende autos de Fyradrive);
-            // si no, solo los autos cuyo dueño es su teléfono.
-            if (!t.id || (t.config && t.config.catalogo === 'fyradrive')) return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
-            return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' AND replace(replace(replace(COALESCE(dueno_telefono,''),'+',''),' ',''),'-','') LIKE ? ORDER BY marca COLLATE NOCASE", ['%' + t.telefono.slice(-10)]);
+            // AUTOS POR UNIVERSO (orden owner 2026-09-08): un auto EXISTE en un universo (autos_universo: comercializa /
+            // dueno / acreditado), no se cruza por teléfono. Tenant 0 = Fyradrive comercializa todo el inventario activo.
+            try {
+                const r = await query(`SELECT i.id, i.fyradrive_web_id, i.marca, i.modelo, i.anio, i.precio, au.rol
+                                       FROM autos_universo au JOIN inventario_autos i ON i.id = au.inv_auto_id
+                                       WHERE au.tenant_id = ? AND au.activo = 1 AND i.estado = 'activo'
+                                       ORDER BY i.marca COLLATE NOCASE, i.modelo COLLATE NOCASE`, [Number(t.id) || 0]);
+                if (r.length || t.id) return r;
+            } catch (e) { /* tabla aún no existe → camino viejo */ }
+            return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
         }
         function hiloDe(tel, tenantId) { return 'whatsapp:' + tel + (tenantId ? '#t' + tenantId : ''); }
         // ── AUTO EN FOCO por contacto (orden owner 2026-09-08): cada contacto tiene UN auto amarrado.
-        // tenant≠0: vive en chats_activos.car_id (nace al delegar); tenant 0: wa_conversations.auto_id_activo.
+        // ETAPA 2: la DIRECCIÓN es universo → chat → delegación (universo.js). tenant≠0: la delegación activa
+        // (espejo en chats_activos.car_id); tenant 0: la columna auto_id_activo del chat (espejo en wa_conversations).
         async function focoDe(t, telFull) {
-            if (t.id) {
-                const ca = await query("SELECT car_id, car_nombre FROM chats_activos WHERE tenant_id=? AND tel=? AND hasta IS NULL ORDER BY id DESC LIMIT 1", [t.id, telFull]);
-                if (!ca.length || !ca[0].car_id) return null;
-                const inv = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE id=? OR fyradrive_web_id=?", [Number(ca[0].car_id), Number(ca[0].car_id)]);
-                return inv[0] ? { id: inv[0].id, web_id: inv[0].fyradrive_web_id, nombre: [inv[0].marca, inv[0].modelo, inv[0].anio].filter(Boolean).join(' '), precio: inv[0].precio } : { id: ca[0].car_id, nombre: ca[0].car_nombre };
-            }
-            const wc = await query('SELECT auto_id_activo FROM wa_conversations WHERE telefono = ?', [telFull]);
-            const f = wc.length ? Number(wc[0].auto_id_activo) : null;
+            const f = await U.focoDe(t.id, telFull);
             if (!f) return null;
-            const inv = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE id=? OR fyradrive_web_id=?", [f, f]);
-            return inv[0] ? { id: inv[0].id, web_id: inv[0].fyradrive_web_id, nombre: [inv[0].marca, inv[0].modelo, inv[0].anio].filter(Boolean).join(' '), precio: inv[0].precio } : null;
+            const inv = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE id=? OR fyradrive_web_id=?", [f.auto_id, f.auto_id]);
+            if (inv[0]) return { id: inv[0].id, web_id: inv[0].fyradrive_web_id, nombre: [inv[0].marca, inv[0].modelo, inv[0].anio].filter(Boolean).join(' '), precio: inv[0].precio };
+            return t.id ? { id: f.auto_id, nombre: f.auto_nombre } : null;
         }
         async function ponerFoco(t, telFull, inv) {
             const nombreA = [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
-            if (t.id) { await run("UPDATE chats_activos SET car_id=?, car_nombre=? WHERE tenant_id=? AND tel=? AND hasta IS NULL", [inv.id, nombreA, t.id, telFull]); return; }
-            const focoNuevo = inv.fyradrive_web_id || inv.id;
-            const rU = await run('UPDATE wa_conversations SET auto_id_activo = ? WHERE telefono = ?', [focoNuevo, telFull]);
-            if (!Number(rU.rowsAffected)) await run('INSERT INTO wa_conversations (telefono, auto_id_activo) VALUES (?, ?)', [telFull, focoNuevo]);
+            // tenant 0: el chat se crea si falta (el upsert de antes); tenant≠0: solo se cambia el auto de una delegación VIVA
+            // (delegar es del puente) — igual que el UPDATE de chats_activos de antes. Historial: cierra la anterior y abre otra.
+            const chatF = await U.chatDe(t.id, telFull, { crear: !t.id });
+            if (!chatF) return;
+            await U.cambiarFoco(chatF, inv.fyradrive_web_id || inv.id, 'fyrachat', { activado_por: 'fyrachat', auto_nombre: nombreA, solo_si_activa: !!t.id });
+        }
+        // ══ ETAPA 2 — BACKFILL de la base por universo (idempotente, por lotes; NO manda nada a WhatsApp).
+        // Lo dispara el owner cuando decida: POST { action:'universo_backfill', key, dry:true|false, telefonos:[...] }.
+        // dry=true solo cuenta. telefonos=[…] limita a esos (pruebas). Reporta conteos.
+        if (action === 'universo_backfill' && req.method === 'POST') {
+            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false, error: 'key invalida' });
+            try {
+                const rep = await U.backfillUniverso({ dry: req.body.dry !== false && req.body.dry !== 0 && req.body.dry !== 'false', telefonos: Array.isArray(req.body.telefonos) ? req.body.telefonos : null });
+                return res.status(200).json({ ok: true, backfill: rep });
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
         }
         if (action === 'timbre_url') {
             // URL viva del túnel del timbre (la publica el puente cada minuto); fallback = la última conocida
@@ -562,10 +574,10 @@ module.exports = async function handler(req, res) {
             if (req.body.solo_preview) return res.status(200).json({ ok: true, opener, modo: modoE });   // la UI pide el machote para dejarlo editar
             // tenant 0: chat delegado = chat del owner de siempre (nuevo_chat) — sin universo aparte
             if (!t.id) {
-                const ex = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + telD]);
-                if (!ex.length) await run("INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, is_dueno_chat, source, created_at, tenant_id) VALUES (?,?,?,?,?,?,0,0,'whatsapp',?,0)", ['whatsapp:' + telD, telD, nomC || null, '', 'out', Date.now(), Date.now()]);
+                // ETAPA 2: el chat nace en su universo (0) y la delegación (chat → auto) queda con historial; espejo a wa_conversations
+                const chatD = await U.chatDe(0, telD, { crear: true, visible: true, nombre: nomC || null });
                 try { await require('../lib/seb/canal-messenger.js').marcarOwner(telD); } catch (e) { }
-                try { await run("UPDATE wa_conversations SET auto_id_activo=? WHERE telefono=?", [auto.fyradrive_web_id || auto.id, telD]); } catch (e) { }
+                try { if (chatD) await U.delegar(chatD, { auto_id: auto.fyradrive_web_id || auto.id, auto_nombre: autoNombre, activado_por: 'fyrachat' }); } catch (e) { }
             }
             let r = null;
             try {
@@ -585,6 +597,8 @@ module.exports = async function handler(req, res) {
             const t = await tenantDeParam(req.body.vendedor);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
+            // ETAPA 2 (tenant 0): la delegación se cierra aquí (idempotente); en universos ≠0 la cierra el puente (dual-write) porque es quien la carga en memoria
+            if (!t.id) { try { const cS = await U.chatDe(0, telD); if (cS) await U.soltar(cS, 'fyrachat'); } catch (e) { } }
             try {
                 const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/soltar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD }) });
                 return res.status(200).json(await fr.json().catch(() => ({ ok: false, error: 'puente ilegible' })));
@@ -871,7 +885,7 @@ module.exports = async function handler(req, res) {
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + ultimoSolo : ultimoSolo;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
                     let autoP = clasifP.auto_id;
-                    if (!autoP) { try { const wcP = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wcP[0] && wcP[0].auto_id_activo) autoP = Number(wcP[0].auto_id_activo); } catch (e) { } }
+                    if (!autoP) { try { autoP = await U.autoActivoDe(0, tel); } catch (e) { } }
                     const { responderEtapa3 } = require('../lib/seb/etapa3.js');
                     let eP = await responderEtapa3({ texto: ultimoSolo, auto_id: autoP, conv_id: convId, clasif: clasifP });
                     let hP = herramientaPura(eP);
@@ -1030,7 +1044,7 @@ module.exports = async function handler(req, res) {
                     if (perroE) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos, fotos: perroE.fotos || null, fotos_after_index: (perroE.fotos_after_index != null ? perroE.fotos_after_index : null) });
                 }
                 let autoE = clasifE.auto_id;
-                if (!autoE) { try { const wc = await query("SELECT auto_id_activo FROM wa_conversations WHERE telefono=?", [tel]); if (wc[0] && wc[0].auto_id_activo) autoE = Number(wc[0].auto_id_activo); } catch (e) { } }
+                if (!autoE) { try { autoE = await U.autoActivoDe(0, tel); } catch (e) { } }
                 const { responderEtapa3 } = require('../lib/seb/etapa3.js');
                 const { nombreReal } = require('../lib/seb/opener.js');
                 const e3 = await responderEtapa3({ texto: followupE, auto_id: autoE, conv_id: convId, clasif: clasifE });
@@ -1074,8 +1088,7 @@ module.exports = async function handler(req, res) {
                     const rowF = autosF.find(a => a.id === absF.auto.auto_id);
                     if (rowF) {
                         const { guardarMesa } = require('../lib/seb/mesa.js');
-                        const curF2 = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [tel]);
-                        let ejF2 = {}; try { ejF2 = JSON.parse((curF2[0] && curF2[0].estado_json) || '{}'); } catch (e) { }
+                        const ejF2 = (await U.leerEstado(0, tel)).ej;
                         ejF2.escena = [rowF.id];
                         await guardarMesa(tel, ejF2, [rowF.id], rowF.id);
                         const limpioF = String(absF.texto || '').replace(rowF.nombre, ' ').replace(/\$+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1128,8 +1141,7 @@ module.exports = async function handler(req, res) {
                         if (famOk && rFamO && rFamO.pregunta && rFamO.via === 'nombre_ambiguo' && rFamO.pregunta.some(x => x.id === Number(clasif.auto_id))) {
                             const idsF = rFamO.pregunta.map(x => x.id);
                             const ejF = JSON.stringify({ mesa_familia: idsF });
-                            await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [ejF, Date.now(), tel]).catch(() => { });
-                            await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [tel, 'mesa', ejF, Date.now(), tel]).catch(() => { });
+                            await U.guardarEstado(0, tel, { estado_json: ejF, estado: 'mesa' }).catch(() => { });
                             const { nombreReal: nrF, saludoHora: shF } = require('../lib/seb/opener.js');
                             const nmF = nrF(nombreChat);
                             return res.status(200).json({ ok: true, modo: 'mesa', tipo: 'mesa_pregunta_cual', segmentos: [`Qué tal${nmF ? ' ' + nmF : ''} ${shF()}!`, 'De esos tenemos estos — ¿cuál te interesa?\n' + rFamO.pregunta.map((x, i) => `${i + 1}) ${x.nombre}`).join('\n')] });
@@ -1219,11 +1231,9 @@ module.exports = async function handler(req, res) {
                     // directo; la respuesta la resuelve dudaGeneral (comprar/vender).
                     try {
                         if (require('../lib/seb/aparador.js').rolAmbiguo({ texto: textoFamilia, adCtx })) {
-                            const curRol = await query("SELECT estado_json FROM wa_conversations WHERE telefono=?", [tel]);
-                            let ejRol = {}; try { ejRol = JSON.parse((curRol[0] && curRol[0].estado_json) || '{}'); } catch (e) { }
+                            const ejRol = (await U.leerEstado(0, tel)).ej;
                             ejRol.pregunta_rol = 1;
-                            await run("UPDATE wa_conversations SET estado_json=?, updated_at=? WHERE telefono=?", [JSON.stringify(ejRol), Date.now(), tel]).catch(() => { });
-                            await run("INSERT INTO wa_conversations (telefono, estado, estado_json, updated_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM wa_conversations WHERE telefono=?)", [tel, 'opener', JSON.stringify(ejRol), Date.now(), tel]).catch(() => { });
+                            await U.guardarEstado(0, tel, { estado_json: ejRol, estado: 'opener' }).catch(() => { });
                             return res.status(200).json({
                                 ok: true, tipo: 'opener_rol', segmentos: [
                                     `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
@@ -1296,11 +1306,11 @@ module.exports = async function handler(req, res) {
             // dedupe_key estable por conversación → una sola sugerencia "viva" por chat.
             const dedupe = tel + ':' + (convId || 'x');
             const resetTs = Number(resets[tel] || 0);
-            const convEstado = await query("SELECT estado_json, auto_id_activo, updated_at FROM wa_conversations WHERE telefono=?", [tel]);
+            const convEstado = await U.leerEstado(0, tel);
             // MODO PRUEBA: si el estado es ANTERIOR al reinicio (contestaste un anuncio nuevo),
             // se IGNORA → lead nuevo de 0 (sin enganche/plazo/auto_id/pregunta arrastrados).
-            const estado = (convEstado[0] && Number(convEstado[0].updated_at || 0) >= resetTs)
-                ? { ...JSON.parse(convEstado[0].estado_json || '{}'), auto_id_activo: convEstado[0].auto_id_activo }
+            const estado = (convEstado.existe && convEstado.updated_at >= resetTs)
+                ? { ...convEstado.ej, auto_id_activo: convEstado.auto_id_activo }
                 : {};
 
             // Meter el AUTO DEL ANUNCIO a la mochila: si el comprador vino de un anuncio,
@@ -1507,12 +1517,7 @@ module.exports = async function handler(req, res) {
 
             // 2) Persistir estado nuevo de la conversación
             if (meta.estado_nuevo) {
-                const upd = await run("UPDATE wa_conversations SET estado_json=?, auto_id_activo=?, updated_at=? WHERE telefono=?",
-                    [JSON.stringify(meta.estado_nuevo), meta.estado_nuevo.auto_id_activo || null, Date.now(), item.telefono]);
-                if (!upd.rowsAffected) {
-                    await run("INSERT INTO wa_conversations (telefono, estado, platform, estado_json, auto_id_activo, updated_at) VALUES (?, 'seb', 'whatsapp', ?, ?, ?)",
-                        [item.telefono, JSON.stringify(meta.estado_nuevo), meta.estado_nuevo.auto_id_activo || null, Date.now()]);
-                }
+                await U.guardarEstado(0, item.telefono, { estado_json: meta.estado_nuevo, auto_id_activo: meta.estado_nuevo.auto_id_activo || null, estado: 'seb' });
             }
 
             // 3) Intentar envío por el bridge (si está configurado y vivo)
@@ -1729,8 +1734,7 @@ module.exports = async function handler(req, res) {
                 else return res.status(200).json({ ok: false, necesita: 'auto', error: hits.length ? ('ambiguo: ' + hits.map(h => [h.marca, h.modelo, h.anio].join(' ')).join(' | ')) : 'no encontré ese auto en el inventario' });
             } else {
                 // el AUTO EN FOCO de la conversación
-                const wc = await query('SELECT auto_id_activo FROM wa_conversations WHERE telefono = ?', [telFullB]);
-                const foco = wc.length ? Number(wc[0].auto_id_activo) : null;
+                const foco = await U.autoActivoDe(0, telFullB);
                 if (foco) { const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [foco, foco]); inv = r[0] || null; }
                 if (!inv) return res.status(200).json({ ok: false, necesita: 'auto' });
             }
@@ -1985,10 +1989,7 @@ module.exports = async function handler(req, res) {
                         if (q.length) {
                             const meta = JSON.parse(q[0].tools_usadas || '{}');
                             if (meta.estado_nuevo) {
-                                const upd = await run("UPDATE wa_conversations SET estado_json=?, auto_id_activo=?, updated_at=? WHERE telefono=?",
-                                    [JSON.stringify(meta.estado_nuevo), meta.estado_nuevo.auto_id_activo || null, Date.now(), q[0].telefono]);
-                                if (!upd.rowsAffected) await run("INSERT INTO wa_conversations (telefono, estado, platform, estado_json, auto_id_activo, updated_at) VALUES (?, 'seb', 'whatsapp', ?, ?, ?)",
-                                    [q[0].telefono, JSON.stringify(meta.estado_nuevo), meta.estado_nuevo.auto_id_activo || null, Date.now()]);
+                                await U.guardarEstado(0, q[0].telefono, { estado_json: meta.estado_nuevo, auto_id_activo: meta.estado_nuevo.auto_id_activo || null, estado: 'seb' });
                             }
                             await run("INSERT INTO seb_entrenamiento (queue_id, telefono, intencion, auto_id, borrador, texto_final, accion, similitud, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                                 [q[0].id, q[0].telefono, q[0].intencion, meta.auto_id || null, q[0].borrador, texto, 'secuencia', 0, Date.now()]);
