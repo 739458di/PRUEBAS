@@ -1,3 +1,4 @@
+// Fase 0.3 (2026-09-07): despliegue por script — este comentario es la prueba del canal.
 // wa-bridge-v2.js — El cartero delgado de Fyradrive (Seb v2).
 // Vive en el VPS. Hace:
 //   1. Conecta WhatsApp por Baileys (muestra QR para vincular).

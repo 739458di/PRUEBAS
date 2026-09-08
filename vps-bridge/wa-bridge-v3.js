@@ -262,7 +262,7 @@ async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, t
         throw e;
     }
 }
-const CARRETE_PATH = path.join(__dirname, 'carrete.jsonl');
+const CARRETE_PATH = require('path').join(__dirname, 'carrete.jsonl');   // require inline: fs/path se declaran más abajo
 let _desdeCarrete = false, _carreteEnCurso = false;
 async function reintentarCarrete() {
     if (_carreteEnCurso || !fs.existsSync(CARRETE_PATH)) return;
