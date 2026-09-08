@@ -38,6 +38,37 @@ const AUTO_OPENER_GAP = Number(process.env.AUTO_OPENER_GAP || 1000);       // ~1
 
 const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
 
+// ── CUOTA TURSO (2026-09-08): Turso cobra por FILA LEÍDA y se acabó la cuota → bloqueo total.
+// Regla: lo que no cambia entre reconexiones vive en memoria a nivel PROCESO (sobrevive reconexiones
+// y ciclos de QR); las lecturas por mensaje se limitan a 1 fila por índice. NADA de lo persistido se quita.
+const lidMapPorTenant = new Map();     // tenantId → { lidAPhone, phoneALid, persistidos, cargado, ultimoIntento }
+function lidMapDe(tenantId) {
+    if (!lidMapPorTenant.has(tenantId)) lidMapPorTenant.set(tenantId, { lidAPhone: new Map(), phoneALid: new Map(), persistidos: new Set(), cargado: false, ultimoIntento: 0 });
+    return lidMapPorTenant.get(tenantId);
+}
+const LID_MAP_REINTENTO_MS = 10 * 60000;   // carga fallida (base caída) → reintentar como máximo cada 10 min, no en cada ciclo de QR
+let _ddlArranqueHecho = false;             // CREATE TABLE/ALTER de arranque: UNA vez por proceso
+async function ddlArranque() {
+    if (_ddlArranqueHecho) return;
+    await db.execute('CREATE TABLE IF NOT EXISTS lid_phone_map (lid TEXT PRIMARY KEY, phone TEXT, updated_at INTEGER)');
+    try { await db.execute('ALTER TABLE lid_phone_map ADD COLUMN tenant_id INTEGER'); } catch (e) {}
+    // Anuncio (auto+link) por teléfono → el cerebro lo mete a la mochila como [DESC:]
+    await db.execute('CREATE TABLE IF NOT EXISTS ad_por_telefono (telefono TEXT PRIMARY KEY, ad_context TEXT, updated_at INTEGER)');
+    // Modo prueba: punto de reinicio por teléfono (solo se ven mensajes posteriores)
+    await db.execute('CREATE TABLE IF NOT EXISTS prueba_reset (telefono TEXT PRIMARY KEY, reset_ts INTEGER)');
+    _ddlArranqueHecho = true;
+}
+const adUltimo = new Map();                // tel → { ctx, ts }: mismo anuncio del mismo tel en <5 min → no re-upsert (se marca SOLO si la escritura tuvo éxito)
+const AD_DEDUP_MS = 5 * 60000;
+const pruebaResetUltimo = new Map();       // tel → ts: re-entrega de la misma ráfaga de prueba en <15 s → no re-upsert
+const PRUEBA_RESET_DEDUP_MS = 15000;
+const puntoEnvioCache = new Map();         // auto_id → { row, ts }: solo HITS, TTL 5 min (un miss se vuelve a consultar)
+const PUNTO_TTL_MS = 5 * 60000;
+const sesionReportada = new Map();         // tenantId → { estado, motivo, ts }: el MISMO estado no se re-escribe en <5 min (ciclos de QR)
+const SESION_DEDUP_MS = 5 * 60000;
+let _returningOk = true;                   // INSERT … RETURNING id ahorra el SELECT por mensaje; si el motor no lo acepta, cae al SELECT
+let _sistemaConfigDDLHecho = false;        // CREATE TABLE sistema_config: una vez por proceso
+
 
 
 // CANDADO DE CONEXIÓN ÚNICA (F1): cada socket lleva un número de GENERACIÓN.
@@ -234,22 +265,36 @@ async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, t
     const thread = 'whatsapp:' + tel + (tId ? ('#t' + tId) : '');
     try {
         // 1) carpeta: crear si no existe; subir su actividad solo si este mensaje es el más nuevo
-        await db.execute({
-            sql: `INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, source, created_at, tenant_id)
+        const upsertSql = `INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, source, created_at, tenant_id)
                   VALUES (?,?,?,?,?,?, 0, 'whatsapp', ?, ?)
                   ON CONFLICT(channel_thread_id) DO UPDATE SET
                     nombre = COALESCE(excluded.nombre, nombre),
                     ult_texto = CASE WHEN excluded.ult_msg_ts >= ult_msg_ts THEN excluded.ult_texto ELSE ult_texto END,
                     ult_dir   = CASE WHEN excluded.ult_msg_ts >= ult_msg_ts THEN excluded.ult_dir ELSE ult_dir END,
-                    ult_msg_ts = MAX(excluded.ult_msg_ts, ult_msg_ts)`,
-            args: [thread, tel, nombre || null, String(texto || '').slice(0, 120), direccion, ts, ts, tId]
-        });
-        const row = (await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [thread] })).rows[0];
-        if (!row) return;
+                    ult_msg_ts = MAX(excluded.ult_msg_ts, ult_msg_ts)`;
+        const upsertArgs = [thread, tel, nombre || null, String(texto || '').slice(0, 120), direccion, ts, ts, tId];
+        // CUOTA: el id de la carpeta sale del MISMO upsert (RETURNING) → cero SELECT por mensaje.
+        // Si el motor no acepta RETURNING (se detecta una vez por proceso) → upsert + SELECT de 1 fila por índice UNIQUE.
+        let convId = null;
+        if (_returningOk) {
+            try {
+                const r = await db.execute({ sql: upsertSql + ' RETURNING id', args: upsertArgs });
+                if (r.rows.length && r.rows[0].id != null) convId = Number(r.rows[0].id);
+            } catch (e) {
+                if (!/returning|syntax/i.test(String(e.message))) throw e;
+                _returningOk = false; console.error('[mensajes-nuevo] RETURNING no soportado → SELECT id por mensaje');
+            }
+        }
+        if (convId == null) {
+            if (!_returningOk) await db.execute({ sql: upsertSql, args: upsertArgs });
+            const row = (await db.execute({ sql: 'SELECT id FROM conversaciones WHERE channel_thread_id=?', args: [thread] })).rows[0];
+            if (!row) return;
+            convId = Number(row.id);
+        }
         // 2) papelito con folio (dedup por folio → JAMÁS duplica)
         await db.execute({
             sql: 'INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-            args: [row.id, msgId, ts, direccion, emisor || null, texto || '', tipo || 'text', ai_generated ? 1 : 0, Date.now()]
+            args: [convId, msgId, ts, direccion, emisor || null, texto || '', tipo || 'text', ai_generated ? 1 : 0, Date.now()]
         });
     } catch (e) {
         console.error('[mensajes-nuevo]', e.message);
@@ -299,7 +344,7 @@ async function publicarTimbreUrl() {
         if (!m || !m.length) return;
         const url = m[m.length - 1].replace('https://', 'wss://');
         if (url === _timbreUrlPublicada) return;
-        await db.execute('CREATE TABLE IF NOT EXISTS sistema_config (clave TEXT PRIMARY KEY, valor TEXT, updated INTEGER)');
+        if (!_sistemaConfigDDLHecho) { await db.execute('CREATE TABLE IF NOT EXISTS sistema_config (clave TEXT PRIMARY KEY, valor TEXT, updated INTEGER)'); _sistemaConfigDDLHecho = true; }
         await db.execute({ sql: 'INSERT INTO sistema_config (clave, valor, updated) VALUES (?,?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor, updated=excluded.updated', args: ['timbre_url', url, Date.now()] });
         _timbreUrlPublicada = url; console.log('[timbre] url publicada: ' + url);
     } catch (e) { console.error('[timbre] publicar:', e.message); }
@@ -373,21 +418,29 @@ function limpiarAuth(tenant) {
 }
 // Estado de sesión → Sales Brain (Turso wa_sessions; la Fase 6 lo vuelve endpoint)
 function reportarSesion(tenantId, estado, motivo) {
-    db.execute({ sql: 'INSERT INTO wa_sessions (tenant_id, estado, motivo, ultimo_evento, updated) VALUES (?,?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET estado=excluded.estado, motivo=excluded.motivo, ultimo_evento=excluded.ultimo_evento, updated=excluded.updated',
-        args: [tenantId, estado, motivo || null, Date.now(), Date.now()] }).catch(() => {});
-    console.log('[sesión] tenant ' + tenantId + ' → ' + estado + (motivo ? ' (' + motivo + ')' : ''));
+    // CUOTA: un universo esperando QR recibe un QR nuevo cada ~20 s → el MISMO estado+motivo no se
+    // re-escribe si ya se escribió hace <5 min (el upsert lee 1 fila por PK cada vez). Un cambio real se escribe al instante.
+    const prev = sesionReportada.get(tenantId), ahora = Date.now();
+    const repetido = !!(prev && prev.estado === estado && prev.motivo === (motivo || null) && ahora - prev.ts < SESION_DEDUP_MS);
+    if (!repetido) {
+        sesionReportada.set(tenantId, { estado, motivo: motivo || null, ts: ahora });
+        db.execute({ sql: 'INSERT INTO wa_sessions (tenant_id, estado, motivo, ultimo_evento, updated) VALUES (?,?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET estado=excluded.estado, motivo=excluded.motivo, ultimo_evento=excluded.ultimo_evento, updated=excluded.updated',
+            args: [tenantId, estado, motivo || null, ahora, ahora] }).catch(() => { sesionReportada.delete(tenantId); });   // falló → el siguiente evento sí reintenta
+    }
+    console.log('[sesión] tenant ' + tenantId + ' → ' + estado + (motivo ? ' (' + motivo + ')' : '') + (repetido ? ' (sin re-escribir)' : ''));
 }
 
 function crearUniverso(tenant) {
     const U = {
         tenant, sock: null, estado: 'arrancando', ultimoQR: null, ultimoRecibido: 0,
         genConexion: 0, reconectTimer: null, conectando: false, ghostTimer: null, reintentos: 0,
-        enviadosPorPanel: new Set(), sentStore: new Map(), getMsgRetries: new Map(), sesionReseteada: new Map(),
-        lidAPhone: new Map(), phoneALid: new Map(), colasPorTel: new Map(),
+        enviadosPorPanel: new Set(), sentStore: new Map(), getMsgRetries: new Map(), getMsgMemo: new Map(), sesionReseteada: new Map(),
+        lidAPhone: lidMapDe(tenant.id).lidAPhone, phoneALid: lidMapDe(tenant.id).phoneALid, colasPorTel: new Map(),   // CUOTA: caché a nivel PROCESO (sobrevive reconexiones y re-aperturas)
         autoOpenerTimers: new Map(), autoOpenerEnVuelo: new Set(), autoOpenerPendiente: new Set(),
         ilegibleAvisado: new Map(), ghostEnCurso: false,
         chatsActivos: new Map(),                                     // tel → fila de chats_activos (Fase 2: delegación)
     };
+const LM = lidMapDe(tenant.id);   // estado del mapa @lid (cargado / persistidos) de ESTE universo, a nivel proceso
 async function resetearSesionContacto(jid) {
     try {
         if (!jid || !U.sock) return;
@@ -418,10 +471,15 @@ function recordarLid(lid, phone) {
     const nuevo = U.lidAPhone.get(lid) !== phone;          // ¿mapeo que NO conocíamos?
     U.lidAPhone.set(lid, phone);
     U.phoneALid.set(phone, lid);
-    db.execute({
-        sql: 'INSERT INTO lid_phone_map (lid, phone, updated_at, tenant_id) VALUES (?, ?, ?, ?) ON CONFLICT(lid) DO UPDATE SET phone=excluded.phone, updated_at=excluded.updated_at, tenant_id=excluded.tenant_id',
-        args: [lid, phone, Date.now(), tenant.id]
-    }).catch(() => {});
+    // CUOTA: antes era un upsert (lee 1 fila por PK) por CADA entrante @lid. Ahora solo si el mapeo cambió
+    // o aún no consta en Turso (si la escritura falla, el siguiente entrante lo reintenta → nada se pierde).
+    if (nuevo) LM.persistidos.delete(lid);
+    if (!LM.persistidos.has(lid)) {
+        db.execute({
+            sql: 'INSERT INTO lid_phone_map (lid, phone, updated_at, tenant_id) VALUES (?, ?, ?, ?) ON CONFLICT(lid) DO UPDATE SET phone=excluded.phone, updated_at=excluded.updated_at, tenant_id=excluded.tenant_id',
+            args: [lid, phone, Date.now(), tenant.id]
+        }).then(() => { if (U.lidAPhone.get(lid) === phone) LM.persistidos.add(lid); }).catch(() => {});
+    }
     // AUTO-CURACIÓN: si justo aprendimos este @lid↔teléfono, unir la conversación
     // huérfana (la que quedó bajo el @lid) con la del teléfono real. Evita el "split".
     if (nuevo) fusionarSiHuerfano(lid, phone).catch(() => {});
@@ -462,17 +520,24 @@ async function conectar() {
     } catch (e) { /* el viejo ya estaba muerto */ }
 
     // Cargar el mapa @lid → teléfono desde Turso (sobrevive reinicios).
-    try {
-        await db.execute('CREATE TABLE IF NOT EXISTS lid_phone_map (lid TEXT PRIMARY KEY, phone TEXT, updated_at INTEGER)');
-        try { await db.execute('ALTER TABLE lid_phone_map ADD COLUMN tenant_id INTEGER'); } catch (e) {}
-        // Anuncio (auto+link) por teléfono → el cerebro lo mete a la mochila como [DESC:]
-        await db.execute('CREATE TABLE IF NOT EXISTS ad_por_telefono (telefono TEXT PRIMARY KEY, ad_context TEXT, updated_at INTEGER)');
-        // Modo prueba: punto de reinicio por teléfono (solo se ven mensajes posteriores)
-        await db.execute('CREATE TABLE IF NOT EXISTS prueba_reset (telefono TEXT PRIMARY KEY, reset_ts INTEGER)');
-        const cached = await db.execute({ sql: 'SELECT lid, phone FROM lid_phone_map WHERE COALESCE(tenant_id, 0) = ?', args: [tenant.id] });
-        for (const row of cached.rows) { U.lidAPhone.set(String(row.lid), String(row.phone)); U.phoneALid.set(String(row.phone), String(row.lid)); }
-        console.log('[lid-map] cargados ' + U.lidAPhone.size + ' mapeos');
-    } catch (e) { console.error('[lid-map] no pude cargar:', e.message); }
+    // CUOTA: UNA vez por proceso y universo (~600 filas). Antes se releía —junto con los CREATE TABLE— en
+    // CADA reconexión, y un universo esperando QR reconecta cada ~1 min. Si la carga falló (base caída),
+    // se reintenta como máximo cada 10 min; mientras, lo aprendido en vivo (senderPn) sigue en memoria.
+    if (!LM.cargado && Date.now() - LM.ultimoIntento >= LID_MAP_REINTENTO_MS) {
+        LM.ultimoIntento = Date.now();
+        try {
+            await ddlArranque();
+            const cached = await db.execute({ sql: 'SELECT lid, phone FROM lid_phone_map WHERE COALESCE(tenant_id, 0) = ?', args: [tenant.id] });
+            for (const row of cached.rows) {
+                const l = String(row.lid), p = String(row.phone);
+                LM.persistidos.add(l);
+                if (U.lidAPhone.has(l)) continue;                      // lo aprendido en vivo en este proceso es más fresco: no pisarlo
+                U.lidAPhone.set(l, p); U.phoneALid.set(p, l);
+            }
+            LM.cargado = true;
+            console.log('[lid-map] cargados ' + U.lidAPhone.size + ' mapeos (tenant ' + tenant.id + ', una vez por proceso)');
+        } catch (e) { console.error('[lid-map] no pude cargar (reintento en ' + (LID_MAP_REINTENTO_MS / 60000) + ' min):', e.message); }
+    }
     U.sockDesde = Date.now();
 
     const { state, saveCreds } = await useMultiFileAuthState(authDirDe(tenant));
@@ -519,12 +584,26 @@ async function conectar() {
             // ⚠️ CAMISA DE FUERZA (2026-08-06): esta consulta corre DENTRO del tubo de
             // recepción de Baileys — si Turso se cuelga, el puente queda conectado pero
             // SORDO (así se murió la recepción 6 horas hoy). Máximo 1.5s y suelta.
+            // CUOTA (2026-09-08): solo el tenant 0 escribe wa_messages; el resultado (hit o miss REAL) se
+            // memoriza 1 h por folio; y la consulta va por el índice (telefono, timestamp) — buscar por
+            // mensaje_id a secas era un SCAN COMPLETO de wa_messages en cada retry-receipt.
+            if (tenant.id !== 0) return undefined;
+            if (U.getMsgMemo.has(key.id)) return U.getMsgMemo.get(key.id);
+            const jidK = String(key.remoteJid || '');
+            let telK = limpiaTel(jidK);
+            if (jidK.endsWith('@lid')) telK = U.lidAPhone.get(telK) || null;
+            if (!telK) { console.error('[getMessage] retry-receipt sin teléfono (lid sin mapa) → sin fallback Turso'); return undefined; }
+            const telsK = [telK];                                                 // el eco pudo guardarse con o sin el "1" mexicano
+            if (/^521\d{10}$/.test(telK)) telsK.push('52' + telK.slice(3)); else if (/^52\d{10}$/.test(telK)) telsK.push('521' + telK.slice(2));
             try {
                 const r = await Promise.race([
-                    db.execute({ sql: "SELECT mensaje FROM wa_messages WHERE mensaje_id=? AND direccion='out' ORDER BY created_at DESC LIMIT 1", args: [key.id] }),
+                    db.execute({ sql: "SELECT mensaje FROM wa_messages WHERE telefono IN (?,?) AND mensaje_id=? AND direccion='out' ORDER BY timestamp DESC LIMIT 1", args: [telsK[0], telsK[1] || telsK[0], key.id] }),
                     new Promise((_, rej) => setTimeout(() => rej(new Error('turso_lento')), 1500))
                 ]);
-                if (r.rows.length && r.rows[0].mensaje && !/^\[/.test(String(r.rows[0].mensaje))) return { conversation: String(r.rows[0].mensaje) };
+                let out;
+                if (r.rows.length && r.rows[0].mensaje && !/^\[/.test(String(r.rows[0].mensaje))) out = { conversation: String(r.rows[0].mensaje) };
+                U.getMsgMemo.set(key.id, out); setTimeout(() => U.getMsgMemo.delete(key.id), 60 * 60000);   // solo se memoriza un resultado REAL (un error se reintenta)
+                return out;
             } catch (e) { console.error('[getMessage] fallback Turso:', e.message); }
             return undefined;
         }
@@ -551,7 +630,11 @@ async function conectar() {
             const vinculacionFallida = code === DisconnectReason.loggedOut && !registrado;   // 401 sin haberse vinculado nunca
             const reconectar = code !== DisconnectReason.loggedOut || vinculacionFallida;
             if (vinculacionFallida) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }
-            reportarSesion(tenant.id, reconectar ? (vinculacionFallida ? 'esperando_qr' : 'reconectando') : 'desvinculado', 'close code ' + code + (vinculacionFallida ? ' — vinculación fallida, se reabre limpio' : (reconectar ? '' : ' — requiere reescaneo')));
+            // CUOTA: un universo SIN vincular que agota su set de QR cierra y reabre cada ~1 min; ese 'reconectando'
+            // dura segundos y volvía a escribir wa_sessions en cada ciclo → se omite (sigue 'esperando_qr', que es la verdad útil).
+            const cicloQR = reconectar && !vinculacionFallida && !registrado && U.estado === 'esperando_qr';
+            if (!cicloQR) reportarSesion(tenant.id, reconectar ? (vinculacionFallida ? 'esperando_qr' : 'reconectando') : 'desvinculado', 'close code ' + code + (vinculacionFallida ? ' — vinculación fallida, se reabre limpio' : (reconectar ? '' : ' — requiere reescaneo')));
+            else console.log('[sesión] tenant ' + tenant.id + ' → ciclo de QR agotado (code ' + code + '), se reabre sin re-escribir estado');
             U.estado = 'cerrado';
             U.reintentos++;
             const espera = Math.min(30000, 3000 * U.reintentos);
@@ -719,17 +802,21 @@ async function conectar() {
             const adLink = esSaliente ? null : adLinkDe(m);       // link del anuncio
             if (adLink && !texto.includes(adLink)) texto = '🔗 ' + adLink + '\n' + texto;  // mostrarlo en FyraChat como en WhatsApp
             // Guardar el anuncio por teléfono → el cerebro lo usará para saber QUÉ AUTO
-            if (adContext) db.execute({
+            // CUOTA: el upsert lee 1 fila por PK; el MISMO anuncio del MISMO tel en <5 min (re-entrega / ráfaga) no se re-escribe.
+            // Se marca SOLO si la escritura tuvo éxito → con la base caída se comporta igual que antes (reintenta en cada mensaje).
+            const adPrev = adContext ? adUltimo.get(tel) : null;
+            if (adContext && !(adPrev && adPrev.ctx === adContext && Date.now() - adPrev.ts < AD_DEDUP_MS)) db.execute({
                 sql: 'INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at',
                 args: [tel, adContext, Date.now()]
-            }).catch(() => {});
+            }).then(() => { adUltimo.set(tel, { ctx: adContext, ts: Date.now() }); setTimeout(() => { const a = adUltimo.get(tel); if (a && a.ctx === adContext) adUltimo.delete(tel); }, AD_DEDUP_MS); }).catch(() => {});
             // MODO PRUEBA: si un número de prueba contesta un anuncio → REINICIAR contexto
             // (solo se verán los mensajes de aquí en adelante, como comprador nuevo).
             if (adContext && TEST_NUMEROS.has(tel.slice(-10))) {
-                db.execute({
+                const prPrev = pruebaResetUltimo.get(tel) || 0;
+                if (Date.now() - prPrev >= PRUEBA_RESET_DEDUP_MS) db.execute({
                     sql: 'INSERT INTO prueba_reset (telefono, reset_ts) VALUES (?,?) ON CONFLICT(telefono) DO UPDATE SET reset_ts=excluded.reset_ts',
                     args: [tel, Date.now() - 3000]
-                }).catch(() => {});
+                }).then(() => pruebaResetUltimo.set(tel, Date.now())).catch(() => {});
                 console.log('[PRUEBA] reinicio de contexto para ' + tel);
             }
             // HORA REAL del mensaje (Baileys m.messageTimestamp, segundos) — no la de ingesta.
@@ -825,9 +912,16 @@ function programarAutoOpener(tel) {
 // ubicación. No crea burbuja en FyraChat (el eco de media saliente se salta por tipo).
 async function autoEnviarUbicacion(p, autoId) {
     try {
-        const pe = await db.execute({ sql: "SELECT image_b64, name, lat, lng FROM punto_envio WHERE auto_id=?", args: [Number(autoId)] });
-        if (!pe.rows.length) return;
-        const e = pe.rows[0];
+        // CUOTA: el punto de un auto casi no cambia → hit en memoria 5 min (un miss se vuelve a consultar: un punto recién configurado sale al instante)
+        const pc = puntoEnvioCache.get(Number(autoId));
+        let e;
+        if (pc && Date.now() - pc.ts < PUNTO_TTL_MS) e = pc.row;
+        else {
+            const pe = await db.execute({ sql: "SELECT image_b64, name, lat, lng FROM punto_envio WHERE auto_id=?", args: [Number(autoId)] });
+            if (!pe.rows.length) return;
+            e = pe.rows[0];
+            puntoEnvioCache.set(Number(autoId), { row: e, ts: Date.now() });
+        }
         const destino = U.phoneALid.has(p) ? (U.phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
         const marca = (r) => { if (r && r.key && r.key.id) { U.enviadosPorPanel.add(r.key.id); U.sentStore.set(r.key.id, r); setTimeout(() => { U.enviadosPorPanel.delete(r.key.id); U.sentStore.delete(r.key.id); }, 60 * 60000); } };
         if (e.image_b64) { const buf = Buffer.from(String(e.image_b64).replace(/^data:[^,]+,/, ''), 'base64'); marca(await U.sock.sendMessage(destino, { image: buf })); }
