@@ -11,13 +11,17 @@ module.exports = async function handler(req, res) {
     try {
         const r = await tickRecordatorios();
         // espejo SB → fyradrive: si falla no tumba los recordatorios
-        try { r.espejo = await tickEspejo(); } catch (e) { r.espejo = { error: e.message }; }
+        // CUOTA TURSO (2026-09-08): los barredores que recorren tablas completas (espejo, messenger, vigía) corren
+        // UNA vez por hora (primer tick de la hora), no cada 10 min; los recordatorios de cita sí cada 10 min.
+        const cadaHora = new Date().getUTCMinutes() < 10;
+        r.barredores = cadaHora ? 'corren' : 'saltados (solo 1/h)';
+        if (cadaHora) try { r.espejo = await tickEspejo(); } catch (e) { r.espejo = { error: e.message }; }
         // canal Messenger: registra leads con la clave aunque aún no contesten
-        try { r.messenger = await require('../lib/seb/canal-messenger.js').barrerMessenger(); } catch (e) { r.messenger = { error: e.message }; }
+        if (cadaHora) try { r.messenger = await require('../lib/seb/canal-messenger.js').barrerMessenger(); } catch (e) { r.messenger = { error: e.message }; }
         // ══ VIGÍA DEL TELÉFONO (caso Roy 2026-08-25): si en 48h llegan entrantes pero
         // CERO manuales tuyos, el teléfono vinculado dejó de sincronizar → aviso (1/día).
         // Este hoyo estuvo 18 días mudo (8-25 ago) y el bot divagó con leads tuyos.
-        try {
+        if (cadaHora) try {
             const { query: q2, run: r2 } = require('../lib/seb/db.js');
             const desde48 = Date.now() - 48 * 3600000;
             const c = (await q2(`SELECT SUM(CASE WHEN direccion='in' THEN 1 ELSE 0 END) ins,
