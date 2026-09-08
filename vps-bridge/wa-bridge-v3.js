@@ -957,8 +957,13 @@ async function correrGhostScan() {
             for (const g of d.enviar) {
                 let p = String(g.telefono).replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
                 try {
-                    if (g.foto) await autoEnviarFotos(p, [g.foto]);
-                    else await autoEnviarTexto(p, g.texto);
+                    // TENANT (2026-09-08): el recordatorio programado desde el FyraChat de un vendedor sale por SU universo
+                    const tG = Number(g.tenant_id) || 0;
+                    const Ux = tG ? universos.get(tG) : null;
+                    if (tG && (!Ux || Ux.estado !== 'conectado')) { console.error('[rescate] tenant ' + tG + ' no conectado → no sale'); continue; }
+                    const fTxt = Ux ? Ux.enviarTexto : autoEnviarTexto, fFot = Ux ? Ux.enviarFotos : autoEnviarFotos;
+                    if (g.foto) await fFot(p, [g.foto]);
+                    else await fTxt(p, g.texto);
                     console.log('[rescate] → chat ' + jidHash(p) + (g.foto ? ' · foto' : ' · texto'));
                 } catch (e) { console.error('[rescate] envío:', e.message); }
                 await new Promise(s => setTimeout(s, 1500));
@@ -987,6 +992,7 @@ async function registrarManualIlegible(m) {
     await guardarMensajeNuevo({ tel, msgId: m.key.id, ts, direccion: 'out', emisor: 'SRS010904', texto: '[mensaje tuyo — no se pudo leer]', tipo: 'text', nombre: null, ai_generated: 0 }).catch(() => {});
 }
 
+    U.enviarTexto = autoEnviarTexto; U.enviarFotos = autoEnviarFotos;   // expuestos para envíos enrutados desde otro universo (ghost_scan del t0)
     U.apiSend = async (res, body) => {
         const tenantId = tenant.id;
         {

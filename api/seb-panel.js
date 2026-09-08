@@ -278,9 +278,11 @@ module.exports = async function handler(req, res) {
             // (sin enganche/plazo/auto_id/pregunta_pendiente arrastrados).
             const est = await query("SELECT estado_json, auto_id_activo, updated_at FROM wa_conversations WHERE telefono=?", [tel]);
             const estadoFresco = est[0] && Number(est[0].updated_at || 0) >= resetTs;
+            let focoChat = null; try { focoChat = await focoDe(tChat, tel); } catch (e) { }
             return res.status(200).json({
                 ok: true,
                 mensajes,
+                foco: focoChat,
                 borrador,
                 estado: estadoFresco ? { ...JSON.parse(est[0].estado_json || '{}'), auto_id_activo: est[0].auto_id_activo } : {}
             });
@@ -345,8 +347,8 @@ module.exports = async function handler(req, res) {
             try {
                 const prog = require('../lib/seb/programados.js');
                 for (const p of await prog.dueNow(Date.now())) {
-                    for (const sg of (p.segmentos || [])) enviar.push({ telefono: p.telefono, texto: sg });
-                    if (p.foto) enviar.push({ telefono: p.telefono, foto: p.foto });
+                    for (const sg of (p.segmentos || [])) enviar.push({ telefono: p.telefono, texto: sg, tenant_id: p.tenant_id || 0 });
+                    if (p.foto) enviar.push({ telefono: p.telefono, foto: p.foto, tenant_id: p.tenant_id || 0 });
                 }
             } catch (e) { console.error('[programados]', e.message); }
             const avisos = await resc.preAvisos({ ahora: Date.now() });
@@ -422,7 +424,7 @@ module.exports = async function handler(req, res) {
                 dueno_tel: req.body.dueno_tel || '', dueno: req.body.dueno || null,
                 auto_id: req.body.auto_id || null, auto_nombre: req.body.auto_nombre || null,
                 fecha: req.body.fecha || '', hora: req.body.hora || '', cita_ts: Number(req.body.cita_ts) || null,
-                avisar: !!req.body.avisar
+                avisar: !!req.body.avisar, tenant_id: Number(req.body.tenant_id) || 0
             });
             return res.status(200).json(rMD);
         }
@@ -471,6 +473,41 @@ module.exports = async function handler(req, res) {
             return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' AND replace(replace(replace(COALESCE(dueno_telefono,''),'+',''),' ',''),'-','') LIKE ? ORDER BY marca COLLATE NOCASE", ['%' + t.telefono.slice(-10)]);
         }
         function hiloDe(tel, tenantId) { return 'whatsapp:' + tel + (tenantId ? '#t' + tenantId : ''); }
+        // ── AUTO EN FOCO por contacto (orden owner 2026-09-08): cada contacto tiene UN auto amarrado.
+        // tenant≠0: vive en chats_activos.car_id (nace al delegar); tenant 0: wa_conversations.auto_id_activo.
+        async function focoDe(t, telFull) {
+            if (t.id) {
+                const ca = await query("SELECT car_id, car_nombre FROM chats_activos WHERE tenant_id=? AND tel=? AND hasta IS NULL ORDER BY id DESC LIMIT 1", [t.id, telFull]);
+                if (!ca.length || !ca[0].car_id) return null;
+                const inv = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE id=? OR fyradrive_web_id=?", [Number(ca[0].car_id), Number(ca[0].car_id)]);
+                return inv[0] ? { id: inv[0].id, web_id: inv[0].fyradrive_web_id, nombre: [inv[0].marca, inv[0].modelo, inv[0].anio].filter(Boolean).join(' '), precio: inv[0].precio } : { id: ca[0].car_id, nombre: ca[0].car_nombre };
+            }
+            const wc = await query('SELECT auto_id_activo FROM wa_conversations WHERE telefono = ?', [telFull]);
+            const f = wc.length ? Number(wc[0].auto_id_activo) : null;
+            if (!f) return null;
+            const inv = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE id=? OR fyradrive_web_id=?", [f, f]);
+            return inv[0] ? { id: inv[0].id, web_id: inv[0].fyradrive_web_id, nombre: [inv[0].marca, inv[0].modelo, inv[0].anio].filter(Boolean).join(' '), precio: inv[0].precio } : null;
+        }
+        async function ponerFoco(t, telFull, inv) {
+            const nombreA = [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
+            if (t.id) { await run("UPDATE chats_activos SET car_id=?, car_nombre=? WHERE tenant_id=? AND tel=? AND hasta IS NULL", [inv.id, nombreA, t.id, telFull]); return; }
+            const focoNuevo = inv.fyradrive_web_id || inv.id;
+            const rU = await run('UPDATE wa_conversations SET auto_id_activo = ? WHERE telefono = ?', [focoNuevo, telFull]);
+            if (!Number(rU.rowsAffected)) await run('INSERT INTO wa_conversations (telefono, auto_id_activo) VALUES (?, ?)', [telFull, focoNuevo]);
+        }
+        if (action === 'foco_cambiar' && req.method === 'POST') {
+            const tF = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0 };
+            if (!tF) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            let telF = String(req.body.telefono || '').replace(/\D/g, ''); if (telF.length === 10) telF = '521' + telF;
+            const idF = Number(req.body.auto_id) || 0;
+            if (!telF || !idF) return res.status(400).json({ ok: false, error: 'telefono y auto_id requeridos' });
+            // SOLO los autos habilitados para ese usuario (su catálogo)
+            const cat = await autosDeTenant(tF);
+            const inv = cat.find(a => Number(a.id) === idF || Number(a.fyradrive_web_id) === idF);
+            if (!inv) return res.status(403).json({ ok: false, error: 'ese auto no está habilitado para este usuario' });
+            await ponerFoco(tF, telF, inv);
+            return res.status(200).json({ ok: true, foco: { id: inv.id, web_id: inv.fyradrive_web_id, nombre: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' '), precio: inv.precio } });
+        }
         if (action === 'tenant_info') {
             const t = await tenantDeParam(req.query.vendedor);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
@@ -1622,6 +1659,13 @@ module.exports = async function handler(req, res) {
             const accB = String(req.body.accion || '');
             if (!telB || !accB) return res.status(400).json({ ok: false, error: 'telefono y accion requeridos' });
             const telFullB = telB.length === 10 ? '521' + telB : telB;
+            // TENANT (orden owner 2026-09-08): los botones funcionan en cada universo, con el AUTO EN FOCO del contacto
+            // (nace al delegar), restringidos a su catálogo, y TODO sale por el número de ESE tenant (jamás por el de Fyradrive).
+            const tAcc = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
+            if (!tAcc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            const TID = tAcc.id;
+            const catalogoT = TID ? await autosDeTenant(tAcc) : null;
+            const enCatalogo = a => !catalogoT || catalogoT.some(c => Number(c.id) === Number(a.id));
             const H = require('../lib/seb/herramientas.js');
             const normB = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
             // ── 1) RESOLVER EL AUTO (fila de inventario) ──
@@ -1633,6 +1677,12 @@ module.exports = async function handler(req, res) {
             if (req.body.auto_id) {
                 const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [Number(req.body.auto_id), Number(req.body.auto_id)]);
                 inv = r[0] || null;
+                if (inv && !enCatalogo(inv)) return res.status(403).json({ ok: false, error: 'ese auto no está habilitado para este usuario' });
+            } else if (TID) {
+                // universo de vendedor: el foco del contacto manda; sin foco NO se adivina (cambia el auto en la barrita)
+                const f = await focoDe(tAcc, telFullB);
+                if (f && f.id) { const r = await buscarInv('id = ?', [Number(f.id)]); inv = r[0] || null; }
+                if (!inv || !enCatalogo(inv)) return res.status(200).json({ ok: false, necesita: 'foco', error: 'este contacto no tiene auto en foco (o ya no está activo) — cámbialo en la barrita del chat' });
             } else if (String(req.body.auto_texto || '').trim()) {
                 // match por nombre contra TODO el inventario activo: todos los tokens
                 // del texto deben vivir en [marca modelo version año]; único o nada.
@@ -1654,17 +1704,15 @@ module.exports = async function handler(req, res) {
             }
             const nombreAuto = [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
             // el foco queda amarrado a lo que se ejecutó (seguimiento coherente) — upsert
-            try {
-                const focoNuevo = inv.fyradrive_web_id || inv.id;
-                const rU = await run('UPDATE wa_conversations SET auto_id_activo = ? WHERE telefono = ?', [focoNuevo, telFullB]);
-                if (!Number(rU.rowsAffected)) await run('INSERT INTO wa_conversations (telefono, auto_id_activo) VALUES (?, ?)', [telFullB, focoNuevo]);
-            } catch (e) { }
+            try { await ponerFoco(tAcc, telFullB, inv); } catch (e) { }
             // CANDADO SANDBOX (ley de la casa): tels de prueba JAMÁS salen a WhatsApp —
             // se simula la ejecución (el flujo se prueba completo sin tocar el puente).
             const esPrueba = /^52100000000/.test(telFullB);
             const BURL = process.env.BRIDGE_SEND_URL || 'http://137.184.199.19:3000/api/send';
             const BKEY = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2-2026';
-            const { enviarWA } = require('../lib/seb/citas-vivas.js');
+            const { enviarWA: enviarWA0 } = require('../lib/seb/citas-vivas.js');
+            const enviarWA = (tel, txt) => enviarWA0(tel, txt, TID);          // sale por el universo del tenant
+            const conTenant = body => Object.assign(body, TID ? { tenant_id: TID } : {});
             try {
                 // ── 2) EJECUTAR LITERAL ──
                 if (accB === 'info') {
@@ -1682,7 +1730,7 @@ module.exports = async function handler(req, res) {
                     if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): texto + ' + urls.length + ' fotos' });
                     await enviarWA(telFullB, 'Van, ahí te las mando 📸');
-                    const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify({ phone: telFullB, urls }) });
+                    const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(conTenant({ phone: telFullB, urls })) });
                     const df = await rf.json().catch(() => ({}));
                     return res.status(200).json({ ok: !!df.ok, auto: nombreAuto, enviado: 'texto + ' + urls.length + ' fotos', error: df.ok ? undefined : (df.error || 'el puente no pudo mandar las fotos') });
                 }
@@ -1694,7 +1742,7 @@ module.exports = async function handler(req, res) {
                     const cap = pe.length ? pe[0] : {};
                     const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes';
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): paquete de ubicación de ' + punto });
-                    const body = { phone: telFullB, text: texto };
+                    const body = conTenant({ phone: telFullB, text: texto });
                     if (cap.image_b64) body.image = cap.image_b64;
                     if (cap.lat != null && cap.lng != null) body.location = { lat: cap.lat, lng: cap.lng, name: cap.name || punto };
                     const ru = await fetch(BURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(body) });
@@ -1716,7 +1764,23 @@ module.exports = async function handler(req, res) {
                     const fI = String(req.body.fecha_iso || ''), hI = String(req.body.hora || '');
                     if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return res.status(200).json({ ok: false, necesita: 'fecha_hora' });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cita ' + fI + ' ' + hI });
-                    const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cita_manual', phone: telB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }) });
+                    const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'cita_manual', phone: telB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }, TID ? {
+                        // TENANT = DUEÑO (orden owner 2026-09-08): no se le pide confirmación a nadie — el vendedor la agenda él mismo;
+                        // el bot Fyradrive le habla A ÉL (víspera/día D) y el comprador recibe el machote + recordatorios por el número del vendedor.
+                        dueno_confirmado: 1, tenant_id: TID, dueno_tel: tAcc.telefono, dueno_nombre: tAcc.nombre,
+                        msj_confirmacion: (() => {
+                            const nomC = String(req.body.comprador_nombre || '').trim().split(/\s+/)[0] || '';
+                            const [y, mo, d] = fI.split('-').map(Number); const [hh, mi] = hI.split(':').map(Number);
+                            const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'], meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+                            const dt = new Date(Date.UTC(y, mo - 1, d, 12));
+                            const horaTxt = (hh % 12 === 0 ? 12 : hh % 12) + (mi ? ':' + String(mi).padStart(2, '0') : '') + (hh < 12 ? 'am' : 'pm');
+                            const vend = String(tAcc.nombre || '').split(/\s+/)[0] || 'tu vendedor';
+                            // MISMO machote dictado por el owner (2026-08-24) — solo cambia quién se presenta: el asistente del vendedor
+                            return 'Hola' + (nomC ? ' ' + nomC : '') + ', soy el asistente de ' + vend + ' 🤖\n' +
+                                'Ya quedó tu cita ✅ ' + dias[dt.getUTCDay()] + ' ' + d + ' de ' + meses[mo - 1] + ' a las ' + horaTxt + ' para ver el ' + nombreAuto + '.\n' +
+                                'Por aquí te estaré enviando las notificaciones previas a tu cita para comprar tu auto 👍';
+                        })()
+                    } : {})) });
                     const dc = await rc.json().catch(() => ({}));
                     if (!dc.ok) return res.status(200).json({ ok: false, error: dc.error || 'no se pudo crear la cita' });
                     return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'cita ' + fI + ' ' + hI + ' — CRM ✓ Calendar ' + (dc.gcal_ok ? '✓' : '⚠️') + ' Solicitud ' + (dc.solicitud_ok ? '✓' : (dc.solicitud_na ? '(sin tel dueño)' : '⚠️')), cita_id: dc.cita_id });
@@ -1727,7 +1791,9 @@ module.exports = async function handler(req, res) {
         // ══ MENSAJES PROGRAMADOS (owner 2026-08-03): el Calendar agenda a mano ══
         if (action === 'prog_crear' && req.method === 'POST') {
             const prog = require('../lib/seb/programados.js');
-            const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0 });
+            const tP = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0 };
+            if (!tP) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0, tenantId: tP.id });
             return res.status(r.ok ? 200 : 400).json(r);
         }
         if (action === 'prog_cancelar' && req.method === 'POST') {
