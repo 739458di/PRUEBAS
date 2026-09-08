@@ -535,7 +535,14 @@ module.exports = async function handler(req, res) {
             const primerNombre = (t.nombre || 'el vendedor').split(/\s+/)[0];
             // MACHOTE del opener (propuesto; el owner lo ajusta en config_json.opener_texto si quiere)
             const plantilla = (t.config && t.config.opener_texto) || 'Hola{nombre}, soy el asistente de {vendedor} para el {auto}. ¿En qué te puedo ayudar?';
-            const opener = String(req.body.opener_texto || plantilla).replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').replace('{vendedor}', primerNombre).replace('{auto}', autoNombre);
+            // FORMA DE ENTRADA (orden owner 2026-09-08): al delegar, el vendedor ELIGE cómo entra el bot:
+            //   modo 'silencio'  → entra sin decir nada (solo se registra el chat)
+            //   modo 'texto'     → el texto que él escribió/editó (literal)
+            //   modo 'bot'       → se presenta como asistente (machote)
+            const modoE = String(req.body.modo_entrada || (req.body.opener_texto ? 'texto' : 'bot'));
+            const openerBase = modoE === 'silencio' ? '' : (modoE === 'texto' ? String(req.body.opener_texto || '') : plantilla);
+            const opener = openerBase.replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').replace('{vendedor}', primerNombre).replace('{auto}', autoNombre);
+            if (req.body.solo_preview) return res.status(200).json({ ok: true, opener, modo: modoE });   // la UI pide el machote para dejarlo editar
             // tenant 0: chat delegado = chat del owner de siempre (nuevo_chat) — sin universo aparte
             if (!t.id) {
                 const ex = await query("SELECT id FROM conversaciones WHERE channel_thread_id=? LIMIT 1", ['whatsapp:' + telD]);

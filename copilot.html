@@ -236,6 +236,24 @@
 
 <!-- MODAL RECORDATORIO (owner 2026-08-06): programa un mensaje para este chat —
      misma libreta mensajes_programados que el Calendar (y su veto al ghost). -->
+<div class="cmodal" id="entradamodal" onclick="if(event.target===this)cerrarEntradaM(null)">
+  <div class="cmcard">
+    <div class="cmgrab"></div>
+    <div class="cmbody">
+      <div class="cmtitle">🤖 ¿Cómo entra el bot?</div>
+      <div class="cmhint" id="entrada-hint">Elige la forma de entrada para este chat.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0">
+        <button type="button" onclick="cerrarEntradaM('silencio')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;cursor:pointer">🤫 <b>Sin decir nada</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Solo entra al chat. No manda mensaje.</div></button>
+        <button type="button" onclick="entradaTexto()" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;cursor:pointer">✍️ <b>Con mi texto</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Tú escribes o editas el primer mensaje.</div></button>
+        <button type="button" onclick="cerrarEntradaM('bot')" style="text-align:left;border:1.5px solid #cfe3ff;background:#eef5ff;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;cursor:pointer">🤖 <b>Se presenta como asistente</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px" id="entrada-machote">—</div></button>
+      </div>
+      <div id="entrada-editor" style="display:none">
+        <textarea id="entrada-texto" rows="4" style="width:100%;box-sizing:border-box;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit"></textarea>
+        <button class="cm-add" onclick="cerrarEntradaM('texto')">✍️ Entrar con este texto</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="cmodal" id="automodal" onclick="if(event.target===this)cerrarAutoM(null)">
   <div class="cmcard">
     <div class="cmgrab"></div>
@@ -521,6 +539,25 @@ async function cargarTenant(){
 const vendQS = () => VEND ? '&vendedor='+encodeURIComponent(VEND) : '';
 // ➕ NUEVO COMPRADOR (única puerta de delegación, orden owner 2026-09-07): nombre del auto +
 // teléfono → el chat nace delegado en el universo del vendedor y el asistente escribe UNA vez.
+// ══ FORMA DE ENTRADA del bot al delegar (orden owner 2026-09-08): silencio / mi texto / como asistente ══
+let ENTRADA_M = { resolve: null };
+function elegirEntrada(machote){
+  return new Promise(resolve => {
+    ENTRADA_M = { resolve };
+    document.getElementById('entrada-machote').textContent = '«' + machote + '»';
+    document.getElementById('entrada-texto').value = machote;
+    document.getElementById('entrada-editor').style.display = 'none';
+    document.getElementById('entradamodal').classList.add('show');
+  });
+}
+function entradaTexto(){ const ed = document.getElementById('entrada-editor'); ed.style.display = 'block'; try { document.getElementById('entrada-texto').focus(); } catch(e){} }
+function cerrarEntradaM(modo){
+  document.getElementById('entradamodal').classList.remove('show');
+  const r = ENTRADA_M.resolve; ENTRADA_M.resolve = null;
+  if (!r) return;
+  if (!modo) return r(null);
+  r({ modo, texto: modo === 'texto' ? (document.getElementById('entrada-texto').value || '').trim() : '' });
+}
 async function nuevoComprador(){
   if (!TENANT) return nuevoChat();
   if (!TENANT.autos.length) return alert('No tienes autos activos dados de alta a tu nombre en el Sales Brain');
@@ -528,10 +565,16 @@ async function nuevoComprador(){
   const t = prompt('📱 Teléfono del comprador (10 dígitos):'); if (!t) return;
   const tel = t.replace(/\D/g,''); if (tel.length !== 10 && !(tel.length === 13 && tel.startsWith('521'))) return alert('Teléfono inválido — 10 dígitos');
   const nombre = (prompt('👤 Nombre del comprador (opcional):') || '').trim();
+  // la forma de entrada la elige el vendedor: primero pedimos el machote para mostrarlo/editarlo
+  let machote = '';
+  try { const pv = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VEND, auto_id: auto.id, telefono: tel, nombre, modo_entrada:'bot', solo_preview:1})}).then(x=>x.json()); machote = (pv && pv.opener) || ''; } catch(e){}
+  const entrada = await elegirEntrada(machote); if (!entrada) return;
+  if (entrada.modo === 'texto' && !entrada.texto) return alert('El texto quedó vacío — elige "Sin decir nada" si no quieres mensaje');
   try {
-    const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VEND, auto_id: auto.id, telefono: tel, nombre})}).then(x=>x.json());
+    const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VEND, auto_id: auto.id, telefono: tel, nombre, modo_entrada: entrada.modo, opener_texto: entrada.texto})}).then(x=>x.json());
     if (!r.ok) return alert('No se pudo: '+(r.error||'error'));
-    alert((r.opener_enviado ? '✅ Chat delegado y primer mensaje enviado:\n\n«'+r.opener+'»' : '🟡 Chat delegado. El primer mensaje quedó pendiente: '+(r.error||'sin conexión')) );
+    alert(entrada.modo === 'silencio' ? '🤫 Chat delegado en silencio (sin mensaje). Ya puedes escribirle o usar los botones.'
+        : (r.opener_enviado ? '✅ Chat delegado y primer mensaje enviado:\n\n«'+r.opener+'»' : '🟡 Chat delegado. El primer mensaje quedó pendiente: '+(r.error||'sin conexión')) );
     await cargarLista();
     abrirChat(r.telefono, nombre || null);
   } catch(e){ alert('Error de red: '+e.message); }
