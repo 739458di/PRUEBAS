@@ -236,6 +236,21 @@
 
 <!-- MODAL RECORDATORIO (owner 2026-08-06): programa un mensaje para este chat —
      misma libreta mensajes_programados que el Calendar (y su veto al ghost). -->
+<div class="cmodal" id="citamodal" onclick="if(event.target===this)cerrarCitaM()">
+  <div class="cmcard">
+    <div class="cmgrab"></div>
+    <div class="cmbody">
+      <div class="cmtitle">📅 Agendar cita</div>
+      <div class="cmhint" id="cita-hint">Elige día y hora. Se agenda para el auto en foco de este contacto.</div>
+      <div style="display:flex;gap:8px;margin:10px 0">
+        <input type="date" id="cita-fecha" style="flex:1;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit">
+        <input type="time" id="cita-hora" step="900" style="flex:1;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit">
+      </div>
+      <div id="cita-rapidas" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <button class="cm-add" onclick="confirmarCitaM(this)">📅 Agendar</button>
+    </div>
+  </div>
+</div>
 <div class="cmodal" id="recmodal" onclick="if(event.target===this)cerrarRec()">
   <div class="cmcard">
     <div class="cmgrab"></div>
@@ -835,9 +850,8 @@ async function accionBoton(acc){
   const tel = TEL; if (!tel) { alert('Abre un chat primero'); return; }
   const body = { action:'accion_boton', telefono: tel, accion: acc, vendedor: VEND || undefined, comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim() };
   if (acc === 'cita') {
-    const f = prompt('📅 Fecha de la cita (AAAA-MM-DD):'); if (f === null) return;
-    const h = prompt('🕐 Hora (HH:MM, 24 hrs — ej. 15:00):'); if (h === null) return;
-    body.fecha_iso = String(f).trim(); body.hora = String(h).trim();
+    // por BOTONES (orden owner 2026-09-08): selectores nativos de fecha/hora + atajos, nada escrito a mano
+    if (!body.fecha_iso) { abrirCitaM(); return; }
   }
   document.querySelectorAll('.acc-b').forEach(b => b.disabled = true);
   let d = await postAccion(body);
@@ -858,6 +872,33 @@ async function accionBoton(acc){
   if (d.necesita === 'auto') { alert('⚠️ No amarré el auto: ' + (d.error || '')); return; }
   if (d.ok) { alert('✅ ' + (d.enviado || 'ejecutado') + (d.auto ? '\n🚗 ' + d.auto : '')); try { cargarChat(); } catch(e){} }
   else alert('⚠️ ' + (d.error || 'no se pudo'));
+}
+
+// ══ 📅 CITA POR BOTONES (owner 2026-09-08) ══
+function abrirCitaM(){
+  const mty = new Date(Date.now() - 6*3600000);
+  const iso = d => d.toISOString().slice(0,10);
+  const f = document.getElementById('cita-fecha'), h = document.getElementById('cita-hora');
+  f.min = iso(mty); f.value = iso(new Date(mty.getTime() + 24*3600000)); h.value = '11:00';
+  document.getElementById('cita-hint').textContent = FOCO ? ('Auto en foco: ' + FOCO.nombre + '. Elige día y hora.') : '⚠️ Este contacto no tiene auto en foco — cámbialo en la barrita antes de agendar.';
+  const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const chips = [];
+  for (let i = 0; i < 7; i++) { const d = new Date(mty.getTime() + i*24*3600000); chips.push('<button type="button" onclick="document.getElementById(\'cita-fecha\').value=\''+iso(d)+'\'" style="border:1.5px solid #dde4ee;background:#fff;border-radius:999px;padding:6px 10px;font-size:12.5px;font-family:inherit;cursor:pointer">'+(i===0?'Hoy':(i===1?'Mañana':dias[d.getUTCDay()]+' '+d.getUTCDate()))+'</button>'); }
+  for (const hh of ['10:00','12:00','16:00','18:00']) chips.push('<button type="button" onclick="document.getElementById(\'cita-hora\').value=\''+hh+'\'" style="border:1.5px solid #cfe3ff;background:#eef5ff;border-radius:999px;padding:6px 10px;font-size:12.5px;font-family:inherit;cursor:pointer">🕐 '+hh+'</button>');
+  document.getElementById('cita-rapidas').innerHTML = chips.join('');
+  document.getElementById('citamodal').classList.add('show');
+}
+function cerrarCitaM(){ document.getElementById('citamodal').classList.remove('show'); }
+async function confirmarCitaM(btn){
+  const f = document.getElementById('cita-fecha').value, h = document.getElementById('cita-hora').value;
+  if (!f || !h) { alert('Elige día y hora'); return; }
+  btn.disabled = true;
+  const body = { action:'accion_boton', telefono: TEL, accion: 'cita', vendedor: VEND || undefined, comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim(), fecha_iso: f, hora: h };
+  const d = await postAccion(body);
+  btn.disabled = false;
+  if (d && d.necesita === 'foco') { alert('⚠️ ' + d.error); return; }
+  if (d && d.ok) { cerrarCitaM(); alert('✅ ' + (d.enviado || 'cita agendada') + (d.auto ? '\n🚗 ' + d.auto : '')); try { cargarChat(); } catch(e){} }
+  else alert('⚠️ ' + ((d && d.error) || 'no se pudo agendar'));
 }
 
 // ══ 📨 RECORDATORIO (owner 2026-08-06): misma libreta que el Calendar ══

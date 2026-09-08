@@ -1728,11 +1728,11 @@ module.exports = async function handler(req, res) {
                 if (accB === 'fotos') {
                     const urls = await H.fotosDeAuto(inv.id, 8);
                     if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): texto + ' + urls.length + ' fotos' });
-                    await enviarWA(telFullB, 'Van, ahí te las mando 📸');
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): ' + (TID ? 'solo ' : 'texto + ') + urls.length + ' fotos' });
+                    if (!TID) await enviarWA(telFullB, 'Van, ahí te las mando 📸');     // en universos de vendedor: SOLO las fotos, sin redactar
                     const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(conTenant({ phone: telFullB, urls })) });
                     const df = await rf.json().catch(() => ({}));
-                    return res.status(200).json({ ok: !!df.ok, auto: nombreAuto, enviado: 'texto + ' + urls.length + ' fotos', error: df.ok ? undefined : (df.error || 'el puente no pudo mandar las fotos') });
+                    return res.status(200).json({ ok: !!df.ok, auto: nombreAuto, enviado: (TID ? '' : 'texto + ') + urls.length + ' fotos', error: df.ok ? undefined : (df.error || 'el puente no pudo mandar las fotos') });
                 }
                 if (accB === 'ubicacion') {
                     const u = await H.ubicacion({ auto_id: inv.id });
@@ -1741,23 +1741,23 @@ module.exports = async function handler(req, res) {
                     const pe = await query('SELECT image_b64, lat, lng, name FROM punto_envio WHERE auto_id = ?', [inv.id]);
                     const cap = pe.length ? pe[0] : {};
                     const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes';
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): paquete de ubicación de ' + punto });
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): paquete de ubicación de ' + punto + (TID ? ' (sin pregunta de cita)' : '') });
                     const body = conTenant({ phone: telFullB, text: texto });
                     if (cap.image_b64) body.image = cap.image_b64;
                     if (cap.lat != null && cap.lng != null) body.location = { lat: cap.lat, lng: cap.lng, name: cap.name || punto };
                     const ru = await fetch(BURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(body) });
                     const du = await ru.json().catch(() => ({}));
                     if (!du.ok) return res.status(200).json({ ok: false, error: du.error || 'el puente no pudo mandar la ubicación' });
-                    await enviarWA(telFullB, '¿Qué día te queda bien para venir a verlo y manejarlo? Te agendo de una vez');
-                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'paquete de ubicación (' + [cap.image_b64 ? 'captura' : null, 'texto', (cap.lat != null ? 'pin' : null), 'cita'].filter(Boolean).join(' + ') + ')' });
+                    if (!TID) await enviarWA(telFullB, '¿Qué día te queda bien para venir a verlo y manejarlo? Te agendo de una vez');   // vendedores: solo el paquete
+                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'paquete de ubicación (' + [cap.image_b64 ? 'captura' : null, 'texto', (cap.lat != null ? 'pin' : null), TID ? null : 'cita'].filter(Boolean).join(' + ') + ')' });
                 }
                 if (accB === 'cotizar') {
                     const c = await H.cotizar({ auto_id: inv.id, enganche: req.body.enganche ? Number(req.body.enganche) : undefined, plazo_meses: req.body.plazo_meses ? Number(req.body.plazo_meses) : undefined });
                     if (!c.ok) return res.status(200).json({ ok: false, necesita: c.error === 'falta_enganche' ? 'datos' : undefined, error: c.error });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cotización lista', tarjeta: String(c.placeholders.cotizacion).slice(0, 200) });
-                    await enviarWA(telFullB, 'Va, mira cómo quedaría:');
-                    await enviarWA(telFullB, c.placeholders.cotizacion);
-                    await enviarWA(telFullB, '¿Cómo la ves?');
+                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cotización lista' + (TID ? ' (solo la tarjeta)' : ''), tarjeta: String(c.placeholders.cotizacion).slice(0, 200) });
+                    if (!TID) await enviarWA(telFullB, 'Va, mira cómo quedaría:');
+                    await enviarWA(telFullB, c.placeholders.cotizacion);                 // vendedores: SOLO la tarjeta
+                    if (!TID) await enviarWA(telFullB, '¿Cómo la ves?');
                     return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'cotización de ' + nombreAuto });
                 }
                 if (accB === 'cita') {
