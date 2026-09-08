@@ -465,7 +465,7 @@ async function cargarLista(){
 
 // Conecta el TIMBRE (WebSocket). Si se cae, reconecta solo. Al reconectar, re-sincroniza el chat abierto.
 async function connectTimbre(){
-  try { const tu = await fetch(API+'?action=timbre_url').then(x=>x.json()); if (tu && tu.url) TIMBRE = tu.url; } catch(e){}
+  try { const tu = await fetch(API+'?action=timbre_url').then(x=>x.json()); if (tu && tu.url) { TIMBRE = tu.url; try { localStorage.setItem('timbre_url', TIMBRE); } catch(e){} } } catch(e){ try { TIMBRE = localStorage.getItem('timbre_url') || TIMBRE; } catch(e2){} }
   try { WS = new WebSocket(TIMBRE); } catch(e){ return setTimeout(connectTimbre, 5000); }
   WS.onopen = () => { estadoTimbre(true); if (TEL) cargarChat(); };   // al (re)conectar, ponerse al día
   WS.onmessage = (ev) => { let d; try{ d=JSON.parse(ev.data); }catch(e){ return; } if (d.tipo==='mensaje') onTimbre(d); };

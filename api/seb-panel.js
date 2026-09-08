@@ -512,6 +512,8 @@ module.exports = async function handler(req, res) {
         if (action === 'timbre_url') {
             // URL viva del túnel del timbre (la publica el puente cada minuto); fallback = la última conocida
             let u = null; try { const r = await query("SELECT valor FROM sistema_config WHERE clave='timbre_url'"); u = r.length ? r[0].valor : null; } catch (e) { }
+            // base caída → última URL conocida (el timbre NO depende de la base: vive en el puente)
+            if (!u) u = process.env.TIMBRE_URL_FALLBACK || 'wss://movers-diabetes-were-greetings.trycloudflare.com';
             return res.status(200).json({ ok: true, url: u });
         }
         if (action === 'foco_cambiar' && req.method === 'POST') {
