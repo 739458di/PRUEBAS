@@ -495,6 +495,11 @@ module.exports = async function handler(req, res) {
             const rU = await run('UPDATE wa_conversations SET auto_id_activo = ? WHERE telefono = ?', [focoNuevo, telFull]);
             if (!Number(rU.rowsAffected)) await run('INSERT INTO wa_conversations (telefono, auto_id_activo) VALUES (?, ?)', [telFull, focoNuevo]);
         }
+        if (action === 'timbre_url') {
+            // URL viva del túnel del timbre (la publica el puente cada minuto); fallback = la última conocida
+            let u = null; try { const r = await query("SELECT valor FROM sistema_config WHERE clave='timbre_url'"); u = r.length ? r[0].valor : null; } catch (e) { }
+            return res.status(200).json({ ok: true, url: u });
+        }
         if (action === 'foco_cambiar' && req.method === 'POST') {
             const tF = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0 };
             if (!tF) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });

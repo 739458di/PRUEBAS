@@ -285,6 +285,26 @@ async function reintentarCarrete() {
     finally { _carreteEnCurso = false; }
 }
 setInterval(reintentarCarrete, 60 * 1000);
+// TIMBRE (2026-09-08): el túnel de Cloudflare (pm2 fyra-tunnel) cambia de URL en cada reinicio del VPS y FyraChat
+// la tenía fija → "CONECTANDO…" eterno. El puente lee la URL viva del log del túnel y la publica en sistema_config;
+// FyraChat la pide al conectar. Determinista, sin payloads.
+let _timbreUrlPublicada = null;
+async function publicarTimbreUrl() {
+    try {
+        const logF = process.env.TUNNEL_LOG || '/root/.pm2/logs/fyra-tunnel-error.log';
+        if (!fs.existsSync(logF)) return;
+        const st = fs.statSync(logF); const fd = fs.openSync(logF, 'r'); const len = Math.min(st.size, 64 * 1024);
+        const buf = Buffer.alloc(len); fs.readSync(fd, buf, 0, len, st.size - len); fs.closeSync(fd);
+        const m = buf.toString('utf8').match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/g);
+        if (!m || !m.length) return;
+        const url = m[m.length - 1].replace('https://', 'wss://');
+        if (url === _timbreUrlPublicada) return;
+        await db.execute('CREATE TABLE IF NOT EXISTS sistema_config (clave TEXT PRIMARY KEY, valor TEXT, updated INTEGER)');
+        await db.execute({ sql: 'INSERT INTO sistema_config (clave, valor, updated) VALUES (?,?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor, updated=excluded.updated', args: ['timbre_url', url, Date.now()] });
+        _timbreUrlPublicada = url; console.log('[timbre] url publicada: ' + url);
+    } catch (e) { console.error('[timbre] publicar:', e.message); }
+}
+setTimeout(publicarTimbreUrl, 15 * 1000); setInterval(publicarTimbreUrl, 60 * 1000);
 setInterval(() => { for (const U of universos.values()) if (U.tenant.id !== 0 && !U.chatsCargados) cargarChatsActivos(U).catch(() => {}); }, 60 * 1000);   // MODO SIN BASE: recargar delegaciones cuando la base vuelva
 
 // Reenvía un mensaje a SALES-BRAIN /api/upload. El router de SALES-BRAIN decide

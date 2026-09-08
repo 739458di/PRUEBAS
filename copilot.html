@@ -302,7 +302,7 @@ const SENTINEL = '||SEQ||';   // separa los mensajes de una SECUENCIA del banco
 let SEQ = null, SEQ_CONSUMED = false;   // secuencia del opener en curso
 let ULTIMA_IN_SUGERIDA = 0, POLL = null, RENDERED_COUNT = -1;
 // EL TIMBRE: WebSocket al bridge (estilo WhatsApp). Recibe mensajes nuevos SIN preguntarle a Turso.
-const TIMBRE = 'wss://fat-simplified-sat-window.trycloudflare.com';
+let TIMBRE = 'wss://movers-diabetes-were-greetings.trycloudflare.com';   // última conocida; la viva se pide al conectar (action=timbre_url)
 let WS = null;
 let ENVIANDO = false;                          // anti doble-envío (BUG 4)
 let CARGA_FRESCA = false;                       // primera carga de un chat → render limpio (BUG 1)
@@ -436,7 +436,8 @@ async function cargarLista(){
 }
 
 // Conecta el TIMBRE (WebSocket). Si se cae, reconecta solo. Al reconectar, re-sincroniza el chat abierto.
-function connectTimbre(){
+async function connectTimbre(){
+  try { const tu = await fetch(API+'?action=timbre_url').then(x=>x.json()); if (tu && tu.url) TIMBRE = tu.url; } catch(e){}
   try { WS = new WebSocket(TIMBRE); } catch(e){ return setTimeout(connectTimbre, 5000); }
   WS.onopen = () => { estadoTimbre(true); if (TEL) cargarChat(); };   // al (re)conectar, ponerse al día
   WS.onmessage = (ev) => { let d; try{ d=JSON.parse(ev.data); }catch(e){ return; } if (d.tipo==='mensaje') onTimbre(d); };
