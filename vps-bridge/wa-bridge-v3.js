@@ -259,7 +259,7 @@ async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, t
             try { fs.appendFileSync(CARRETE_PATH, JSON.stringify({ tel, msgId, ts, direccion, emisor, texto, tipo, nombre, ai_generated, tenantId }) + '\n'); }
             catch (e2) { console.error('[carrete] no pude escribir:', e2.message); }
         }
-        throw e;
+        if (_desdeCarrete) throw e;   // solo el reintento necesita saber que falló; a los demás no se les revienta (sin rechazos sueltos)
     }
 }
 const CARRETE_PATH = require('path').join(__dirname, 'carrete.jsonl');   // require inline: fs/path se declaran más abajo
