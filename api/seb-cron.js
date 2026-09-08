@@ -16,6 +16,8 @@ module.exports = async function handler(req, res) {
         const cadaHora = new Date().getUTCMinutes() < 10;
         r.barredores = cadaHora ? 'corren' : 'saltados (solo 1/h)';
         if (cadaHora) try { r.espejo = await tickEspejo(); } catch (e) { r.espejo = { error: e.message }; }
+        // PROYECCIÓN PÚBLICA: reconstrucción completa 1 vez al día (respaldo; lo normal es puntual por evento)
+        if (cadaHora && new Date().getUTCHours() === 9) try { r.proyeccion_diaria = await require('../lib/seb/catalogo-web.js').proyectarWeb([], true); } catch (e) { r.proyeccion_diaria = { error: e.message }; }
         // canal Messenger: registra leads con la clave aunque aún no contesten
         if (cadaHora) try { r.messenger = await require('../lib/seb/canal-messenger.js').barrerMessenger(); } catch (e) { r.messenger = { error: e.message }; }
         // ══ VIGÍA DEL TELÉFONO (caso Roy 2026-08-25): si en 48h llegan entrantes pero
