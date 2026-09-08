@@ -438,9 +438,81 @@ module.exports = async function handler(req, res) {
                 dueno_tel: req.body.dueno_tel || '', dueno: req.body.dueno || null,
                 auto_id: req.body.auto_id || null, auto_nombre: req.body.auto_nombre || null,
                 fecha: req.body.fecha || '', hora: req.body.hora || '', cita_ts: Number(req.body.cita_ts) || null,
-                avisar: !!req.body.avisar, tenant_id: Number(req.body.tenant_id) || 0
+                avisar: !!req.body.avisar, tenant_id: Number(req.body.tenant_id) || 0,
+                cita_id: Number(req.body.cita_id) || null,
+                // mover/re-confirmar: las máquinas vivas de ese chat se reemplazan y sus casillas se cancelan aquí (no en SB por LIKE)
+                reemplazar: !!(req.body.reemplazar === true || req.body.reemplazar === 1 || req.body.reemplazar === '1')
             });
             return res.status(200).json(rMD);
+        }
+
+        // ══════════ CASILLAS · ENTRADA POR UNIVERSO · ACCIONES · BACKFILL (orden owner 2026-09-08) ══════════
+        const KEY_PUENTE = process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026';
+        // LA MISMA PUERTA para el temporizador del puente y para el barredor del cron: ejecuta UNA casilla.
+        if (action === 'casilla_ejecutar' && req.method === 'POST') {
+            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
+            const idC = Number(req.body.id || req.body.casilla_id) || 0;
+            if (!idC) return res.status(400).json({ ok: false, error: 'id requerido' });
+            try { return res.status(200).json(await citasVivas.casillaEjecutar(idC)); }
+            catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        // El puente (universos ≠0, tras persistir un ENTRANTE de un chat delegado) → la MISMA máquina que el tenant 0.
+        // Se llama por chat; adentro solo se lee si hay cita viva (1-3 filas por índice) y nada más.
+        if (action === 'cita_entrante' && req.method === 'POST') {
+            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
+            const tE = Number(req.body.tenant_id) || 0;
+            let telE = String(req.body.telefono || req.body.tel || '').replace(/\D/g, ''); if (telE.length === 10) telE = '521' + telE;
+            const textoE = String(req.body.texto || '');
+            if (!telE || !textoE) return res.status(400).json({ ok: false, error: 'tel y texto requeridos' });
+            try {
+                let chatIdE = Number(req.body.chat_id) || null;
+                if (!chatIdE) { const cE = await U.chatDe(tE, telE); chatIdE = cE ? Number(cE.id) : null; }
+                if (!chatIdE) return res.status(200).json({ ok: true, handled: false, motivo: 'sin chat en ese universo' });
+                let pausaMin = null;
+                if (tE) { try { const tI = await tenantDeParam(String(tE)); pausaMin = tI && tI.config && Number(tI.config.pausa_min) || null; } catch (e) { } }
+                const r = await citasVivas.procesarEntrante({ tenantId: tE, chatId: chatIdE, tel: telE, texto: textoE, vendedor_ultimo_ts: Number(req.body.vendedor_ultimo_ts) || 0, enviar: !!tE, pausaMin });
+                return res.status(200).json(Object.assign({ ok: true }, r));
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        // Estado de las casillas de una máquina (SB pausar/reanudar/cancelar entra por aquí — misma puerta)
+        if (action === 'casillas_estado' && req.method === 'POST') {
+            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
+            const mid = Number(req.body.cita_match_id) || 0, acc = String(req.body.accion || '');
+            if (!mid || !['pausar', 'reanudar', 'cancelar'].includes(acc)) return res.status(400).json({ ok: false, error: 'cita_match_id y accion (pausar|reanudar|cancelar) requeridos' });
+            try {
+                const n = acc === 'reanudar' ? await citasVivas.reanudarCasillas({ cita_match_id: mid }) : await citasVivas.cancelarCasillas({ cita_match_id: mid }, acc === 'pausar' ? 'pausada' : 'cancelada');
+                return res.status(200).json({ ok: true, cita_match_id: mid, accion: acc, casillas: n });
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        // Acciones del chat (para que FyraChat las pinte como parte del chat) — por índice (chat_id, ts)
+        if (action === 'acciones') {
+            const tA = req.query.vendedor ? await tenantDeParam(req.query.vendedor) : { id: 0 };
+            if (!tA) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            let telA = String(req.query.telefono || '').replace(/\D/g, ''); if (telA.length === 10) telA = '521' + telA;
+            if (!telA) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            try {
+                const cA = await U.chatDe(tA.id, telA);
+                if (!cA) return res.status(200).json({ ok: true, acciones: [] });
+                const desdeA = Number(req.query.desde) || 0;   // epoch en segundos (como FyraChat) o en ms
+                const filas = await require('../lib/seb/acciones.js').listar({ chat_id: cA.id, desde: desdeA > 1e12 ? desdeA : desdeA * 1000, limite: Number(req.query.limite) || 200 });
+                return res.status(200).json({ ok: true, chat_id: cA.id, acciones: filas.map(a => ({ id: a.id, tipo: a.tipo, ref_id: a.ref_id, meta: (() => { try { return JSON.parse(a.meta_json || 'null'); } catch (e) { return null; } })(), ts: Number(a.ts), actor: a.actor, delegacion_id: a.delegacion_id })) });
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        // Backfill de dirección del sistema de citas (idempotente; reporta lo no ligado)
+        if (action === 'citas_backfill' && req.method === 'POST') {
+            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
+            try { return res.status(200).json({ ok: true, backfill: await citasVivas.backfillDireccionCitas({ dry: req.body.dry !== false && req.body.dry !== 0 && req.body.dry !== 'false', telefonos: Array.isArray(req.body.telefonos) ? req.body.telefonos : null }) }); }
+            catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+        }
+        // El puente, al reiniciar, re-arma sus temporizadores: casillas pendientes de las próximas N horas (1 consulta por índice)
+        if (action === 'casillas_pendientes') {
+            if (String(req.query.key || (req.body && req.body.key) || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
+            try {
+                await citasVivas.ensureDireccionCitas();
+                const horas = Math.min(Number(req.query.horas) || 24, 72);
+                const filas = await query("SELECT id, due_ts, tel, tenant_id FROM cita_casillas WHERE estado='pendiente' AND due_ts <= ? ORDER BY due_ts ASC LIMIT 500", [Date.now() + horas * 3600000]);
+                return res.status(200).json({ ok: true, casillas: filas.filter(c => !/^52100000000/.test(String(c.tel || ''))).map(c => ({ casilla_id: Number(c.id), due_ts: Number(c.due_ts), tenant_id: Number(c.tenant_id) || 0 })) });
+            } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
         }
 
         // ============ CANCELAR MATCH MANUAL (orden owner 2026-07-18) ============
@@ -451,13 +523,15 @@ module.exports = async function handler(req, res) {
             if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
                 return res.status(401).json({ ok: false, error: 'key invalida' });
             }
-            const telCM = String(req.body.telefono || '').replace(/\D/g, '').slice(-10);
-            if (!telCM) return res.status(400).json({ ok: false, error: 'telefono requerido' });
-            // CUOTA TURSO: el filtro por teléfono va en SQL (índice citas_match(estado)); el find en JS queda como verificación exacta
-            const filas = await query("SELECT * FROM citas_match WHERE estado IN ('solicitud','contrapropuesta','esperando_horario','match') AND comprador_tel LIKE ? ORDER BY updated DESC", ['%' + telCM]);
-            const MCM = filas.find(r => String(r.comprador_tel || '').replace(/\D/g, '').slice(-10) === telCM);
+            let telCM = String(req.body.telefono || '').replace(/\D/g, ''); if (telCM.length === 10) telCM = '521' + telCM;
+            if (!telCM && !req.body.chat_id) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            // DIRECCIÓN (2026-09-08): SB manda tenant_id+chat_id de la cita; si no, se resuelve el chat por (tenant, tel) → 1 fila por índice
+            const tCM = Number(req.body.tenant_id) || 0;
+            let chatCM = Number(req.body.chat_id) || null;
+            if (!chatCM) { const dCM = await citasVivas.direccionDe(tCM, telCM); chatCM = dCM.chat_id; }
+            const MCM = await citasVivas.filaViva(tCM, chatCM, ['solicitud', 'contrapropuesta', 'esperando_horario', 'match', 'pausada', 'pausada_staff', 'escalada_manual']);
             if (!MCM) return res.status(200).json({ ok: true, avisado: false, motivo: 'sin fila activa de match' });
-            await citasVivas.ejecutarCancelacion(MCM);
+            await citasVivas.ejecutarCancelacion(MCM, { por: 'owner', actor: 'owner', texto: req.body.razon || null });
             return res.status(200).json({ ok: true, avisado: true, match_id: MCM.id });
         }
 
@@ -539,6 +613,7 @@ module.exports = async function handler(req, res) {
             const inv = cat.find(a => Number(a.id) === idF || Number(a.fyradrive_web_id) === idF);
             if (!inv) return res.status(403).json({ ok: false, error: 'ese auto no está habilitado para este usuario' });
             await ponerFoco(tF, telF, inv);
+            try { const dF = await citasVivas.direccionDe(tF.id, telF); await require('../lib/seb/acciones.js').registrar({ tenant_id: tF.id, chat_id: dF.chat_id, delegacion_id: dF.delegacion_id, tipo: 'foco_cambiado', ref_id: inv.id, meta: { auto: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ') }, actor: 'vendedor' }); } catch (e) { }
             return res.status(200).json({ ok: true, foco: { id: inv.id, web_id: inv.fyradrive_web_id, nombre: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' '), precio: inv.precio } });
         }
         if (action === 'tenant_info') {
@@ -591,6 +666,8 @@ module.exports = async function handler(req, res) {
                     const d2 = await fr2.json().catch(() => ({})); r = Object.assign({ ok: true }, r || {}, { opener_enviado: fr2.ok && d2.ok !== false });
                 } catch (e) { r = Object.assign({ ok: true }, r || {}, { opener_enviado: false, error: e.message }); }
             }
+            // ACCIÓN POR CHAT: la delegación queda como acción (con la delegación activa que acaba de nacer)
+            try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: { auto: autoNombre, modo: modoE, opener_enviado: !!(r && r.opener_enviado) }, actor: 'vendedor' }); } catch (e) { }
             return res.status(200).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener }, r || {}));
         }
         if (action === 'soltar' && req.method === 'POST') {
@@ -675,7 +752,8 @@ module.exports = async function handler(req, res) {
                         ultimoD = mD.length ? String(mD[0].texto || '') : '';
                     }
                     if (ultimoD) {
-                        const segsD = await citasVivas.manejarMensajeDueno(tel, ultimoD);
+                        // DIRECCIÓN: el chat del dueño ya está resuelto → 1 lectura por índice (dueno_chat_id, estado)
+                        const segsD = await citasVivas.manejarMensajeDueno(tel, ultimoD, convD.length ? convD[0].id : null);
                         if (segsD && segsD.length) return res.status(200).json({ ok: true, modo: 'vendedor_match', tipo: 'cita_vendedor', segmentos: segsD });
                     }
                 } catch (e) { console.error('[citas-vivas] dueno:', e.message); }
@@ -702,7 +780,7 @@ module.exports = async function handler(req, res) {
             // silla de vendedor viva, su mensaje entra a ESA máquina (sí→confirma, no→
             // escala, resto→escala) — jamás al flujo de comprador.
             try {
-                const segsSt = await citasVivas.manejarMensajeStaff(tel, entrantes[entrantes.length - 1].mensaje);
+                const segsSt = await citasVivas.manejarMensajeStaff(tel, entrantes[entrantes.length - 1].mensaje, convId);   // por chat (idx_cv_chat)
                 if (segsSt !== null) {
                     if (segsSt && segsSt.length) return res.status(200).json({ ok: true, modo: 'staff', tipo: 'cita_staff', segmentos: segsSt });
                     return res.status(200).json({ ok: false, motivo: 'staff — escalado al owner' });
@@ -715,7 +793,7 @@ module.exports = async function handler(req, res) {
                 // llega en RÁFAGA — se evalúa la ráfaga entrante COMPLETA, no solo la última burbuja.
                 let lastOutIdxC = -1; mensajes.forEach((m, i) => { if (m.direccion === 'out') lastOutIdxC = i; });
                 const rafagaIn = (lastOutIdxC >= 0 ? mensajes.slice(lastOutIdxC + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes[entrantes.length - 1].mensaje || '');
-                const segsM = await citasVivas.manejarMensajeComprador(tel, rafagaIn);
+                const segsM = await citasVivas.manejarMensajeComprador(tel, rafagaIn, 0, convId);   // por dirección (0, chat) → 1 lectura
                 if (segsM && segsM.length) return res.status(200).json({ ok: true, modo: 'cita_match', tipo: 'cita_comprador', segmentos: segsM });
             } catch (e) { console.error('[citas-vivas] comprador:', e.message); }
 
@@ -1741,6 +1819,8 @@ module.exports = async function handler(req, res) {
             const nombreAuto = [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
             // el foco queda amarrado a lo que se ejecutó (seguimiento coherente) — upsert
             try { await ponerFoco(tAcc, telFullB, inv); } catch (e) { }
+            // ACCIÓN POR CHAT (Etapa 2c): cada botón deja UNA fila con dirección y toca el timbre
+            const regAcc = async (tipo, meta) => { try { const dA = await citasVivas.direccionDe(TID, telFullB); await require('../lib/seb/acciones.js').registrar({ tenant_id: TID, chat_id: dA.chat_id, delegacion_id: dA.delegacion_id, tipo, ref_id: inv.id, meta: Object.assign({ auto: nombreAuto }, meta || {}), actor: 'vendedor' }); } catch (e) { } };
             // CANDADO SANDBOX (ley de la casa): tels de prueba JAMÁS salen a WhatsApp —
             // se simula la ejecución (el flujo se prueba completo sin tocar el puente).
             const esPrueba = /^52100000000/.test(telFullB);
@@ -1757,6 +1837,7 @@ module.exports = async function handler(req, res) {
                     const { machoteDe } = require('../lib/seb/machote.js');
                     const mch = await machoteDe(inv.id);
                     if (!mch) return res.status(200).json({ ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
+                    await regAcc('boton_info', { simulado: esPrueba });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): machote de info', machote: String(mch).slice(0, 150) });
                     await enviarWA(telFullB, mch);
                     return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'machote completo de ' + nombreAuto });
@@ -1764,6 +1845,7 @@ module.exports = async function handler(req, res) {
                 if (accB === 'fotos') {
                     const urls = await H.fotosDeAuto(inv.id, 8);
                     if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
+                    await regAcc('boton_fotos', { n: urls.length, simulado: esPrueba });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): ' + (TID ? 'solo ' : 'texto + ') + urls.length + ' fotos' });
                     if (!TID) await enviarWA(telFullB, 'Van, ahí te las mando 📸');     // en universos de vendedor: SOLO las fotos, sin redactar
                     const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(conTenant({ phone: telFullB, urls })) });
@@ -1777,6 +1859,7 @@ module.exports = async function handler(req, res) {
                     const pe = await query('SELECT image_b64, lat, lng, name FROM punto_envio WHERE auto_id = ?', [inv.id]);
                     const cap = pe.length ? pe[0] : {};
                     const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes';
+                    await regAcc('boton_ubicacion', { punto, simulado: esPrueba });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): paquete de ubicación de ' + punto + (TID ? ' (sin pregunta de cita)' : '') });
                     const body = conTenant({ phone: telFullB, text: texto });
                     if (cap.image_b64) body.image = cap.image_b64;
@@ -1790,6 +1873,7 @@ module.exports = async function handler(req, res) {
                 if (accB === 'cotizar') {
                     const c = await H.cotizar({ auto_id: inv.id, enganche: req.body.enganche ? Number(req.body.enganche) : undefined, plazo_meses: req.body.plazo_meses ? Number(req.body.plazo_meses) : undefined });
                     if (!c.ok) return res.status(200).json({ ok: false, necesita: c.error === 'falta_enganche' ? 'datos' : undefined, error: c.error });
+                    await regAcc('boton_cotizar', { enganche: req.body.enganche || null, plazo: req.body.plazo_meses || null, simulado: esPrueba });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cotización lista' + (TID ? ' (solo la tarjeta)' : ''), tarjeta: String(c.placeholders.cotizacion).slice(0, 200) });
                     if (!TID) await enviarWA(telFullB, 'Va, mira cómo quedaría:');
                     await enviarWA(telFullB, c.placeholders.cotizacion);                 // vendedores: SOLO la tarjeta
@@ -1799,6 +1883,7 @@ module.exports = async function handler(req, res) {
                 if (accB === 'cita') {
                     const fI = String(req.body.fecha_iso || ''), hI = String(req.body.hora || '');
                     if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return res.status(200).json({ ok: false, necesita: 'fecha_hora' });
+                    await regAcc('cita_agendada', { fecha_iso: fI, hora: hI, simulado: esPrueba, via: 'boton' });
                     if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cita ' + fI + ' ' + hI });
                     const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'cita_manual', phone: telB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }, TID ? {
                         // TENANT = DUEÑO (orden owner 2026-09-08): no se le pide confirmación a nadie — el vendedor la agenda él mismo;

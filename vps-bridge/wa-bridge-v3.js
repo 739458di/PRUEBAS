@@ -752,6 +752,11 @@ async function conectar() {
                 guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id }).catch(() => {});
                 emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: telD, mensaje: textoD, direccion: fromMeD ? 'out' : 'in', timestamp: Math.floor(tsD / 1000), msg_id: m.key.id, ai_generated: 0 });
                 console.log('[t' + tenant.id + '] ' + (fromMeD ? 'salida dueño' : 'entrada') + ' · chat ' + jidHash(telD) + ' · ' + tipoDeMsg(m.message));
+                // ══ CITAS POR UNIVERSO (orden owner 2026-09-08): un ENTRANTE de un chat delegado toca la MISMA máquina
+                // de citas que el tenant 0 (cita_entrante → procesarEntrante): "voy en camino", cancelación, desvío.
+                // Debounce de la ráfaga (como el auto-opener); el cerebro solo lee si ese chat tiene cita viva.
+                // Ley 5: se manda `vendedor_ultimo_ts` (memoria) → si el vendedor escribió a mano hace <N min, el bot calla.
+                if (!fromMeD && textoD) programarCitaEntrante(telD, textoD, chatD);
                 continue;
             }
             if (m.key.remoteJid?.endsWith('@g.us')) continue;     // ignorar grupos
@@ -881,6 +886,29 @@ async function conectar() {
             if (!esSaliente) programarAutoOpener(tel);
         }
     });
+}
+
+// ── CITA ENTRANTE (universos ≠0): junta la ráfaga del comprador y toca la máquina de citas ──
+U.citaEntrante = new Map();       // tel → { timer, textos: [] }
+function programarCitaEntrante(tel, texto, chatD) {
+    if (tenant.id === 0) return;
+    const cur = U.citaEntrante.get(tel) || { timer: null, textos: [] };
+    cur.textos.push(String(texto));
+    if (cur.timer) clearTimeout(cur.timer);
+    cur.timer = setTimeout(async () => {
+        U.citaEntrante.delete(tel);
+        const junto = cur.textos.join(' ').trim();
+        if (!junto) return;
+        try {
+            const r = await fetch(OPENER_AUTO_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'cita_entrante', key: 'fyra-bridge-v2-2026', tenant_id: tenant.id, telefono: tel, texto: junto, vendedor_ultimo_ts: Number(chatD && chatD.ultimo_from_me) || 0 })
+            });
+            const d = await r.json().catch(() => ({}));
+            if (d && d.handled) console.log('[t' + tenant.id + '] cita_entrante · chat ' + jidHash(tel) + ' · ' + (d.rol || '?') + (d.callado ? ' · callado (' + d.callado + ')' : '') + (d.enviados ? ' · ' + d.enviados + ' burbujas' : ''));
+        } catch (e) { console.error('[t' + tenant.id + '] cita_entrante:', e.message); }
+    }, AUTO_OPENER_DELAY);
+    U.citaEntrante.set(tel, cur);
 }
 
 // ── AUTOPILOT DEL PRIMER MENSAJE ─────────────────────────────────────────────
@@ -1412,6 +1440,51 @@ setInterval(() => {
     }
 }, 60000);
 
+// ═══════════════════════ CASILLAS PROGRAMADAS — EL TIMBRE DE LAS CITAS (orden owner 2026-09-08) ═══════════════════════
+// Cada recordatorio de cita es una CASILLA (tabla cita_casillas, la escribe fyrachat). Aquí vive UN temporizador por
+// casilla (evento, no sondeo): al vencer se ejecuta POR LA MISMA PUERTA que el cron (seb-panel action=casilla_ejecutar,
+// idempotente). Vueltas de máx. 24 h (se re-arma solo con la due_ts en memoria). Al reiniciar el proceso se re-arma
+// leyendo las pendientes de las próximas 24 h en UNA consulta (casillas_pendientes) y cada 12 h se repite (respaldo);
+// lo que se escape (proceso caído en la hora exacta) lo recoge el cron cada 10 min por la misma puerta.
+const casillaTimers = new Map();   // casilla_id → { timer, due_ts }
+const CASILLA_VUELTA_MS = 24 * 3600000;
+const CASILLA_KEY = 'fyra-bridge-v2-2026';
+async function ejecutarCasillaRemota(id) {
+    try {
+        const r = await fetch(OPENER_AUTO_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'casilla_ejecutar', key: CASILLA_KEY, id }) });
+        const d = await r.json().catch(() => ({}));
+        console.log('[casilla] #' + id + ' → ' + JSON.stringify(d).slice(0, 140));
+        // el cerebro dice "aún no toca" (reloj desfasado) → re-armar con su due_ts
+        if (d && d.motivo === 'aun_no_toca' && Number(d.due_ts)) programarCasilla(id, Number(d.due_ts));
+        // envío fallido (universo desconectado, red) → reintento en 5 min; el cron también la recoge
+        else if (d && d.ok === false && d.motivo !== 'no_existe') programarCasilla(id, Date.now() + 5 * 60000);
+    } catch (e) { console.error('[casilla] #' + id + ':', e.message); programarCasilla(id, Date.now() + 5 * 60000); }
+}
+function programarCasilla(id, dueTs) {
+    id = Number(id); dueTs = Number(dueTs);
+    if (!id || !dueTs) return false;
+    const prev = casillaTimers.get(id); if (prev && prev.timer) clearTimeout(prev.timer);
+    const espera = Math.max(0, dueTs - Date.now());
+    const timer = setTimeout(() => {
+        casillaTimers.delete(id);
+        if (dueTs - Date.now() > 1000) return programarCasilla(id, dueTs);   // vuelta de 24 h: todavía no → otra vuelta
+        ejecutarCasillaRemota(id);
+    }, Math.min(espera, CASILLA_VUELTA_MS));
+    casillaTimers.set(id, { timer, due_ts: dueTs });
+    return true;
+}
+function cancelarCasillaTimer(id) { const t = casillaTimers.get(Number(id)); if (t && t.timer) clearTimeout(t.timer); return casillaTimers.delete(Number(id)); }
+async function rearmarCasillas() {
+    try {
+        const r = await fetch(OPENER_AUTO_URL + '?action=casillas_pendientes&key=' + CASILLA_KEY + '&horas=24');
+        const d = await r.json().catch(() => ({}));
+        if (!d || !d.ok || !Array.isArray(d.casillas)) { console.error('[casilla] re-armar: respuesta inválida'); return; }
+        let n = 0; for (const c of d.casillas) if (programarCasilla(c.casilla_id, c.due_ts)) n++;
+        console.log('[casilla] re-armadas ' + n + ' casillas (próximas 24 h) · timers vivos: ' + casillaTimers.size);
+    } catch (e) { console.error('[casilla] re-armar:', e.message); }
+}
+setTimeout(rearmarCasillas, 20 * 1000); setInterval(rearmarCasillas, 12 * 3600000);
+
 // ═══════════════════════ SERVIDOR HTTP (una puerta, muchos universos) ═══════════════════════
 const leerBody = (req) => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => r(b)); });
 const tenantDe = (body) => { const t = Number(body && body.tenant_id); return universos.get(Number.isInteger(t) ? t : 0); };
@@ -1480,6 +1553,19 @@ const server = http.createServer(async (req, res) => {
         emitir(out);
         console.log('[timbre] cambio · ' + (out.entidad || '?') + (out.accion ? ' · ' + out.accion : '') + ' → ' + (wss ? [...wss.clients].filter(c => c.readyState === 1).length : 0) + ' pantallas');
         return res.end(JSON.stringify({ ok: true }));
+    }
+    // EL TIMBRE DE LAS CITAS: fyrachat programa/cancela temporizadores de casillas (con key).
+    //   POST /api/programar { casillas:[{casilla_id, due_ts}] } | { casilla_id, due_ts } | { cancelar:[ids] }
+    //   (también /tenant/<id>/programar por simetría con la botonera; el tenant no cambia nada: la casilla trae su universo)
+    if ((url.pathname === '/api/programar' || /^\/tenant\/\d+\/programar$/.test(url.pathname)) && req.method === 'POST') {
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        let b = {}; try { b = JSON.parse((await leerBody(req)) || '{}'); } catch (e) {}
+        let programadas = 0, canceladas = 0;
+        const lista = Array.isArray(b.casillas) ? b.casillas : (b.casilla_id ? [{ casilla_id: b.casilla_id, due_ts: b.due_ts }] : []);
+        for (const c of lista) if (c && programarCasilla(c.casilla_id, c.due_ts)) programadas++;
+        for (const id of (Array.isArray(b.cancelar) ? b.cancelar : [])) if (cancelarCasillaTimer(id)) canceladas++;
+        if (programadas) console.log('[casilla] programadas ' + programadas + ' · timers vivos: ' + casillaTimers.size);
+        return res.end(JSON.stringify({ ok: true, programadas, canceladas, timers: casillaTimers.size }));
     }
     if (url.pathname === '/api/send' && req.method === 'POST') {
         if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
