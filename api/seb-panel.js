@@ -464,7 +464,10 @@ module.exports = async function handler(req, res) {
         }
         // Autos del tenant: los suyos (dueño por teléfono); el tenant 0 ve todo el inventario activo
         async function autosDeTenant(t) {
-            if (!t.id) return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
+            // Catálogo por tenant: tenant 0 = todo Fyradrive; config.catalogo='fyradrive' = ACREDITADO para trabajar todo el
+            // inventario de Fyradrive desde su universo (orden owner 2026-09-08: su número personal vende autos de Fyradrive);
+            // si no, solo los autos cuyo dueño es su teléfono.
+            if (!t.id || (t.config && t.config.catalogo === 'fyradrive')) return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
             return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' AND replace(replace(replace(COALESCE(dueno_telefono,''),'+',''),' ',''),'-','') LIKE ? ORDER BY marca COLLATE NOCASE", ['%' + t.telefono.slice(-10)]);
         }
         function hiloDe(tel, tenantId) { return 'whatsapp:' + tel + (tenantId ? '#t' + tenantId : ''); }
