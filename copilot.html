@@ -236,6 +236,16 @@
 
 <!-- MODAL RECORDATORIO (owner 2026-08-06): programa un mensaje para este chat —
      misma libreta mensajes_programados que el Calendar (y su veto al ghost). -->
+<div class="cmodal" id="automodal" onclick="if(event.target===this)cerrarAutoM(null)">
+  <div class="cmcard">
+    <div class="cmgrab"></div>
+    <div class="cmbody">
+      <div class="cmtitle" id="auto-titulo">🚗 Elige el auto</div>
+      <input id="auto-buscar" placeholder="Buscar marca, modelo o año…" oninput="filtrarAutoM()" style="width:100%;box-sizing:border-box;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit;margin:10px 0">
+      <div id="auto-lista" style="max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
+</div>
 <div class="cmodal" id="citamodal" onclick="if(event.target===this)cerrarCitaM()">
   <div class="cmcard">
     <div class="cmgrab"></div>
@@ -514,9 +524,7 @@ const vendQS = () => VEND ? '&vendedor='+encodeURIComponent(VEND) : '';
 async function nuevoComprador(){
   if (!TENANT) return nuevoChat();
   if (!TENANT.autos.length) return alert('No tienes autos activos dados de alta a tu nombre en el Sales Brain');
-  const lista = TENANT.autos.map((a,i)=> (i+1)+') '+a.nombre).join('\n');
-  const pick = prompt('🚗 ¿Cuál auto? Escribe el número:\n'+lista); if (!pick) return;
-  const auto = TENANT.autos[Number(pick)-1]; if (!auto) return alert('Número inválido');
+  const auto = await elegirAuto(TENANT.autos, '🚗 ¿Qué auto le interesa al comprador?'); if (!auto) return;
   const t = prompt('📱 Teléfono del comprador (10 dígitos):'); if (!t) return;
   const tel = t.replace(/\D/g,''); if (tel.length !== 10 && !(tel.length === 13 && tel.startsWith('521'))) return alert('Teléfono inválido — 10 dígitos');
   const nombre = (prompt('👤 Nombre del comprador (opcional):') || '').trim();
@@ -604,14 +612,38 @@ function pintarFoco(f){
   el.style.display = 'block';
   document.getElementById('c-foco-txt').textContent = FOCO ? FOCO.nombre : 'sin auto';
 }
+// ══ SELECTOR DE AUTO por toque (orden owner 2026-09-08): lista tocable con buscador, nada escrito ══
+let AUTO_M = { autos: [], resolve: null };
+function elegirAuto(autos, titulo){
+  return new Promise(resolve => {
+    AUTO_M = { autos: autos || [], resolve };
+    document.getElementById('auto-titulo').textContent = titulo || '🚗 Elige el auto';
+    document.getElementById('auto-buscar').value = '';
+    filtrarAutoM();
+    document.getElementById('automodal').classList.add('show');
+    setTimeout(() => { try { document.getElementById('auto-buscar').focus(); } catch(e){} }, 50);
+  });
+}
+function filtrarAutoM(){
+  const q = (document.getElementById('auto-buscar').value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const items = AUTO_M.autos.map((a,i)=>({a,i})).filter(x => !q || norm(x.a.nombre).includes(q));
+  document.getElementById('auto-lista').innerHTML = items.length ? items.map(x =>
+    '<button type="button" onclick="cerrarAutoM('+x.i+')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:11px 12px;font-size:15px;font-family:inherit;cursor:pointer;display:flex;justify-content:space-between;gap:10px">' +
+    '<span>' + (FOCO && FOCO.id === x.a.id ? '✅ ' : '🚗 ') + esc(x.a.nombre) + '</span>' + (x.a.precio ? '<span style="color:#5b6b82;white-space:nowrap">$'+Number(x.a.precio).toLocaleString('es-MX')+'</span>' : '') + '</button>').join('')
+    : '<div style="color:#5b6b82;font-size:13px;padding:8px 2px">Sin resultados</div>';
+}
+function cerrarAutoM(i){
+  document.getElementById('automodal').classList.remove('show');
+  const r = AUTO_M.resolve; AUTO_M.resolve = null;
+  if (r) r(i == null ? null : AUTO_M.autos[i] || null);
+}
 async function cambiarFoco(){
   if (!TEL) return;
   let autos = [];
   try { const d = await fetch(API+'?action=tenant_info'+(VEND ? '&vendedor='+encodeURIComponent(VEND) : '')).then(x=>x.json()); autos = d.autos || []; } catch(e){}
   if (!autos.length) { alert('No hay autos habilitados para este usuario'); return; }
-  const lista = autos.map((a,i)=> (i+1)+') '+a.nombre+(a.precio ? ' — $'+Number(a.precio).toLocaleString('es-MX') : '')).join('\n');
-  const pick = prompt('🚗 ¿Cuál auto queda en foco para este contacto? Escribe el número:\n'+lista); if (!pick) return;
-  const auto = autos[Number(pick)-1]; if (!auto) { alert('Número inválido'); return; }
+  const auto = await elegirAuto(autos, '🚗 Auto en foco para este contacto'); if (!auto) return;
   const r = await postAccion({ action:'foco_cambiar', vendedor: VEND || undefined, telefono: TEL, auto_id: auto.id });
   if (r && r.ok) pintarFoco(r.foco); else alert('⚠️ ' + ((r && r.error) || 'no se pudo cambiar el foco'));
 }
