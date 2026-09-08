@@ -285,6 +285,7 @@ async function reintentarCarrete() {
     finally { _carreteEnCurso = false; }
 }
 setInterval(reintentarCarrete, 60 * 1000);
+setInterval(() => { for (const U of universos.values()) if (U.tenant.id !== 0 && !U.chatsCargados) cargarChatsActivos(U).catch(() => {}); }, 60 * 1000);   // MODO SIN BASE: recargar delegaciones cuando la base vuelva
 
 // Reenvía un mensaje a SALES-BRAIN /api/upload. El router de SALES-BRAIN decide
 // solo: conversación nueva o append (por external_id = teléfono real).
@@ -1160,10 +1161,18 @@ async function registrarManualIlegible(m) {
 async function cargarChatsActivos(U) {
     try {
         const r = await db.execute({ sql: 'SELECT * FROM chats_activos WHERE tenant_id=? AND hasta IS NULL', args: [U.tenant.id] });
+        cacheEscribir('chats.' + U.tenant.id + '.json', r.rows.map(x => Object.assign({}, x)));
         U.chatsActivos.clear();
         for (const row of r.rows) U.chatsActivos.set(String(row.tel), { id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
         console.log('[delegación] tenant ' + U.tenant.id + ': ' + U.chatsActivos.size + ' chats activos');
-    } catch (e) { console.error('[delegación] carga:', e.message); }
+        U.chatsCargados = true;
+    } catch (e) {
+        console.error('[delegación] carga:', e.message);
+        // MODO SIN BASE: última lista conocida desde caché; se reintenta cada minuto hasta que la base vuelva
+        const cache = cacheLeer('chats.' + U.tenant.id + '.json') || [];
+        if (cache.length && !U.chatsActivos.size) for (const row of cache) U.chatsActivos.set(String(row.tel), { id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
+        U.chatsCargados = false;
+    }
 }
 async function abrirUniverso(tenant) {
     if (universos.has(tenant.id)) return universos.get(tenant.id);
@@ -1186,7 +1195,27 @@ async function cerrarUniverso(tenantId, borrarCredenciales) {
     }
     return true;
 }
+const CACHE_DIR = require('path').join(__dirname, 'cache');
+function cacheEscribir(nombre, obj) { try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(require('path').join(CACHE_DIR, nombre), JSON.stringify(obj)); } catch (e) {} }
+function cacheLeer(nombre) { try { return JSON.parse(fs.readFileSync(require('path').join(CACHE_DIR, nombre), 'utf8')); } catch (e) { return null; } }
 async function cargarTenants() {
+    try {
+        const rows = await cargarTenantsDB();
+        cacheEscribir('tenants.json', rows);
+        return rows;
+    } catch (e) {
+        // MODO SIN BASE (2026-09-08): la base no responde → arrancar con la última lista conocida; jamás quedarnos caídos.
+        const cache = cacheLeer('tenants.json');
+        if (cache && cache.length) { console.error('[arranque] base sin responder (' + e.message.slice(0, 80) + ') → tenants desde caché: ' + cache.map(t => t.id).join(',')); return cache; }
+        // sin caché: derivar de las carpetas de sesión existentes (auth/<id>)
+        let ids = [];
+        try { ids = fs.readdirSync(require('path').join(__dirname, 'auth')).filter(d => /^\d+$/.test(d)).map(Number).sort((a, b) => a - b); } catch (e2) {}
+        if (!ids.length) throw e;
+        console.error('[arranque] base sin responder y sin caché → tenants desde auth/: ' + ids.join(','));
+        return ids.map(id => ({ id, telefono: '', nombre: 't' + id, config: {} }));
+    }
+}
+async function cargarTenantsDB() {
     await db.execute('CREATE TABLE IF NOT EXISTS tenants (id INTEGER PRIMARY KEY, telefono TEXT UNIQUE, nombre TEXT, activo INTEGER DEFAULT 1, config_json TEXT, created_at INTEGER)');
     await db.execute('CREATE TABLE IF NOT EXISTS wa_sessions (tenant_id INTEGER PRIMARY KEY, estado TEXT, motivo TEXT, ultimo_evento INTEGER, ultimo_mensaje INTEGER, qr_pendiente INTEGER DEFAULT 0, updated INTEGER)');
     const r = await db.execute('SELECT id, telefono, nombre, config_json FROM tenants WHERE activo = 1 ORDER BY id');
