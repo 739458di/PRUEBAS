@@ -350,6 +350,7 @@ module.exports = async function handler(req, res) {
             const resc = require('../lib/seb/rescate.js');
             const enviar = [];
             const pushes = await resc.barrer({ ahora: Date.now() });
+            if (pushes.length) await require('../lib/seb/timbre.js').tocar({ entidad: 'rescate', accion: 'barrido', n: pushes.length });
             for (const p of pushes) {
                 for (const sg of (p.segmentos || [p.texto])) enviar.push({ telefono: p.telefono, texto: sg });
                 if (p.foto) enviar.push({ telefono: p.telefono, foto: p.foto });
@@ -1848,6 +1849,7 @@ module.exports = async function handler(req, res) {
             const idR = Number(req.body.id || 0);
             if (!idR) return res.status(400).json({ ok: false, error: 'id requerido' });
             await run("UPDATE rescates SET estado='cerrado', motivo_cierre='cancelado por el owner', updated=? WHERE id=?", [Date.now(), idR]);
+            await require('../lib/seb/timbre.js').tocar({ entidad: 'rescate', id: idR, accion: 'cancelado' });
             return res.status(200).json({ ok: true });
         }
         if (action === 'rescate_reactivar' && req.method === 'POST') {
@@ -1858,6 +1860,7 @@ module.exports = async function handler(req, res) {
             let prox = Number(rowR[0].proxima_ts) || 0;
             if (prox < Date.now()) prox = Date.now() + 60 * 60000;   // ya pasó → reloj fresco de 60 min
             await run("UPDATE rescates SET estado='vivo', motivo_cierre='', proxima_ts=?, updated=? WHERE id=?", [prox, Date.now(), idR]);
+            await require('../lib/seb/timbre.js').tocar({ entidad: 'rescate', id: idR, accion: 'reactivado' });
             return res.status(200).json({ ok: true, proxima_ts: prox });
         }
         if (action === 'recepcion_activa') {

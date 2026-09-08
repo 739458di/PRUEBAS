@@ -1408,6 +1408,18 @@ const server = http.createServer(async (req, res) => {
             return res.end(JSON.stringify(r));
         } catch (e) { res.statusCode = 500; return res.end(JSON.stringify({ ok: false, error: e.message })); }
     }
+    // EL TIMBRE DE CAMBIOS (Ley del Timbre, 2026-09-08): cualquier pieza del sistema (FyraChat, Sales Brain, citas vivas)
+    // que CAMBIA algo toca aquí y el puente lo rebota a todas las pantallas conectadas (calendario, FyraChat…).
+    // Evento, no sondeo: las pantallas ya no preguntan cada X segundos si algo cambió.
+    if (url.pathname === '/api/emit' && req.method === 'POST') {
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
+        let ev = {}; try { ev = JSON.parse((await leerBody(req)) || '{}'); } catch (e) {}
+        if (!ev || typeof ev !== 'object' || ev.tipo === 'mensaje') { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'evento inválido' })); }
+        const out = Object.assign({ tipo: 'cambio' }, ev, { ts: Date.now() });
+        emitir(out);
+        console.log('[timbre] cambio · ' + (out.entidad || '?') + (out.accion ? ' · ' + out.accion : '') + ' → ' + (wss ? [...wss.clients].filter(c => c.readyState === 1).length : 0) + ' pantallas');
+        return res.end(JSON.stringify({ ok: true }));
+    }
     if (url.pathname === '/api/send' && req.method === 'POST') {
         if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
         const body = await leerBody(req);
