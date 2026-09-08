@@ -534,7 +534,12 @@ async function cargarTenant(){
     // el universo se identifica por NÚMERO (orden owner 2026-09-08): nombre + el WhatsApp por el que salen estos chats
     const telV = String(TENANT.telefono || '').replace(/\D/g, '');
     const telFmt = telV.length === 13 ? ('+' + telV.slice(0, 2) + ' ' + telV.slice(3, 6) + ' ' + telV.slice(6, 9) + ' ' + telV.slice(9)) : (telV ? '+' + telV : '');
-    const h1 = document.querySelector('#scr-lista .top h1'); if (h1) h1.innerHTML = 'FyraChat · ' + esc(TENANT.nombre || telFmt) + (TENANT.nombre && telFmt ? '<div style="font-size:13px;font-weight:500;color:#5b6b82;margin-top:2px">📱 ' + telFmt + ' · universo ' + TENANT.id + '</div>' : '');
+    const h1 = document.querySelector('#scr-lista .top h1');
+    if (h1) {
+      // en universos de vendedor el título es más chico (cabe en un teléfono) y debajo va el NÚMERO del universo
+      h1.style.fontSize = '20px'; h1.style.lineHeight = '1.15'; h1.style.minWidth = '0';
+      h1.innerHTML = '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FyraChat · ' + esc(TENANT.nombre || telFmt) + '</div>' + (TENANT.nombre && telFmt ? '<div style="font-size:12px;font-weight:500;color:#5b6b82;margin-top:2px;white-space:nowrap">📱 ' + telFmt + ' · universo ' + TENANT.id + '</div>' : '');
+    }
     const btn = document.querySelector('#scr-lista .top .nuevo'); if (btn) btn.textContent = '＋ Nuevo comprador';
     if (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado') toast('⚠️ Tu WhatsApp aún no está vinculado al asistente');
   } catch(e){}
