@@ -9,6 +9,9 @@
 // lotes usa eso para afinar la biblioteca donde Seb falla.
 
 const { query, run } = require('../lib/seb/db.js');
+// CUOTA TURSO (2026-09-08): caché en memoria del proceso — dueños (5 min), inventario activo (15 s),
+// y lo que es "por request" se olvida al entrar (ver olvidar en el handler).
+const { telefonosDueno, memoQuery, olvidar, INV_TTL } = require('../lib/seb/memo.js');
 const { entender } = require('../lib/seb/clasificador.js');
 const { pensar } = require('../lib/seb/loop.js');
 const { responder: responderOpener, SENTINEL, necesitaCerebro } = require('../lib/seb/opener.js');
@@ -61,10 +64,7 @@ function partirRafaga(borrador) {
         .filter(Boolean);
 }
 
-async function telefonosDueno() {
-    const rows = await query("SELECT DISTINCT dueno_telefono t FROM inventario_autos WHERE dueno_telefono IS NOT NULL");
-    return new Set(rows.map(r => String(r.t).replace(/\D/g, '').slice(-10)).filter(x => x.length === 10));
-}
+// telefonosDueno() vive en lib/seb/memo.js (cacheado 5 min; misma consulta de siempre).
 
 // Convierte el "yyyy" string time de cleaned_text ("15/6/2026, 14:22:57") a epoch segundos.
 function timeAEpoch(s, fallback) {
@@ -148,6 +148,9 @@ module.exports = async function handler(req, res) {
 
     try {
         const action = (req.query && req.query.action) || (req.body && req.body.action) || '';
+        // CUOTA TURSO: el estado de conversación (etapa3.estadoConv) se cachea SOLO dentro de un
+        // request — cada request nuevo arranca sin rastro (un mensaje nuevo cambia el estado).
+        olvidar('estadoConv:');
 
         // ══════════ 🚩 BANDERITAS EN FYRACHAT (training sobre mensajes REALES) ══════════
         // El owner marca cualquier burbuja → queda en fyrachat_flags con el contexto de la
@@ -201,12 +204,18 @@ module.exports = async function handler(req, res) {
                 "SELECT channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, is_dueno_chat " +
                 "FROM conversaciones WHERE source='whatsapp' AND ult_msg_ts IS NOT NULL AND COALESCE(tenant_id,0) = ? " +
                 "ORDER BY ult_msg_ts DESC LIMIT 120", [tenantIdChats]);
-            const pend = await query("SELECT telefono, COUNT(*) n FROM seb_queue WHERE estado='pendiente' GROUP BY telefono");
+            // CUOTA TURSO: pendientes SOLO de los teléfonos de esta lista (índice seb_queue(telefono, estado))
+            // — antes agrupaba la tabla seb_queue completa en cada poll de 90 s.
+            const telDeRow = row => row.telefono || ((row.channel_thread_id || '').split(':')[1] || '').split('#')[0] || '';
+            const telsLista = [...new Set(rows.map(telDeRow).filter(Boolean))];
+            const pend = telsLista.length
+                ? await query("SELECT telefono, COUNT(*) n FROM seb_queue WHERE estado='pendiente' AND telefono IN (" + telsLista.map(() => '?').join(',') + ") GROUP BY telefono", telsLista)
+                : [];
             const pendMap = {}; pend.forEach(p => pendMap[p.telefono] = p.n);
             const porTel = new Map();
             for (const row of rows) {
                 if (row.is_dueno_chat === 1) continue;                 // chat de dueño → ocultar
-                const tel = row.telefono || (row.channel_thread_id || '').split(':')[1].split('#')[0] || '';
+                const tel = telDeRow(row);
                 if (!tel) continue;
                 const tel10 = String(tel).replace(/\D/g, '').slice(-10);
                 if (!tenantIdChats && duenos.has(tel10)) continue;     // dueño por teléfono → ocultar (solo en el FyraChat del owner)
@@ -253,9 +262,12 @@ module.exports = async function handler(req, res) {
             const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", [hiloDe(tel, tChat.id)]);
             let mensajes = [];
             if (conv.length) {
+                // INCREMENTAL (cuota Turso 2026-09-08): ?desde=<epoch s> → solo lo nuevo (>= para no perder la misma
+                // segunda; el front deduplica por msg_id). Sin desde = conversación completa (primera carga).
+                const desdeQ = Number(req.query.desde) || 0;
                 const rows = await query(
-                    "SELECT direccion, texto, ts, msg_id, tipo, ai_generated FROM mensajes WHERE conversacion_id = ? ORDER BY ts ASC, id ASC",
-                    [conv[0].id]);
+                    "SELECT direccion, texto, ts, msg_id, tipo, ai_generated FROM mensajes WHERE conversacion_id = ? AND ts >= ? ORDER BY ts ASC, id ASC",
+                    [conv[0].id, desdeQ * 1000]);
                 // ai: 0 = lo escribió el owner (teléfono o FyraChat), 1 = lo escribió el bot — FyraChat lo etiqueta
                 mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id, tipo: m.tipo || 'text', ai: Number(m.ai_generated) || 0 }));
                 // MODO PRUEBA: solo mensajes posteriores al reinicio
@@ -439,7 +451,8 @@ module.exports = async function handler(req, res) {
             }
             const telCM = String(req.body.telefono || '').replace(/\D/g, '').slice(-10);
             if (!telCM) return res.status(400).json({ ok: false, error: 'telefono requerido' });
-            const filas = await query("SELECT * FROM citas_match WHERE estado IN ('solicitud','contrapropuesta','esperando_horario','match') ORDER BY updated DESC");
+            // CUOTA TURSO: el filtro por teléfono va en SQL (índice citas_match(estado)); el find en JS queda como verificación exacta
+            const filas = await query("SELECT * FROM citas_match WHERE estado IN ('solicitud','contrapropuesta','esperando_horario','match') AND comprador_tel LIKE ? ORDER BY updated DESC", ['%' + telCM]);
             const MCM = filas.find(r => String(r.comprador_tel || '').replace(/\D/g, '').slice(-10) === telCM);
             if (!MCM) return res.status(200).json({ ok: true, avisado: false, motivo: 'sin fila activa de match' });
             await citasVivas.ejecutarCancelacion(MCM);
@@ -724,7 +737,9 @@ module.exports = async function handler(req, res) {
                 let atipico = false;
                 if (cm.esArranqueAtipico(mensajes)) {
                     try {
-                        const adRow = await query("SELECT 1 FROM ad_por_telefono WHERE telefono LIKE ? LIMIT 1", ['%' + telCM.slice(-10)]);
+                        // CUOTA TURSO: ad_por_telefono tiene PK telefono → búsqueda exacta por las 3 formas (521/52/10 dígitos), no LIKE '%…' (tabla completa)
+                        const t10CM = telCM.slice(-10);
+                        const adRow = await query("SELECT 1 FROM ad_por_telefono WHERE telefono IN (?,?,?) LIMIT 1", ['521' + t10CM, '52' + t10CM, t10CM]);
                         atipico = !adRow.length;
                     } catch (e) { atipico = true; }
                 }
@@ -799,7 +814,8 @@ module.exports = async function handler(req, res) {
                     // ══ FUENTE ÚNICA (orden owner 2026-07-16): el turno COMPLETO de Ignacio
                     // (ráfaga, historial, último manual, compuerta de despertar) vive en
                     // turnoIgnacio (lib/seb/recepcion.js) — el sandbox llama LA MISMA función.
-                    const rIg = await recepcion.turnoIgnacio({ telefono: tel, convId, desdeTs: resetTsOA });
+                    // CUOTA TURSO: se le pasa la libreta YA leída arriba (mismo request, mismo filtro de reset) — no se relee
+                    const rIg = await recepcion.turnoIgnacio({ telefono: tel, convId, desdeTs: resetTsOA, mensajesPre: mensajes });
                     if (rIg.activo) {
                         if (rIg.avisoOwner) { try { await citasVivas.enviarWA('5218120066355', rIg.avisoOwner); } catch (e) { } }
                         return res.status(200).json({ ok: true, modo: 'recepcion', tipo: 'ignacio_recepcion', segmentos: rIg.segmentos || [] });
@@ -952,7 +968,7 @@ module.exports = async function handler(req, res) {
                 // pregunta cuál — esto NO es "fuera de lista blanca", es leer inventario.
                 try {
                     const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
-                    const aActC = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                    const aActC = await memoQuery(INV_TTL, "SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                     const candC = candidatosDeAuto(followup, aActC.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                     if (candC) {
                         return res.status(200).json({
@@ -1174,7 +1190,7 @@ module.exports = async function handler(req, res) {
                     // ("el mazda" y hay 2 Mazda) → se le presentan y se pregunta cuál.
                     try {
                         const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
-                        const aAct = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                        const aAct = await memoQuery(INV_TTL, "SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                         const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                         if (cand) {
                             return res.status(200).json(conFoto({

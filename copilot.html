@@ -328,7 +328,7 @@ let TEL = null, QID = null, EDITANDO = false, SOLO_PEND = false, CHATS = [];
 let OBJETIVO = null;   // mensaje del cliente seleccionado para "responder a" (msgId + texto)
 const SENTINEL = '||SEQ||';   // separa los mensajes de una SECUENCIA del banco
 let SEQ = null, SEQ_CONSUMED = false;   // secuencia del opener en curso
-let ULTIMA_IN_SUGERIDA = 0, POLL = null, RENDERED_COUNT = -1;
+let ULTIMA_IN_SUGERIDA = 0, POLL = null, RENDERED_COUNT = -1, ULT_TS = 0;   // ULT_TS: última burbuja pintada → el chat se pide INCREMENTAL (cuota Turso)
 // EL TIMBRE: WebSocket al bridge (estilo WhatsApp). Recibe mensajes nuevos SIN preguntarle a Turso.
 let TIMBRE = 'wss://movers-diabetes-were-greetings.trycloudflare.com';   // última conocida; la viva se pide al conectar (action=timbre_url)
 let WS = null;
@@ -598,7 +598,7 @@ async function nuevoChat(){
   } catch(e){ alert('Error de red: '+e.message); }
 }
 async function abrirChat(tel, nombre){
-  TEL = tel; QID = null; EDITANDO = false; ULTIMA_IN_SUGERIDA = 0; RENDERED_COUNT = -1;
+  TEL = tel; QID = null; EDITANDO = false; ULTIMA_IN_SUGERIDA = 0; RENDERED_COUNT = -1; ULT_TS = 0;
   OBJETIVO = null; document.getElementById('obj-banner').classList.remove('show');
   marcarLeido(tel); pintarLista();                   // abriste el chat → borra el contador AL INSTANTE (la lista está detrás)
   document.getElementById('c-nombre').textContent = nombre || tel;
@@ -625,7 +625,9 @@ async function abrirChat(tel, nombre){
 async function cargarChat(){
   const mio = TEL; if (!mio) return;
   let r;
-  try { r = await fetch(API+'?action=chat&telefono='+encodeURIComponent(mio)+vendQS()).then(x=>x.json()); }
+  // INCREMENTAL (cuota Turso 2026-09-08): tras la primera carga solo se piden las burbujas nuevas (desde la última pintada)
+  const desdeQ = (!CARGA_FRESCA && ULT_TS) ? '&desde='+ULT_TS : '';
+  try { r = await fetch(API+'?action=chat&telefono='+encodeURIComponent(mio)+vendQS()+desdeQ).then(x=>x.json()); }
   catch(e){ return; }
   if (TEL !== mio) return;                            // BUG 8: cambiaste de chat → descartar respuesta vieja
   const msgs = r.mensajes || [];
@@ -640,6 +642,7 @@ async function cargarChat(){
     for (const m of msgs){ insertarBurbuja(m); }
   }
   RENDERED_COUNT = msgs.length;
+  for (const m of msgs) if (Number(m.timestamp) > ULT_TS) ULT_TS = Number(m.timestamp);
   const ultimo = msgs[msgs.length-1];
   const ultimoIn = [...msgs].reverse().find(m => m.direccion==='in');
   // SOLO on-demand (ahorra tokens): NUNCA auto-sugerir. Muestra el borrador ya guardado

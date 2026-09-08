@@ -13,6 +13,8 @@
 //        cerebro y devuelve { etapa, segmentos, fotos, pin, escala, motivo }
 
 const { query, run } = require('../lib/seb/db.js');
+// CUOTA TURSO (2026-09-08): inventario activo cacheado 15 s; estadoConv por request (ver olvidar en el handler)
+const { memoQuery, olvidar, INV_TTL } = require('../lib/seb/memo.js');
 const { entender } = require('../lib/seb/clasificador.js');
 const { pensar } = require('../lib/seb/loop.js');
 const { responder: responderOpener, necesitaCerebro, nombreReal, saludoHora } = require('../lib/seb/opener.js');
@@ -100,6 +102,7 @@ module.exports = async function handler(req, res) {
 
     try {
         const action = (req.query && req.query.action) || (req.body && req.body.action) || '';
+        olvidar('estadoConv:');   // CUOTA TURSO: el estado de conversación se cachea SOLO dentro de este request
         const carril = (req.body && req.body.carril) || (req.query && req.query.carril) || '';
         // Carriles: owner = …000 · pruebas/pruebas1-8 = …0001-…0008 (tests paralelos de
         // Claude sin pisarse entre sí ni tocar al owner; todos excluidos del ghosting).
@@ -498,7 +501,7 @@ module.exports = async function handler(req, res) {
                         // DESAMBIGUAR (paridad con producción): familia con varios → ¿cuál?
                         try {
                             const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
-                            const aAct = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                            const aAct = await memoQuery(INV_TTL, "SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                             const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                             if (cand) out = { segmentos: [`Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`, 'Mucho gusto, mi nombre es Sebastián Romero, para servirte', require('../lib/seb/aparador.js').introFamilia(textoFamilia, cand) + '\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'opener_desambiguar' };
                         } catch (e) { }
@@ -572,7 +575,7 @@ module.exports = async function handler(req, res) {
                     // DESAMBIGUAR (paridad con producción): familia con varios → ¿cuál?
                     try {
                         const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
-                        const aActC = await query("SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
+                        const aActC = await memoQuery(INV_TTL, "SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                         const candC = candidatosDeAuto(textoFamilia, aActC.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                         if (candC) { out = { segmentos: [require('../lib/seb/aparador.js').introFamilia(textoFamilia, candC) + '\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'), 'Cuál te interesa?'], tipo: 'cont_desambiguar' }; ruta = 'banco_continuacion'; universo = 'desambiguar'; }
                     } catch (e) { }
