@@ -251,8 +251,40 @@ async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, t
             sql: 'INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
             args: [row.id, msgId, ts, direccion, emisor || null, texto || '', tipo || 'text', ai_generated ? 1 : 0, Date.now()]
         });
-    } catch (e) { console.error('[mensajes-nuevo]', e.message); }
+    } catch (e) {
+        console.error('[mensajes-nuevo]', e.message);
+        // CARRETE DE EMERGENCIA (2026-09-08, Turso bloqueado por cuota): el papelito se guarda en disco y
+        // se reintenta cada minuto por la MISMA puerta (dedup por msg_id → jamás duplica). Cero pérdidas.
+        if (!_desdeCarrete) {
+            try { fs.appendFileSync(CARRETE_PATH, JSON.stringify({ tel, msgId, ts, direccion, emisor, texto, tipo, nombre, ai_generated, tenantId }) + '\n'); }
+            catch (e2) { console.error('[carrete] no pude escribir:', e2.message); }
+        }
+        throw e;
+    }
 }
+const CARRETE_PATH = path.join(__dirname, 'carrete.jsonl');
+let _desdeCarrete = false, _carreteEnCurso = false;
+async function reintentarCarrete() {
+    if (_carreteEnCurso || !fs.existsSync(CARRETE_PATH)) return;
+    _carreteEnCurso = true;
+    try {
+        const lineas = fs.readFileSync(CARRETE_PATH, 'utf8').split('\n').filter(Boolean);
+        if (!lineas.length) { fs.unlinkSync(CARRETE_PATH); return; }
+        // sonda: si la base sigue bloqueada, ni intentamos (y no llenamos el log)
+        try { await db.execute('SELECT 1'); } catch (e) { return; }
+        const pendientes = [];
+        for (const l of lineas) {
+            let r; try { r = JSON.parse(l); } catch (e) { continue; }
+            _desdeCarrete = true;
+            try { await guardarMensajeNuevo(r); } catch (e) { pendientes.push(l); } finally { _desdeCarrete = false; }
+        }
+        fs.writeFileSync(CARRETE_PATH, pendientes.length ? pendientes.join('\n') + '\n' : '');
+        if (!pendientes.length) fs.unlinkSync(CARRETE_PATH);
+        console.log('[carrete] reintento: ' + (lineas.length - pendientes.length) + ' guardados, ' + pendientes.length + ' pendientes');
+    } catch (e) { console.error('[carrete]', e.message); }
+    finally { _carreteEnCurso = false; }
+}
+setInterval(reintentarCarrete, 60 * 1000);
 
 // Reenvía un mensaje a SALES-BRAIN /api/upload. El router de SALES-BRAIN decide
 // solo: conversación nueva o append (por external_id = teléfono real).
