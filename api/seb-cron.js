@@ -1,13 +1,23 @@
 // api/seb-cron.js — EL CRON REAL de los recordatorios de cita (citas vivas).
-// Lo dispara el crontab del VPS cada 10 min:
-//   */10 * * * * curl -s 'https://fyrachat.vercel.app/api/seb-cron?key=fyra-cron-2026'
+// Lo dispara el crontab del VPS cada 10 min (llave por HEADER, blindaje 2026-09-10):
+//   */10 * * * * curl -s -H "x-api-key: $CRON_KEY" https://fyrachat.vercel.app/api/seb-cron
 // Manda por WhatsApp los recordatorios que ya tocan (víspera, día D, espera del
 // dueño, 1h antes, aviso de salida) — el MISMO plan que el sandbox (citas-vivas.js).
 const { tickRecordatorios } = require('../lib/seb/citas-vivas.js');
 const { tickEspejo } = require('../lib/seb/espejo.js');
+const ACC = require('../lib/seb/acceso.js');   // mismaClave (tiempo constante) + barredor de sesiones desvinculadas
 
 module.exports = async function handler(req, res) {
-    if ((req.query && req.query.key) !== 'fyra-cron-2026') return res.status(401).json({ ok: false });
+    // ══ LLAVE (bloque 1): header x-api-key === CRON_KEY; transición: ?key= === KEY_VIEJA_CRON (con aviso). Sin literales; sin env → 503.
+    const hdrC = String((req.headers && req.headers['x-api-key']) || '');
+    const qKey = String((req.query && req.query.key) || '');
+    const okH = !!process.env.CRON_KEY && !!hdrC && ACC.mismaClave(hdrC, process.env.CRON_KEY);
+    const okV = !okH && !!process.env.KEY_VIEJA_CRON && !!qKey && ACC.mismaClave(qKey, process.env.KEY_VIEJA_CRON);
+    if (okV) console.warn('[key-vieja]', 'seb-cron');
+    if (!okH && !okV) {
+        if (!process.env.CRON_KEY && !process.env.KEY_VIEJA_CRON) return res.status(503).json({ error: 'CRON_KEY no configurada' });
+        return res.status(401).json({ ok: false });
+    }
     try {
         const r = await tickRecordatorios();
         // espejo SB → fyradrive: si falla no tumba los recordatorios
@@ -16,6 +26,8 @@ module.exports = async function handler(req, res) {
         const cadaHora = new Date().getUTCMinutes() < 10;
         r.barredores = cadaHora ? 'corren' : 'saltados (solo 1/h)';
         if (cadaHora) try { r.espejo = await tickEspejo(); } catch (e) { r.espejo = { error: e.message }; }
+        // SESIONES (bloque 5): universos con WhatsApp desvinculado → todas sus sesiones de FyraChat se cierran (UPDATE único)
+        if (cadaHora) try { r.sesiones_desvinculadas_cerradas = await ACC.barrerSesionesDesvinculadas(); } catch (e) { r.sesiones_desvinculadas_cerradas = { error: e.message }; }
         // PROYECCIÓN PÚBLICA: reconstrucción completa 1 vez al día (respaldo; lo normal es puntual por evento)
         if (cadaHora && new Date().getUTCHours() === 9) try { r.proyeccion_diaria = await require('../lib/seb/catalogo-web.js').proyectarWeb([], true); } catch (e) { r.proyeccion_diaria = { error: e.message }; }
         // canal Messenger: registra leads con la clave aunque aún no contesten

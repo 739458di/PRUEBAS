@@ -142,74 +142,158 @@ async function guardarOferta(telO, segs) {
     } catch (e) { }
 }
 
+// ══════════ CLASIFICACIÓN DE ACCIONES (blindaje 2026-09-10, spec docs/seguridad-acceso-spec-2026-09-10.md) ══════════
+// PÚBLICA: sin nada. K_PUENTE: solo el puente (header x-api-key). K_PANEL: servidores propios (web, SB, Claude/scripts).
+// Las de K_PUENTE y K_PANEL también las abre la sesión MAESTRA (el owner desde su navegador). Todo lo no listado = SESIÓN.
+const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url']);
+const ACC_PUENTE = new Set(['opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
+const ACC_PANEL = new Set(['acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
+    'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
+    'flags_msgs', 'flags_msgs_done', 'citas_backfill', 'universo_backfill']);
+// prog_crear/prog_machote también los usa copilot.html (el vendedor programa "te aviso" desde su FyraChat) → K_PANEL **o** SESIÓN
+const ACC_PANEL_O_SESION = new Set(['prog_crear', 'prog_machote']);
+const ORIGEN_PROPIO = 'https://fyrachat.vercel.app';
+
 module.exports = async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    // ══ CORS (bloque 6): sin '*'. Solo los orígenes de CORS_ORIGENES (vacío por defecto) reciben ACAO.
+    const origin = String((req.headers && req.headers.origin) || '');
+    const CORS_OK = (process.env.CORS_ORIGENES || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (origin && CORS_OK.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+    }
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
         const action = (req.query && req.query.action) || (req.body && req.body.action) || '';
 
+        // ══════════ LLAVES (bloque 1): header x-api-key, comparación en tiempo constante; transición KEY_VIEJA por body/query ══════════
+        const hdrKey = String((req.headers && req.headers['x-api-key']) || '');
+        const bodyKey = String((req.body && req.body.key) || (req.query && req.query.key) || '');
+        const viejaOk = !!process.env.KEY_VIEJA && !!bodyKey && ACC.mismaClave(bodyKey, process.env.KEY_VIEJA);
+        if (viejaOk) console.warn('[key-vieja]', action);
+        const conPuente = (!!process.env.K_PUENTE && !!hdrKey && ACC.mismaClave(hdrKey, process.env.K_PUENTE)) || viejaOk;
+        const conPanel = (!!process.env.K_PANEL && !!hdrKey && ACC.mismaClave(hdrKey, process.env.K_PANEL)) || viejaOk;
+
         // ══════════ ACCESO DEL VENDEDOR (bloque 2 del blindaje, 2026-09-10) ══════════
         // Regla: una sesión de vendedor SIEMPRE opera su propio universo (lo que diga ?vendedor= se ignora).
-        // ?vendedor= suelto solo lo aceptan la sesión MAESTRA (owner) o quien trae la key (puente / Sales Brain).
-        const KEY_PANEL = process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026';
+        // ?vendedor= suelto solo lo aceptan la sesión MAESTRA (owner), STAFF_TELS (solo =0) o quien trae la key (puente / Sales Brain).
         const tokenSes = ACC.leerCookie(req);
         const SES0 = tokenSes ? await ACC.sesionDe(tokenSes).catch(() => null) : null;
         const SES = SES0 && !SES0.desvinculado ? SES0 : null;
         const DESV = SES0 && SES0.desvinculado ? SES0.tenant : null;   // tenía sesión pero su WhatsApp ya no está vinculado
-        const conKey = String((req.body && req.body.key) || (req.query && req.query.key) || '') === KEY_PANEL || (!!process.env.BRIDGE_API_KEY && String(req.headers['x-api-key'] || '') === process.env.BRIDGE_API_KEY);
-        let VEND_PARAM = String((req.query && req.query.vendedor) || (req.body && req.body.vendedor) || '').trim();
-        // 'vendedor=0' = FyraChat de Fyradrive (tenant 0 clásico): solo la maestra o la key pueden pedirlo así
-        if (VEND_PARAM === '0' && (conKey || (SES && SES.maestra))) VEND_PARAM = '';
-        if (SES && (!SES.maestra || !VEND_PARAM)) VEND_PARAM = String(SES.tenant_id);   // toda sesión abre SU universo; la maestra puede pedir otro con ?vendedor=
-        else if (VEND_PARAM && !SES && !conKey) return res.status(401).json({ ok: false, error: 'Entra con el código que te llega a tu WhatsApp', login: true });
+        const IP = ACC.ipDe(req);
+        const STAFF = (process.env.STAFF_TELS || '').split(',').map(ACC.tel521).filter(Boolean);
+        const esStaff = !!(SES && STAFF.includes(String(SES.tenant.telefono)));
+        const MAESTRA = !!(SES && SES.maestra);
 
-        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra } : null, desvinculado: DESV ? { tenant: DESV } : null });
+        // ══ CSRF (bloque 6): un POST con cookie solo se acepta desde nuestro propio origen (o uno de CORS_ORIGENES)
+        if (req.method === 'POST' && tokenSes && origin && origin !== ORIGEN_PROPIO && !CORS_OK.includes(origin)) {
+            return res.status(403).json({ ok: false, error: 'origen no permitido' });
+        }
+
+        let VEND_PARAM = String((req.query && req.query.vendedor) || (req.body && req.body.vendedor) || '').trim();
+        const pidioT0 = VEND_PARAM === '0';
+        // 'vendedor=0' = FyraChat de Fyradrive (tenant 0 clásico): la maestra, STAFF o la key pueden pedirlo así
+        if (pidioT0 && (conPuente || conPanel || MAESTRA || esStaff)) VEND_PARAM = '';
+        if (SES && !MAESTRA) {
+            if (esStaff && pidioT0) { /* STAFF en tenant 0 */ }
+            else if (esStaff && VEND_PARAM && VEND_PARAM !== String(SES.tenant_id)) return res.status(403).json({ ok: false, error: 'Ese universo no es tuyo' });
+            else VEND_PARAM = String(SES.tenant_id);   // toda sesión de vendedor abre SU universo
+        } else if (MAESTRA && !VEND_PARAM && !pidioT0) VEND_PARAM = String(SES.tenant_id);   // la maestra sin ?vendedor= abre su universo; con ?vendedor= el que pida
+
+        // ══════════ REGLA ÚNICA DE AUTORIZACIÓN (antes de cualquier acción) ══════════
+        const t0 = !VEND_PARAM;
+        const mandaEnT0 = !!(SES && (MAESTRA || esStaff));
+        const SIN_SESION = { ok: false, error: 'Entra con el código que te llega a tu WhatsApp', login: true };
+        if (!ACC_PUBLICAS.has(action)) {
+            if (ACC_PUENTE.has(action)) {
+                if (!conPuente && !MAESTRA) {
+                    if (!process.env.K_PUENTE && !process.env.KEY_VIEJA) return res.status(503).json({ error: 'K_PUENTE no configurada' });
+                    return res.status(401).json(SIN_SESION);
+                }
+            } else if (ACC_PANEL.has(action)) {
+                const sesionVale = ACC_PANEL_O_SESION.has(action) && (t0 ? mandaEnT0 : !!SES);
+                if (!conPanel && !MAESTRA && !sesionVale) {
+                    if (!process.env.K_PANEL && !process.env.KEY_VIEJA) return res.status(503).json({ error: 'K_PANEL no configurada' });
+                    return res.status(401).json(SIN_SESION);
+                }
+            } else if (!conPuente && !conPanel && (t0 ? !mandaEnT0 : !SES)) {
+                return res.status(401).json(SIN_SESION);
+            }
+        }
+        // ══ BITÁCORA (invariante 8): toda escritura con cookie deja sesion_id + ip (1 INSERT best-effort; GET no escribe)
+        if (req.method === 'POST' && SES && !ACC_PUBLICAS.has(action)) await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action, ip: IP });
+
+        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff } : null, desvinculado: DESV ? { tenant: DESV } : null });
         if (action === 'acceso_pedir' && req.method === 'POST') {
-            const tel = ACC.tel521(req.body.telefono);
-            if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
-            const r = await ACC.pedirCodigo(tel);
-            if (!r.ok) return res.status(r.espera ? 429 : 404).json({ ok: false, error: r.error });
-            const texto = 'Tu código para entrar a FyraChat es *' + r.codigo.slice(0, 3) + ' ' + r.codigo.slice(3) + '*. Vence en ' + r.vida_min + ' minutos. Si no lo pediste, ignora este mensaje.';
-            const env = await citasVivas.enviarWA(tel, texto, 0);   // sale del número de Fyradrive
-            if (!env.ok) return res.status(502).json({ ok: false, error: 'No pude mandarte el código por WhatsApp. Intenta de nuevo.' });
-            return res.status(200).json({ ok: true, vida_min: r.vida_min, tel_mascara: '••• ••• ' + tel.slice(-4) });
+            // RESPUESTA UNIFORME (invariante 7): exista o no el número, la respuesta es la misma. 429 solo por tope de IP.
+            const telIn = String(req.body.telefono || '').replace(/\D/g, '');
+            if (telIn.length < 10) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
+            const r = await ACC.pedirCodigo(telIn, IP);
+            if (r.limite === 'ip') return res.status(429).json({ ok: false, error: r.error });
+            if (!r.silencioso && r.codigo) {
+                const env = await citasVivas.enviarWA(r.tenant.telefono, ACC.textoCodigo(r.codigo, r.vida_min), 0);   // sale del número de Fyradrive
+                if (!env.ok) console.error('[acceso_pedir] envío falló:', env.error);
+            }
+            return res.status(200).json({ ok: true, vida_min: r.vida_min || 3, tel_mascara: '••• ••• ' + telIn.slice(-4) });
         }
         if (action === 'acceso_entrar' && req.method === 'POST') {
             const tel = ACC.tel521(req.body.telefono);
             if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
-            const r = await ACC.entrarConCodigo(tel, String(req.body.codigo || ''), req.headers['user-agent']);
+            const r = await ACC.entrarConCodigo(tel, String(req.body.codigo || ''), req.headers['user-agent'], IP);
             if (!r.ok) return res.status(401).json({ ok: false, error: r.error });
             if (r.tenant && r.tenant.id !== 0 && !r.maestra && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.', desvinculado: true }); }
             ACC.ponerCookie(res, r.token);
+            await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar', ip: IP });
+            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
             return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra });
         }
         if (action === 'acceso_salir' && req.method === 'POST') { await ACC.cerrarSesion(tokenSes); ACC.borrarCookie(res); return res.status(200).json({ ok: true }); }
         if (action === 'acceso_ticket' && req.method === 'POST') {
-            // lo llama fyradrive.com/seb al confirmar la vinculación (con key): ticket de un solo uso → sesión en ESE navegador
-            if (!conKey) return res.status(401).json({ ok: false, error: 'key inválida' });
+            // lo llama fyradrive.com/seb al confirmar la vinculación (SOLO K_PANEL, invariante 5): ticket de un solo uso → sesión en ESE navegador
+            if (!conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
+            if (!req.body.enviar) return res.status(400).json({ ok: false, error: 'enviar:1 requerido' });
             const r = await ACC.crearTicket(req.body.telefono);
             if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
-            const urlT = 'https://fyrachat.vercel.app/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(r.token);
+            const urlT = ORIGEN_PROPIO + '/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(r.token);
             // ¿primera vez? = nunca ha tenido sesión en su FyraChat (la web decide si enseña la guía de "agregar a inicio")
             const prev = await query("SELECT COUNT(*) n FROM sesiones_vendedor WHERE tenant_id = ?", [r.tenant.id]).catch(() => [{ n: 0 }]);
             const primera = Number(prev[0] && prev[0].n) === 0;
-            // El ticket viaja SOLO al WhatsApp vinculado (quien tiene el teléfono), nunca al navegador que hizo el alta:
+            // El ticket viaja SOLO al WhatsApp vinculado (quien tiene el teléfono), NUNCA se devuelve la URL:
             // un tercero puede dar de alta un número ajeno desde la web y no debe recibir la sesión de la víctima. 2026-09-10
-            if (req.body.enviar) {
-                const nom = String((r.tenant && r.tenant.nombre) || '').trim().split(/\s+/)[0];
-                const txt = 'Listo' + (nom ? ' ' + nom : '') + ', tu FyraChat ya está activo. Ábrelo aquí (link de un solo uso, vence en 15 min):\n' + urlT + '\n\nDespués entras en fyrachat.vercel.app con el código que te llega a este WhatsApp.';
-                const env = await citasVivas.enviarWA(r.tenant.telefono, txt, 0);
-                return res.status(200).json({ ok: true, enviado: !!env.ok, expira: r.expira, primera });
-            }
-            return res.status(200).json({ ok: true, url: urlT, expira: r.expira, primera });
+            const nom = String((r.tenant && r.tenant.nombre) || '').trim().split(/\s+/)[0];
+            const txt = 'Listo' + (nom ? ' ' + nom : '') + ', tu FyraChat ya está activo. Ábrelo aquí (link de un solo uso, vence en 15 min):\n' + urlT + '\n\nDespués entras en fyrachat.vercel.app con el código que te llega a este WhatsApp.';
+            const env = await citasVivas.enviarWA(r.tenant.telefono, txt, 0);
+            return res.status(200).json({ ok: true, enviado: !!env.ok, expira: r.expira, primera });
         }
         if (action === 'acceso_canjear') {
-            const r = await ACC.canjearTicket(String(req.query.t || ''), req.headers['user-agent']);
+            const r = await ACC.canjearTicket(String(req.query.t || ''), req.headers['user-agent'], IP);
             if (!r.ok) { res.setHeader('Location', '/copilot.html?vendedor=entrar&aviso=' + encodeURIComponent(r.error)); return res.status(302).end(); }
-            ACC.ponerCookie(res, r.token); res.setHeader('Location', '/copilot.html?bienvenida=1'); return res.status(302).end();
+            ACC.ponerCookie(res, r.token);
+            await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_canjear', ip: IP });
+            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
+            res.setHeader('Location', '/copilot.html?bienvenida=1'); return res.status(302).end();
+        }
+        // ══ TUS DISPOSITIVOS (bloque 5): sesiones vivas del universo de la cookie + cerrar todas
+        if (action === 'acceso_sesiones') {
+            if (!SES) return res.status(401).json(SIN_SESION);
+            return res.status(200).json({ ok: true, sesiones: await ACC.listarSesiones(SES.tenant_id, SES.sid) });
+        }
+        if (action === 'acceso_cerrar_todas' && req.method === 'POST') {
+            if (!SES) return res.status(401).json(SIN_SESION);
+            await ACC.cerrarTodas(SES.tenant_id); ACC.borrarCookie(res);
+            return res.status(200).json({ ok: true });
+        }
+        // K_PANEL (re-alta / desvinculación desde SB o la web): cierra todas las sesiones de un universo
+        if (action === 'acceso_cerrar_todas_tenant' && req.method === 'POST') {
+            const tidC = Number(req.body.tenant_id);
+            if (!Number.isFinite(tidC)) return res.status(400).json({ ok: false, error: 'tenant_id requerido' });
+            await ACC.cerrarTodas(tidC);
+            return res.status(200).json({ ok: true, tenant_id: tidC });
         }
         // CUOTA TURSO: el estado de conversación (etapa3.estadoConv) se cachea SOLO dentro de un
         // request — cada request nuevo arranca sin rastro (un mensaje nuevo cambia el estado).
@@ -440,7 +524,6 @@ module.exports = async function handler(req, res) {
         }
         // ══ TIMBRES DEL PUENTE → LA MÁQUINA DE RESCATE (fuente única) ══
         if (action === 'rescate_turno' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false });
             const telR = String(req.body.telefono || '').replace(/\D/g, '');
             if (!telR) return res.status(400).json({ ok: false, error: 'telefono' });
             // CANDADO DE CAMPAÑA 📢: una respuesta a la campaña NO crea folios de rescate
@@ -461,7 +544,6 @@ module.exports = async function handler(req, res) {
             } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
         }
         if (action === 'rescate_manual' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false });
             const telM = String(req.body.telefono || '').replace(/\D/g, '');
             if (!telM) return res.status(400).json({ ok: false, error: 'telefono' });
             // CANDADO DE CAMPAÑA 📢: tu mensaje manual desde el teléfono = RETOMASTE
@@ -477,9 +559,6 @@ module.exports = async function handler(req, res) {
         // a un comprador. Misma puerta que el barredor del cron (ejecutarCierre es
         // idempotente): el timbre da la velocidad, el cron la garantía.
         if (action === 'cierre_timbre' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
-                return res.status(401).json({ ok: false, error: 'key invalida' });
-            }
             const telT = String(req.body.telefono || '');
             const textoT = String(req.body.texto || '');
             if (!telT || !textoT) return res.status(400).json({ ok: false, error: 'telefono y texto requeridos' });
@@ -492,9 +571,6 @@ module.exports = async function handler(req, res) {
         // el owner → LA MISMA máquina del match arranca los recordatorios de una vez
         // (víspera, día D, 1h antes). Distinto timbre, mismo funcionamiento.
         if (action === 'match_directo' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
-                return res.status(401).json({ ok: false, error: 'key invalida' });
-            }
             const rMD = await citasVivas.matchDirectoCalendar({
                 comprador_tel: req.body.comprador_tel, comprador_nombre: req.body.comprador_nombre || null,
                 dueno_tel: req.body.dueno_tel || '', dueno: req.body.dueno || null,
@@ -509,10 +585,8 @@ module.exports = async function handler(req, res) {
         }
 
         // ══════════ CASILLAS · ENTRADA POR UNIVERSO · ACCIONES · BACKFILL (orden owner 2026-09-08) ══════════
-        const KEY_PUENTE = process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026';
         // LA MISMA PUERTA para el temporizador del puente y para el barredor del cron: ejecuta UNA casilla.
         if (action === 'casilla_ejecutar' && req.method === 'POST') {
-            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
             const idC = Number(req.body.id || req.body.casilla_id) || 0;
             if (!idC) return res.status(400).json({ ok: false, error: 'id requerido' });
             try { return res.status(200).json(await citasVivas.casillaEjecutar(idC)); }
@@ -521,7 +595,6 @@ module.exports = async function handler(req, res) {
         // El puente (universos ≠0, tras persistir un ENTRANTE de un chat delegado) → la MISMA máquina que el tenant 0.
         // Se llama por chat; adentro solo se lee si hay cita viva (1-3 filas por índice) y nada más.
         if (action === 'cita_entrante' && req.method === 'POST') {
-            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
             const tE = Number(req.body.tenant_id) || 0;
             let telE = String(req.body.telefono || req.body.tel || '').replace(/\D/g, ''); if (telE.length === 10) telE = '521' + telE;
             const textoE = String(req.body.texto || '');
@@ -538,7 +611,6 @@ module.exports = async function handler(req, res) {
         }
         // Estado de las casillas de una máquina (SB pausar/reanudar/cancelar entra por aquí — misma puerta)
         if (action === 'casillas_estado' && req.method === 'POST') {
-            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
             const mid = Number(req.body.cita_match_id) || 0, acc = String(req.body.accion || '');
             if (!mid || !['pausar', 'reanudar', 'cancelar'].includes(acc)) return res.status(400).json({ ok: false, error: 'cita_match_id y accion (pausar|reanudar|cancelar) requeridos' });
             try {
@@ -562,13 +634,11 @@ module.exports = async function handler(req, res) {
         }
         // Backfill de dirección del sistema de citas (idempotente; reporta lo no ligado)
         if (action === 'citas_backfill' && req.method === 'POST') {
-            if (String(req.body.key || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
             try { return res.status(200).json({ ok: true, backfill: await citasVivas.backfillDireccionCitas({ dry: req.body.dry !== false && req.body.dry !== 0 && req.body.dry !== 'false', telefonos: Array.isArray(req.body.telefonos) ? req.body.telefonos : null }) }); }
             catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
         }
         // El puente, al reiniciar, re-arma sus temporizadores: casillas pendientes de las próximas N horas (1 consulta por índice)
         if (action === 'casillas_pendientes') {
-            if (String(req.query.key || (req.body && req.body.key) || '') !== KEY_PUENTE) return res.status(401).json({ ok: false, error: 'key invalida' });
             try {
                 await citasVivas.ensureDireccionCitas();
                 const horas = Math.min(Number(req.query.horas) || 24, 72);
@@ -582,9 +652,6 @@ module.exports = async function handler(req, res) {
         // WhatsApp del comprador (ejecutarCancelacion): marca la fila y le avisa al
         // DUEÑO con el mismo texto. Distinto timbre, mismo funcionamiento.
         if (action === 'cancelar_match_manual' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
-                return res.status(401).json({ ok: false, error: 'key invalida' });
-            }
             let telCM = String(req.body.telefono || '').replace(/\D/g, ''); if (telCM.length === 10) telCM = '521' + telCM;
             if (!telCM && !req.body.chat_id) return res.status(400).json({ ok: false, error: 'telefono requerido' });
             // DIRECCIÓN (2026-09-08): SB manda tenant_id+chat_id de la cita; si no, se resuelve el chat por (tenant, tel) → 1 fila por índice
@@ -604,7 +671,7 @@ module.exports = async function handler(req, res) {
         // ══════════ FASE 2 — FYRACHAT POR VENDEDOR (tenant) ══════════
         // ?vendedor=<tenant id o teléfono>. El tenant 0 (owner) = FyraChat de siempre.
         const BRIDGE_BASE = (process.env.BRIDGE_SEND_URL || 'http://137.184.199.19:3000/api/send').replace(/\/api\/send$/, '');
-        const BRIDGE_KEY_T = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2-2026';
+        const BRIDGE_KEY_T = process.env.K_PUENTE || process.env.BRIDGE_API_KEY || '';   // llave SALIENTE al puente (transición: BRIDGE_API_KEY)
         async function tenantDeParam(v) {
             const raw = String(v == null ? '' : v).trim();
             if (!raw) return { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
@@ -648,10 +715,9 @@ module.exports = async function handler(req, res) {
             await U.cambiarFoco(chatF, inv.fyradrive_web_id || inv.id, 'fyrachat', { activado_por: 'fyrachat', auto_nombre: nombreA, solo_si_activa: !!t.id });
         }
         // ══ ETAPA 2 — BACKFILL de la base por universo (idempotente, por lotes; NO manda nada a WhatsApp).
-        // Lo dispara el owner cuando decida: POST { action:'universo_backfill', key, dry:true|false, telefonos:[...] }.
+        // Lo dispara el owner cuando decida: POST { action:'universo_backfill', dry:true|false, telefonos:[...] } con header x-api-key: K_PANEL.
         // dry=true solo cuenta. telefonos=[…] limita a esos (pruebas). Reporta conteos.
         if (action === 'universo_backfill' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) return res.status(401).json({ ok: false, error: 'key invalida' });
             try {
                 const rep = await U.backfillUniverso({ dry: req.body.dry !== false && req.body.dry !== 0 && req.body.dry !== 'false', telefonos: Array.isArray(req.body.telefonos) ? req.body.telefonos : null });
                 return res.status(200).json({ ok: true, backfill: rep });
@@ -675,7 +741,7 @@ module.exports = async function handler(req, res) {
             const inv = cat.find(a => Number(a.id) === idF || Number(a.fyradrive_web_id) === idF);
             if (!inv) return res.status(403).json({ ok: false, error: 'ese auto no está habilitado para este usuario' });
             await ponerFoco(tF, telF, inv);
-            try { const dF = await citasVivas.direccionDe(tF.id, telF); await require('../lib/seb/acciones.js').registrar({ tenant_id: tF.id, chat_id: dF.chat_id, delegacion_id: dF.delegacion_id, tipo: 'foco_cambiado', ref_id: inv.id, meta: { auto: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ') }, actor: 'vendedor' }); } catch (e) { }
+            try { const dF = await citasVivas.direccionDe(tF.id, telF); await require('../lib/seb/acciones.js').registrar({ tenant_id: tF.id, chat_id: dF.chat_id, delegacion_id: dF.delegacion_id, tipo: 'foco_cambiado', ref_id: inv.id, meta: { auto: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ') }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
             return res.status(200).json({ ok: true, foco: { id: inv.id, web_id: inv.fyradrive_web_id, nombre: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' '), precio: inv.precio } });
         }
         if (action === 'tenant_info') {
@@ -729,7 +795,7 @@ module.exports = async function handler(req, res) {
                 } catch (e) { r = Object.assign({ ok: true }, r || {}, { opener_enviado: false, error: e.message }); }
             }
             // ACCIÓN POR CHAT: la delegación queda como acción (con la delegación activa que acaba de nacer)
-            try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: { auto: autoNombre, modo: modoE, opener_enviado: !!(r && r.opener_enviado) }, actor: 'vendedor' }); } catch (e) { }
+            try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: { auto: autoNombre, modo: modoE, opener_enviado: !!(r && r.opener_enviado) }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
             return res.status(200).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener }, r || {}));
         }
         if (action === 'soltar' && req.method === 'POST') {
@@ -738,6 +804,7 @@ module.exports = async function handler(req, res) {
             let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
             // ETAPA 2 (tenant 0): la delegación se cierra aquí (idempotente); en universos ≠0 la cierra el puente (dual-write) porque es quien la carga en memoria
             if (!t.id) { try { const cS = await U.chatDe(0, telD); if (cS) await U.soltar(cS, 'fyrachat'); } catch (e) { } }
+            try { const dS = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dS.chat_id, delegacion_id: dS.delegacion_id, tipo: 'soltado', meta: null, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
             try {
                 const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/soltar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD }) });
                 return res.status(200).json(await fr.json().catch(() => ({ ok: false, error: 'puente ilegible' })));
@@ -793,6 +860,23 @@ module.exports = async function handler(req, res) {
         if (action === 'opener_auto' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             if (!tel) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            // ══ PRIMERA COMPUERTA — "CERRAR" (bloque 5, 2026-09-10): si el teléfono es dueño de un universo y su último
+            // entrante es exactamente CERRAR, se cierran TODAS sus sesiones de FyraChat y se le confirma por WhatsApp.
+            // Determinista (regex exacta), jamás despierta al bot.
+            try {
+                const tCz = await ACC.tenantPorTelefono(tel);
+                if (tCz) {
+                    const cvZ = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel.replace(/\D/g, '')]);
+                    const mZ = cvZ.length ? await query("SELECT texto FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY ts DESC, id DESC LIMIT 1", [cvZ[0].id]) : [];
+                    const txtZ = mZ.length ? String(mZ[0].texto || '') : '';
+                    if (/^\s*cerrar[.!]?\s*$/i.test(txtZ)) {
+                        await ACC.cerrarTodas(tCz.id);
+                        await ACC.accesosLog({ sesion_id: null, tenant_id: tCz.id, action: 'cerrar_wa', ip: IP });
+                        await citasVivas.enviarWA(String(tCz.telefono), 'Listo: cerré todas las sesiones de tu FyraChat. Para entrar de nuevo pide un código.', 0);
+                        return res.status(200).json({ ok: true, acceso_cerrado: true, tenant_id: tCz.id });
+                    }
+                }
+            } catch (e) { console.error('[acceso cerrar_wa]', e.message); }
             // Dueño/vendedor por teléfono → nunca autopilot.
             // MODO COMPRADOR DE PRUEBA (owner 2026-08-05, "solo por esta vez"): si existe
             // el marcador 'comprador:<tel>' en prueba_reset, ese tel actúa de COMPRADOR
@@ -1662,7 +1746,7 @@ module.exports = async function handler(req, res) {
 
             // 3) Intentar envío por el bridge (si está configurado y vivo)
             let enviado = false, error_envio = null;
-            const bridgeUrl = process.env.BRIDGE_SEND_URL, bridgeKey = process.env.BRIDGE_API_KEY;
+            const bridgeUrl = process.env.BRIDGE_SEND_URL, bridgeKey = process.env.K_PUENTE || process.env.BRIDGE_API_KEY;
             // PAQUETE DE UBICACIÓN: si la sugerencia usó la herramienta ubicacion, adjunta la
             // captura branded + el pin guardados (punto_envio del auto). El bridge los manda
             // junto con el texto formal. Si no hay paquete, va solo el texto.
@@ -1689,7 +1773,7 @@ module.exports = async function handler(req, res) {
                     enviado = r.ok && d.ok !== false;
                     if (!enviado) error_envio = d.error || ('bridge ' + r.status);
                 } catch (e) { error_envio = e.message; }
-            } else { error_envio = 'bridge no configurado (BRIDGE_SEND_URL/BRIDGE_API_KEY)'; }
+            } else { error_envio = 'bridge no configurado (BRIDGE_SEND_URL/K_PUENTE)'; }
 
             // 4) El saliente ya llega a raw_conversations vía el bridge (/api/send → SALES-BRAIN).
             //    Fuente única: NO se escribe wa_messages aquí.
@@ -1882,12 +1966,12 @@ module.exports = async function handler(req, res) {
             // el foco queda amarrado a lo que se ejecutó (seguimiento coherente) — upsert
             try { await ponerFoco(tAcc, telFullB, inv); } catch (e) { }
             // ACCIÓN POR CHAT (Etapa 2c): cada botón deja UNA fila con dirección y toca el timbre
-            const regAcc = async (tipo, meta) => { try { const dA = await citasVivas.direccionDe(TID, telFullB); await require('../lib/seb/acciones.js').registrar({ tenant_id: TID, chat_id: dA.chat_id, delegacion_id: dA.delegacion_id, tipo, ref_id: inv.id, meta: Object.assign({ auto: nombreAuto }, meta || {}), actor: 'vendedor' }); } catch (e) { } };
+            const regAcc = async (tipo, meta) => { try { const dA = await citasVivas.direccionDe(TID, telFullB); await require('../lib/seb/acciones.js').registrar({ tenant_id: TID, chat_id: dA.chat_id, delegacion_id: dA.delegacion_id, tipo, ref_id: inv.id, meta: Object.assign({ auto: nombreAuto }, meta || {}), actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { } };
             // CANDADO SANDBOX (ley de la casa): tels de prueba JAMÁS salen a WhatsApp —
             // se simula la ejecución (el flujo se prueba completo sin tocar el puente).
             const esPrueba = /^52100000000/.test(telFullB);
             const BURL = process.env.BRIDGE_SEND_URL || 'http://137.184.199.19:3000/api/send';
-            const BKEY = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2-2026';
+            const BKEY = process.env.K_PUENTE || process.env.BRIDGE_API_KEY || '';
             const { enviarWA: enviarWA0 } = require('../lib/seb/citas-vivas.js');
             const enviarWA = (tel, txt) => enviarWA0(tel, txt, TID);          // sale por el universo del tenant
             const conTenant = body => Object.assign(body, TID ? { tenant_id: TID } : {});
@@ -1977,6 +2061,7 @@ module.exports = async function handler(req, res) {
             const tP = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tP) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0, tenantId: tP.id });
+            if (r.ok) { try { let telPg = String(req.body.telefono || '').replace(/\D/g, ''); if (telPg.length === 10) telPg = '521' + telPg; const dP = await citasVivas.direccionDe(tP.id, telPg); await require('../lib/seb/acciones.js').registrar({ tenant_id: tP.id, chat_id: dP.chat_id, delegacion_id: dP.delegacion_id, tipo: 'programado', ref_id: r.id, meta: { cuando_ts: Number(req.body.cuando_ts) }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { } }
             return res.status(r.ok ? 200 : 400).json(r);
         }
         if (action === 'prog_cancelar' && req.method === 'POST') {
@@ -2069,9 +2154,6 @@ module.exports = async function handler(req, res) {
         // Foto del VENDEDOR (ya subida al Blob por el puente) → pool de su sesión.
         // Silencio por foto (no spamear); solo al COMPLETAR el checklist se contesta.
         if (action === 'recepcion_foto' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
-                return res.status(401).json({ ok: false, error: 'key' });
-            }
             const tF = String(req.body.telefono || '').replace(/\D/g, '');
             const urlF = String(req.body.url || '');
             if (!tF || !urlF) return res.status(400).json({ ok: false, error: 'telefono y url requeridos' });
@@ -2086,9 +2168,6 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'carga_pieza' && req.method === 'POST') {
-            if (String(req.body.key || '') !== (process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026')) {
-                return res.status(401).json({ ok: false, error: 'key inválida' });
-            }
             const { pieza } = require('../lib/seb/carga-lote.js');
             const rp = await pieza({ remitente: req.body.remitente, tipo: req.body.tipo, texto: req.body.texto, url: req.body.url });
             return res.status(200).json(rp || { ok: false });
@@ -2106,7 +2185,7 @@ module.exports = async function handler(req, res) {
             const consumeQid = Number(req.body.consume_qid || 0) || null;
             if (!tel || !texto) return res.status(400).json({ error: 'telefono y texto requeridos' });
             let enviado = false, error_envio = null;
-            const bridgeUrl = process.env.BRIDGE_SEND_URL, bridgeKey = process.env.BRIDGE_API_KEY;
+            const bridgeUrl = process.env.BRIDGE_SEND_URL, bridgeKey = process.env.K_PUENTE || process.env.BRIDGE_API_KEY;
             if (bridgeUrl && bridgeKey) {
                 try {
                     let phone = tel.replace(/\D/g, '');
@@ -2141,7 +2220,7 @@ module.exports = async function handler(req, res) {
                             await run("INSERT INTO seb_entrenamiento (queue_id, telefono, intencion, auto_id, borrador, texto_final, accion, similitud, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                                 [q[0].id, q[0].telefono, q[0].intencion, meta.auto_id || null, q[0].borrador, texto, 'secuencia', 0, Date.now()]);
                             // MEDIA del banco (pin de ubicación / fotos) — se manda al consumir el QID.
-                            const bUrl = process.env.BRIDGE_SEND_URL, bKey = process.env.BRIDGE_API_KEY;
+                            const bUrl = process.env.BRIDGE_SEND_URL, bKey = process.env.K_PUENTE || process.env.BRIDGE_API_KEY;
                             if (bUrl && bKey) {
                                 let ph = String(q[0].telefono).replace(/\D/g, ''); if (ph.length === 10) ph = '521' + ph;
                                 if (meta.ubic) {

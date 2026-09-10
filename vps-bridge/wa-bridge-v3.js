@@ -20,13 +20,55 @@ const http = require('http');
 const { Boom } = require('@hapi/boom');
 let NodeCache; try { NodeCache = require('node-cache'); } catch (e) { NodeCache = null; }
 
+const crypto = require('crypto');
+
+// ── .env LOCAL (anti-hackeo 2026-09-10): el puente lee /root/wa-bridge/.env él mismo y rellena SOLO lo que pm2 no
+//    haya inyectado. Así un `pm2 restart` sin --update-env jamás arranca sin K_PUENTE. Sin dependencia dotenv.
+(function cargarEnvLocal() {
+    try {
+        const txt = require('fs').readFileSync(require('path').join(__dirname, '.env'), 'utf8');
+        for (const linea of txt.split(/\r?\n/)) {
+            if (!linea.trim() || linea.trim().startsWith('#')) continue;
+            const mm = linea.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+            if (!mm) continue;
+            let v = mm[2]; if (/^(['"]).*\1$/.test(v)) v = v.slice(1, -1);
+            if (process.env[mm[1]] === undefined || process.env[mm[1]] === '') process.env[mm[1]] = v;
+        }
+    } catch (e) {}
+})();
+
 const TURSO_URL = process.env.TURSO_URL || 'libsql://crm-fyradrive-739458di.aws-us-west-2.turso.io';
 const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || '';
-const SEND_KEY = process.env.BRIDGE_API_KEY || 'fyra-bridge-v2';
 const PORT = Number(process.env.PORT || 3000);
 const PLATFORM = 'whatsapp';
 const SB_UPLOAD_URL = process.env.SALESBRAIN_UPLOAD_URL || 'https://sales-brain-theta.vercel.app/api/upload';
-const SB_KEY = process.env.SALESBRAIN_KEY || 'fyradrive-sb-2026';
+
+// ── LLAVE ÚNICA DEL PUENTE (spec seguridad-acceso 2026-09-10, BLOQUE 4). JAMÁS un literal de llave en el código.
+//    K_PUENTE  = la llave que el puente EXIGE en el header x-api-key de toda petición entrante, y la que él MANDA
+//                en x-api-key a fyrachat (seb-panel) y a Sales Brain (/api/upload ingesta).
+//    KEY_VIEJA = SOLO durante la rotación: se acepta además como x-api-key entrante (console.warn '[key-vieja]')
+//                y se manda como body.key / ?key= de salida para que el fyrachat VIEJO siga aceptando hasta que se
+//                despliegue el nuevo. Acepta varias separadas por coma (la primera es la que se manda). Vacía = fin.
+//    BRIDGE_API_KEY / SEND_KEY / SALESBRAIN_KEY / CASILLA_KEY ya NO existen: si hay que aceptar la vieja, va en KEY_VIEJA.
+//    Sin K_PUENTE el puente NO arranca (falla cerrada, invariante 1).
+const K_PUENTE = String(process.env.K_PUENTE || '').trim();
+if (!K_PUENTE) { console.error('FATAL: falta K_PUENTE en /root/wa-bridge/.env'); process.exit(1); }
+const KEYS_VIEJAS = String(process.env.KEY_VIEJA || '').split(',').map(x => x.trim()).filter(Boolean);
+const KEY_VIEJA_SALIDA = KEYS_VIEJAS[0] || '';
+if (KEYS_VIEJAS.length) console.warn('[key-vieja] transición ACTIVA: se acepta/manda también la llave vieja (KEY_VIEJA). Bórrala al terminar la rotación.');
+const sha256 = (x) => crypto.createHash('sha256').update(String(x)).digest();
+const mismaLlave = (a, b) => !!(a && b) && crypto.timingSafeEqual(sha256(a), sha256(b));   // tiempo constante
+// ¿La petición ENTRANTE trae llave válida? SOLO header x-api-key (nada por query ni body — invariante 2).
+function llaveEntrante(req, ruta) {
+    const hdr = String(req.headers['x-api-key'] || '');
+    if (mismaLlave(hdr, K_PUENTE)) return true;
+    for (const v of KEYS_VIEJAS) if (mismaLlave(hdr, v)) { console.warn('[key-vieja]', ruta); return true; }
+    return false;
+}
+// SALIDAS del puente (fyrachat seb-panel, Sales Brain): header SIEMPRE; body.key / ?key= SOLO mientras dure la transición.
+const HDR_PUENTE = Object.freeze({ 'Content-Type': 'application/json', 'x-api-key': K_PUENTE });
+const cuerpoPanel = (o) => JSON.stringify(KEY_VIEJA_SALIDA ? Object.assign({ key: KEY_VIEJA_SALIDA }, o) : o);
+const queryVieja = () => (KEY_VIEJA_SALIDA ? '&key=' + encodeURIComponent(KEY_VIEJA_SALIDA) : '');
 // MODO PRUEBA: estos números (por últimos 10 dígitos), cuando contestan un anuncio,
 // REINICIAN su conversación (contexto fresco, como comprador nuevo).
 const TEST_NUMEROS = new Set((process.env.TEST_NUMEROS || '8120066355').split(',').map(s => s.trim()).filter(Boolean));
@@ -379,7 +421,7 @@ async function mandarASalesBrain({ external_id, text, from_name, direction, ad_c
         try {
             const r = await fetch(SB_UPLOAD_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-api-key': SB_KEY },
+                headers: HDR_PUENTE,
                 body
             });
             if (!r.ok) {
@@ -425,6 +467,16 @@ function authDirDe(tenant) {
 // Limpia las credenciales de un universo NO registrado (vinculación fallida) para reintentar en limpio
 function limpiarAuth(tenant) {
     try { const dir = path.join(__dirname, 'auth', String(tenant.id)); for (const f of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, f)); } catch (e) {}
+}
+// Estado REPORTADO del universo (lo que ve Sales Brain): memoria del proceso primero; si no hay (arranque fresco),
+// UNA fila de wa_sessions. Lo usa codigoVinculacion() para respetar la invariante 6 (no limpiar creds registradas).
+async function estadoSesion(tenantId) {
+    const p = sesionReportada.get(tenantId);
+    if (p && p.estado) return String(p.estado);
+    try {
+        const r = await db.execute({ sql: 'SELECT estado FROM wa_sessions WHERE tenant_id=?', args: [tenantId] });
+        return r.rows.length ? String(r.rows[0].estado || '') : '';
+    } catch (e) { return ''; }
 }
 // Estado de sesión → Sales Brain (Turso wa_sessions; la Fase 6 lo vuelve endpoint)
 function reportarSesion(tenantId, estado, motivo) {
@@ -668,7 +720,7 @@ async function conectar() {
     async function manejarPiezaCarga(m, texto, remitente) {
         try {
             const w = m.message || {};
-            const post = (b) => fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'carga_pieza', key: 'fyra-bridge-v2-2026', remitente: remitente || '5218120066355' }, b)) }).catch(() => {});
+            const post = (b) => fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel(Object.assign({ action: 'carga_pieza', remitente: remitente || '5218120066355' }, b)) }).catch(() => {});
             if (w.imageMessage) {
                 const cap = String(w.imageMessage.caption || '').trim();
                 if (cap) await post({ tipo: 'texto', texto: cap });
@@ -713,7 +765,7 @@ async function conectar() {
     async function manejarFotoRecepcion(m, tel) {
         try {
             const t10 = String(tel).replace(/\D/g, '');
-            const chk = await fetch('https://fyrachat.vercel.app/api/seb-panel?action=recepcion_activa&telefono=' + t10).then(r => r.json()).catch(() => null);
+            const chk = await fetch('https://fyrachat.vercel.app/api/seb-panel?action=recepcion_activa&telefono=' + t10 + queryVieja(), { headers: HDR_PUENTE }).then(r => r.json()).catch(() => null);
             if (!chk || !chk.activa) return;
             const w = m.message || {};
             const buff = await baileys.downloadMediaMessage(m, 'buffer', {});
@@ -724,7 +776,7 @@ async function conectar() {
             const up = await fetch('https://www.fyradrive.com/api/agency/upload-photo', { method: 'POST', body: fd });
             const du = await up.json().catch(() => ({}));
             if (du && du.ok && du.url) {
-                await fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'recepcion_foto', key: 'fyra-bridge-v2-2026', telefono: t10, url: du.url }) });
+                await fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'recepcion_foto', telefono: t10, url: du.url }) });
                 console.log('[recepcion] foto subida ' + t10);
             } else console.error('[recepcion] upload-photo fallo:', du && du.error);
         } catch (e) { console.error('[recepcion foto]', e && e.message); }
@@ -782,7 +834,7 @@ async function conectar() {
             // teléfono acredita carril ubicación (24h) — timbre y sigue el skip normal.
             if (esSaliente && (m.message?.locationMessage || m.message?.liveLocationMessage) && !U.enviadosPorPanel.has(m.key.id)) {
                 const telPin = telefonoReal(m);
-                if (telPin) fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_manual', key: 'fyra-bridge-v2-2026', telefono: telPin, texto: '', es_pin: true }) }).catch(() => {});
+                if (telPin) fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'rescate_manual', telefono: telPin, texto: '', es_pin: true }) }).catch(() => {});
             }
             // Eco SALIENTE de MEDIA (imagen/pin/video/doc/audio): NO crear burbuja en FyraChat.
             // Lo que mandamos (p.ej. el paquete de ubicación) ya está representado por su texto;
@@ -861,7 +913,7 @@ async function conectar() {
             // 🛟 MANUAL TUYO (máquina de rescate): tu texto escrito a mano re-arma el
             // reloj del silencio (jamás toca una promesa del comprador).
             if (esSaliente) {
-                fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_manual', key: 'fyra-bridge-v2-2026', telefono: tel, texto: String(texto || '') }) }).catch(() => {});
+                fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'rescate_manual', telefono: tel, texto: String(texto || '') }) }).catch(() => {});
             }
             // ══ TIMBRE DE CIERRE (lógica del timbre, orden owner 2026-07-16): "cita
             // confirmada" MANUAL tuyo → fyrachat ejecuta la máquina AL INSTANTE (paquete
@@ -869,8 +921,8 @@ async function conectar() {
             // de respaldo por la MISMA puerta idempotente — jamás duplica.
             if (esSaliente && /cita confirmada/i.test(texto)) {
                 fetch('https://fyrachat.vercel.app/api/seb-panel?action=cierre_timbre', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: 'fyra-bridge-v2-2026', telefono: String(tel).replace(/\D/g, ''), texto, ts: msgTs })
+                    method: 'POST', headers: HDR_PUENTE,
+                    body: cuerpoPanel({ telefono: String(tel).replace(/\D/g, ''), texto, ts: msgTs })
                 }).then(r => r.json()).then(j => console.log('[timbre-cierre]', tel, JSON.stringify(j).slice(0, 120))).catch(e => console.error('[timbre-cierre]', e.message));
             }
             // Reenviar a SALES-BRAIN EN ORDEN por teléfono (cola). Sigue llenando lo VIEJO en paralelo.
@@ -904,8 +956,8 @@ function programarCitaEntrante(tel, texto, chatD) {
         if (!junto) return;
         try {
             const r = await fetch(OPENER_AUTO_URL, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'cita_entrante', key: 'fyra-bridge-v2-2026', tenant_id: tenant.id, telefono: tel, texto: junto, vendedor_ultimo_ts: Number(chatD && chatD.ultimo_from_me) || 0 })
+                method: 'POST', headers: HDR_PUENTE,
+                body: cuerpoPanel({ action: 'cita_entrante', tenant_id: tenant.id, telefono: tel, texto: junto, vendedor_ultimo_ts: Number(chatD && chatD.ultimo_from_me) || 0 })
             });
             const d = await r.json().catch(() => ({}));
             if (d && d.handled) console.log('[t' + tenant.id + '] cita_entrante · chat ' + jidHash(tel) + ' · ' + (d.rol || '?') + (d.callado ? ' · callado (' + d.callado + ')' : '') + (d.enviados ? ' · ' + d.enviados + ' burbujas' : ''));
@@ -1016,8 +1068,8 @@ async function dispararAutoOpener(tel) {
         let d = null;
         try {
             const r = await fetch(OPENER_AUTO_URL, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'opener_auto', telefono: tel })
+                method: 'POST', headers: HDR_PUENTE,
+                body: cuerpoPanel({ action: 'opener_auto', telefono: tel })
             });
             d = await r.json().catch(() => ({}));
         } catch (e) { console.error('[auto-opener] cerebro:', e.message); }
@@ -1056,7 +1108,7 @@ async function dispararAutoOpener(tel) {
         console.log('[auto-opener] ' + (d.modo || 'opener') + ' → ' + tel + ' (' + segmentos.length + ' msgs' + (d.ubicacion_auto_id ? ' +pin' : '') + (d.fotos ? ' +' + d.fotos.length + 'fotos' : '') + ')');
         // 🛟 LA MÁQUINA DE RESCATE: turno cerrado → el cerebro re-evalúa folios
         // (promesa del comprador / cancha / arma el reloj del silencio con su carril)
-        fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rescate_turno', key: 'fyra-bridge-v2-2026', telefono: tel, segmentos: segmentos, pin: !!d.ubicacion_auto_id }) }).catch(() => {});
+        fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'rescate_turno', telefono: tel, segmentos: segmentos, pin: !!d.ubicacion_auto_id }) }).catch(() => {});
     } finally {
         U.autoOpenerEnVuelo.delete(tel);
         // ¿Llegó algún mensaje mientras respondíamos? → reprocesar (leerá el nuevo contexto
@@ -1104,8 +1156,8 @@ async function correrGhostScan() {
     U.ghostEnCurso = true;
     try {
         const r = await fetch(OPENER_AUTO_URL, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ghost_scan' })
+            method: 'POST', headers: HDR_PUENTE,
+            body: cuerpoPanel({ action: 'ghost_scan' })
         });
         const d = await r.json().catch(() => ({}));
         if (d && d.ok && Array.isArray(d.enviar) && d.enviar.length) {
@@ -1322,7 +1374,14 @@ async function registrarManualIlegible(m) {
     // de teléfono. El vendedor teclea el código en SU teléfono. Solo mientras no esté registrado.
     U.codigoVinculacion = async () => {
         if (!U.sock) return { ok: false, error: 'universo sin socket' };
-        if (U.estado === 'conectado' && U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered) return { ok: false, error: 'ya está vinculado' };   // solo si la línea está VIVA
+        // INVARIANTE 6 (spec 2026-09-10): con creds.registered=true JAMÁS se limpia auth salvo que el estado REPORTADO del
+        // universo sea 'desvinculado' (el vendedor quitó el dispositivo / baja). Conectado o reconectando = sigue vinculado:
+        // se responde vinculado:true y las credenciales quedan intactas (Sales Brain NO manda WhatsApp con este flag).
+        const registrado = !!(U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered);
+        if (registrado) {
+            const est = await estadoSesion(tenant.id);
+            if (est !== 'desvinculado') return { ok: false, vinculado: true, error: 'ya está vinculado', estado: est || U.estado };
+        }
         const tel = String(tenant.telefono || '').replace(/\D/g, '').replace(/^521(\d{10})$/, '52$1');   // WhatsApp MX: 52 + 10 dígitos
         if (!tel) return { ok: false, error: 'tenant sin teléfono' };
         // UN código por vez (2026-09-10, "códigos diferentes en la web y en WhatsApp"): si el último sigue vivo (<100 s, misma
@@ -1456,10 +1515,9 @@ setInterval(() => {
 // lo que se escape (proceso caído en la hora exacta) lo recoge el cron cada 10 min por la misma puerta.
 const casillaTimers = new Map();   // casilla_id → { timer, due_ts }
 const CASILLA_VUELTA_MS = 24 * 3600000;
-const CASILLA_KEY = 'fyra-bridge-v2-2026';
 async function ejecutarCasillaRemota(id) {
     try {
-        const r = await fetch(OPENER_AUTO_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'casilla_ejecutar', key: CASILLA_KEY, id }) });
+        const r = await fetch(OPENER_AUTO_URL, { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'casilla_ejecutar', id }) });
         const d = await r.json().catch(() => ({}));
         console.log('[casilla] #' + id + ' → ' + JSON.stringify(d).slice(0, 140));
         // el cerebro dice "aún no toca" (reloj desfasado) → re-armar con su due_ts
@@ -1484,7 +1542,7 @@ function programarCasilla(id, dueTs) {
 function cancelarCasillaTimer(id) { const t = casillaTimers.get(Number(id)); if (t && t.timer) clearTimeout(t.timer); return casillaTimers.delete(Number(id)); }
 async function rearmarCasillas() {
     try {
-        const r = await fetch(OPENER_AUTO_URL + '?action=casillas_pendientes&key=' + CASILLA_KEY + '&horas=24');
+        const r = await fetch(OPENER_AUTO_URL + '?action=casillas_pendientes&horas=24' + queryVieja(), { headers: HDR_PUENTE });
         const d = await r.json().catch(() => ({}));
         if (!d || !d.ok || !Array.isArray(d.casillas)) { console.error('[casilla] re-armar: respuesta inválida'); return; }
         let n = 0; for (const c of d.casillas) if (programarCasilla(c.casilla_id, c.due_ts)) n++;
@@ -1499,8 +1557,11 @@ const tenantDe = (body) => { const t = Number(body && body.tenant_id); return un
 const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     const url = new URL(req.url, 'http://x');
-    const conKey = req.headers['x-api-key'] === SEND_KEY;
-    if (url.pathname === '/status') {
+    // ÚNICA ruta pública: latido sin datos (para monitores). Todo lo demás exige x-api-key (K_PUENTE; KEY_VIEJA en transición).
+    if (url.pathname === '/health') return res.end(JSON.stringify({ ok: true }));
+    const conKey = llaveEntrante(req, url.pathname);
+    if (url.pathname === '/status') {                                                      // (con key: expone estados/teléfonos)
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
         const lista = [...universos.values()].map(U => ({ tenant_id: U.tenant.id, nombre: U.tenant.nombre, estado: U.estado, conectado: U.estado === 'conectado', lid_map: U.lidAPhone.size, ultimo_mensaje: U.ultimoRecibido || null }));
         const U0 = universos.get(0);
         return res.end(JSON.stringify({ ok: true, estado: U0 ? U0.estado : 'sin_tenant_0', conectado: !!(U0 && U0.estado === 'conectado'), lid_map: U0 ? U0.lidAPhone.size : 0, universos: lista }));
@@ -1512,7 +1573,8 @@ const server = http.createServer(async (req, res) => {
         if (!U) { res.statusCode = 404; return res.end(JSON.stringify({ ok: false, error: 'tenant sin universo abierto' })); }
         return res.end(JSON.stringify({ ok: true, tenant_id: U.tenant.id, estado: U.estado, qr: U.ultimoQR }));
     }
-    if (url.pathname === '/qr') {                                                          // compat: tenant 0
+    if (url.pathname === '/qr') {                                                          // compat: tenant 0 (con key)
+        if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
         const U = universos.get(0);
         return res.end(JSON.stringify({ ok: true, estado: U ? U.estado : 'sin_tenant_0', qr: U ? U.ultimoQR : null }));
     }

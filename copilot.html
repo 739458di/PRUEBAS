@@ -201,6 +201,20 @@
   #guia li b{color:#0b1730}
   #guia button{margin-top:16px;width:100%;padding:13px;border-radius:999px;border:0;background:#2f6df0;color:#fff;font-weight:800;font-size:15px;cursor:pointer}
   .top .salir{background:none;border:0;color:#9aa3b5;font-size:12px;font-weight:700;cursor:pointer;margin-right:8px}
+  .top .disp{background:none;border:0;color:#9aa3b5;font-size:12px;font-weight:700;cursor:pointer;margin-right:8px;white-space:nowrap}
+  /* TUS DISPOSITIVOS (2026-09-10): sesiones vivas de este universo + cerrar todas */
+  #disp{position:fixed;inset:0;background:rgba(11,23,48,.72);display:none;align-items:flex-end;justify-content:center;z-index:59}
+  #disp.on{display:flex}
+  #disp .caja{background:#fff;color:#1a2438;border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));max-width:520px;width:100%;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+  #disp h3{margin:0 0 4px;font-size:20px;font-weight:800}
+  #disp .sub{color:#5b6b85;font-size:13px;margin-bottom:14px}
+  #disp ul{list-style:none;margin:0;padding:0;max-height:45vh;overflow:auto}
+  #disp li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eef1f6;font-size:14px}
+  #disp li .nav{font-weight:700;color:#0b1730}
+  #disp li .fecha{font-size:12px;color:#7d8aa3}
+  #disp li .este{margin-left:auto;font-size:11px;font-weight:800;color:#0f9d6a;background:#e6f7ef;border-radius:999px;padding:3px 9px;white-space:nowrap}
+  #disp .todas{margin-top:16px;width:100%;padding:13px;border-radius:999px;border:0;background:#e53935;color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+  #disp .cerrar{margin-top:8px;width:100%;padding:11px;border-radius:999px;border:1px solid #e3e9f4;background:#fff;color:#5b6b85;font-weight:700;font-size:14px;cursor:pointer}
   .top .ayuda{background:#eef3fb;border:0;color:#2f6df0;width:30px;height:30px;border-radius:50%;font-weight:800;cursor:pointer;margin-right:8px}
 </style>
 </head>
@@ -238,6 +252,17 @@
       <li><b>Lo demás sigue igual.</b> Tus otros chats no se tocan; el asistente solo ve los que tú le delegas. Puedes quitarlo cuando quieras desde Dispositivos vinculados en tu WhatsApp.</li>
     </ol>
     <button onclick="cerrarGuia()">Entendido</button>
+  </div>
+</div>
+
+<!-- TUS DISPOSITIVOS: sesiones abiertas de este FyraChat (botón junto a "Salir") -->
+<div id="disp" onclick="if(event.target===this)cerrarDispositivos()">
+  <div class="caja">
+    <h3>Tus dispositivos</h3>
+    <div class="sub">Navegadores con tu FyraChat abierto. Si ves uno que no reconoces, cierra todas las sesiones.</div>
+    <ul id="disp-lista"><li>Cargando…</li></ul>
+    <button class="todas" onclick="cerrarTodasSesiones()">Cerrar todas las sesiones</button>
+    <button class="cerrar" onclick="cerrarDispositivos()">Volver</button>
   </div>
 </div>
 
@@ -580,7 +605,9 @@ document.getElementById('pill-pend').onclick = function(){ SOLO_PEND=!SOLO_PEND;
 // sale por el puente firmado como manual.
 // ══ FASE 2 — FYRACHAT POR VENDEDOR: ?vendedor=<tenant id o teléfono>. Sin parámetro = tenant 0 (owner).
 let VEND = (new URLSearchParams(location.search).get('vendedor') || '').trim();
-let SESION = null;   // { tenant:{id,nombre,telefono}, maestra }
+let SESION = null;   // { tenant:{id,nombre,telefono}, maestra, staff }
+let T0 = false;      // la maestra / STAFF pidió el FyraChat de Fyradrive (tenant 0 clásico) con ?vendedor=0 → cada llamada lo dice EXPLÍCITO
+const VPARAM = () => VEND || (T0 ? '0' : undefined);
 let TENANT = null;   // { id, nombre, telefono }, autos[]
 // ── ACCESO (2026-09-10): primero la sesión. Vendedor con sesión → SU universo, diga lo que diga el link.
 //    Sin sesión y con ?vendedor= → pantalla de código. Sin nada → FyraChat de Fyradrive (tenant 0), como siempre.
@@ -602,16 +629,39 @@ async function accEntrar(){
 }
 function accVolver(){ $a('acc-p2').style.display = 'none'; $a('acc-p1').style.display = ''; }
 function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search); const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
-async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/copilot.html?vendedor=entrar'); }
+async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/copilot.html'); }
+// ── TUS DISPOSITIVOS (2026-09-10): lista de sesiones vivas del universo + cerrar todas
+function fechaCorta(ms){ try { return new Date(ms).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
+async function abrirDispositivos(){
+  $a('disp').classList.add('on'); $a('disp-lista').innerHTML = '<li>Cargando…</li>';
+  const r = await fetch(API+'?action=acceso_sesiones').then(x=>x.json()).catch(()=>({ok:false}));
+  if (!r.ok) { $a('disp-lista').innerHTML = '<li>No pude leer tus sesiones.</li>'; return; }
+  const ses = r.sesiones || [];
+  $a('disp-lista').innerHTML = ses.length ? ses.map(x => '<li><div><div class="nav">' + esc(x.navegador || 'Navegador') + '</div><div class="fecha">Entró ' + esc(fechaCorta(x.creada)) + ' · último uso ' + esc(fechaCorta(x.ultimo_uso)) + (x.ip_mascara ? ' · ' + esc(x.ip_mascara) : '') + '</div></div>' + (x.actual ? '<span class="este">este dispositivo</span>' : '') + '</li>').join('') : '<li>Sin sesiones abiertas.</li>';
+}
+function cerrarDispositivos(){ $a('disp').classList.remove('on'); }
+async function cerrarTodasSesiones(){
+  if (!confirm('¿Cerrar TODAS las sesiones de tu FyraChat (incluida esta)? Para volver a entrar pedirás un código.')) return;
+  await fetch(API+'?action=acceso_cerrar_todas',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{});
+  location.replace('/copilot.html');
+}
+// Botones de sesión en la barra: "Tus dispositivos" + "Salir" (para cualquier sesión, en cualquier universo)
+function montarBotonesSesion(){
+  const btn = document.querySelector('#scr-lista .top .nuevo');
+  if (!SESION || !btn || document.querySelector('.top .salir')) return;
+  const di = document.createElement('button'); di.className = 'disp'; di.textContent = 'Tus dispositivos'; di.title = 'Dónde está abierto tu FyraChat'; di.onclick = abrirDispositivos; btn.parentNode.insertBefore(di, btn);
+  const sa = document.createElement('button'); sa.className = 'salir'; sa.textContent = 'Salir'; sa.onclick = accSalir; btn.parentNode.insertBefore(sa, btn);
+}
 function abrirGuia(){ $a('guia').classList.add('on'); }
 function cerrarGuia(){ $a('guia').classList.remove('on'); try { localStorage.setItem('fyra_guia_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
 async function cargarTenant(){
   const qs = new URLSearchParams(location.search);
   try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; window.__desv = !!(yo && yo.desvinculado); } catch(e){ SESION = null; }
   if (!SESION && window.__desv) { mostrarAcceso('Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.'); return false; }
-  if (VEND === '0' && SESION && SESION.maestra) VEND = '';                    // maestra pidiendo el FyraChat de Fyradrive (clásico)
-  else if (SESION && (!SESION.maestra || !VEND)) VEND = String(SESION.tenant.id);   // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
-  else if (!SESION && VEND) { mostrarAcceso(qs.get('aviso') || ''); return false; }   // sin sesión: código
+  if (!SESION) { mostrarAcceso(qs.get('aviso') || ''); return false; }          // SIN SESIÓN NO HAY UNIVERSO (también sin ?vendedor=) — bloque 2, 2026-09-10
+  if (VEND === '0' && (SESION.maestra || SESION.staff)) { VEND = ''; T0 = true; }   // maestra / STAFF pidiendo el FyraChat de Fyradrive (clásico): se manda vendedor=0 explícito
+  else if (!SESION.maestra || !VEND) VEND = String(SESION.tenant.id);          // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
+  montarBotonesSesion();
   if (!VEND) return;
   try { document.getElementById('gen').style.display = 'none'; } catch(e){}   // Seb del tenant 0: NO en universos de vendedor
   try {
@@ -628,16 +678,15 @@ async function cargarTenant(){
       h1.innerHTML = '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FyraChat · ' + esc(TENANT.nombre || telFmt) + '</div>' + (TENANT.nombre && telFmt ? '<div style="font-size:12px;font-weight:500;color:#5b6b82;margin-top:2px;white-space:nowrap">📱 ' + telFmt + ' · universo ' + TENANT.id + '</div>' : '');
     }
     const btn = document.querySelector('#scr-lista .top .nuevo'); if (btn) btn.textContent = '＋ Nuevo comprador';
-    if (SESION && !SESION.maestra && btn && !document.querySelector('.top .salir')) {
-      const ay = document.createElement('button'); ay.className = 'ayuda'; ay.textContent = '?'; ay.title = 'Cómo usar tu FyraChat'; ay.onclick = abrirGuia; btn.parentNode.insertBefore(ay, btn);
-      const sa = document.createElement('button'); sa.className = 'salir'; sa.textContent = 'Salir'; sa.onclick = accSalir; btn.parentNode.insertBefore(sa, btn);
+    if (SESION && !SESION.maestra && btn && !document.querySelector('.top .ayuda')) {
+      const ay = document.createElement('button'); ay.className = 'ayuda'; ay.textContent = '?'; ay.title = 'Cómo usar tu FyraChat'; ay.onclick = abrirGuia; btn.parentNode.insertBefore(ay, document.querySelector('.top .disp') || btn);
       let vista = false; try { vista = !!localStorage.getItem('fyra_guia_' + TENANT.id); } catch(e){}
       if (qs.get('bienvenida') === '1' || !vista) { abrirGuia(); if (qs.get('bienvenida')) history.replaceState(null, '', '/copilot.html'); }
     }
     if (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado') toast('⚠️ Tu WhatsApp aún no está vinculado al asistente');
   } catch(e){}
 }
-const vendQS = () => VEND ? '&vendedor='+encodeURIComponent(VEND) : '';
+const vendQS = () => VPARAM() != null ? '&vendedor='+encodeURIComponent(VPARAM()) : '';
 // ➕ NUEVO COMPRADOR (única puerta de delegación, orden owner 2026-09-07): nombre del auto +
 // teléfono → el chat nace delegado en el universo del vendedor y el asistente escribe UNA vez.
 // ══ FORMA DE ENTRADA del bot al delegar (orden owner 2026-09-08): silencio / mi texto / como asistente ══
@@ -668,11 +717,11 @@ async function nuevoComprador(){
   const nombre = (prompt('👤 Nombre del comprador (opcional):') || '').trim();
   // la forma de entrada la elige el vendedor: primero pedimos el machote para mostrarlo/editarlo
   let machote = '';
-  try { const pv = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VEND, auto_id: auto.id, telefono: tel, nombre, modo_entrada:'bot', solo_preview:1})}).then(x=>x.json()); machote = (pv && pv.opener) || ''; } catch(e){}
+  try { const pv = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), auto_id: auto.id, telefono: tel, nombre, modo_entrada:'bot', solo_preview:1})}).then(x=>x.json()); machote = (pv && pv.opener) || ''; } catch(e){}
   const entrada = await elegirEntrada(machote); if (!entrada) return;
   if (entrada.modo === 'texto' && !entrada.texto) return alert('El texto quedó vacío — elige "Sin decir nada" si no quieres mensaje');
   try {
-    const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VEND, auto_id: auto.id, telefono: tel, nombre, modo_entrada: entrada.modo, opener_texto: entrada.texto})}).then(x=>x.json());
+    const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), auto_id: auto.id, telefono: tel, nombre, modo_entrada: entrada.modo, opener_texto: entrada.texto})}).then(x=>x.json());
     if (!r.ok) return alert('No se pudo: '+(r.error||'error'));
     alert(entrada.modo === 'silencio' ? '🤫 Chat delegado en silencio (sin mensaje). Ya puedes escribirle o usar los botones.'
         : (r.opener_enviado ? '✅ Chat delegado y primer mensaje enviado:\n\n«'+r.opener+'»' : '🟡 Chat delegado. El primer mensaje quedó pendiente: '+(r.error||'sin conexión')) );
@@ -683,7 +732,7 @@ async function nuevoComprador(){
 async function soltarChat(){
   if (!TENANT || !TEL) return;
   if (!confirm('¿Soltar este chat? El asistente deja de leerlo y registrarlo.')) return;
-  try { const r = await fetch(API+'?action=soltar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VEND, telefono: TEL})}).then(x=>x.json()); toast(r.ok ? 'Chat soltado' : ('No se pudo: '+(r.error||'')), !r.ok); } catch(e){ toast('Error: '+e.message, true); }
+  try { const r = await fetch(API+'?action=soltar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), telefono: TEL})}).then(x=>x.json()); toast(r.ok ? 'Chat soltado' : ('No se pudo: '+(r.error||'')), !r.ok); } catch(e){ toast('Error: '+e.message, true); }
 }
 async function nuevoChat(){
   const t = prompt('📱 Teléfono del contacto (10 dígitos):'); if (!t) return;
@@ -788,10 +837,10 @@ function cerrarAutoM(i){
 async function cambiarFoco(){
   if (!TEL) return;
   let autos = [];
-  try { const d = await fetch(API+'?action=tenant_info'+(VEND ? '&vendedor='+encodeURIComponent(VEND) : '')).then(x=>x.json()); autos = d.autos || []; } catch(e){}
+  try { const d = await fetch(API+'?action=tenant_info'+vendQS()).then(x=>x.json()); autos = d.autos || []; } catch(e){}
   if (!autos.length) { alert('No hay autos habilitados para este usuario'); return; }
   const auto = await elegirAuto(autos, '🚗 Auto en foco para este contacto'); if (!auto) return;
-  const r = await postAccion({ action:'foco_cambiar', vendedor: VEND || undefined, telefono: TEL, auto_id: auto.id });
+  const r = await postAccion({ action:'foco_cambiar', vendedor: VPARAM(), telefono: TEL, auto_id: auto.id });
   if (r && r.ok) pintarFoco(r.foco); else alert('⚠️ ' + ((r && r.error) || 'no se pudo cambiar el foco'));
 }
 function esc(s){
@@ -1028,7 +1077,7 @@ async function postAccion(body){
 }
 async function accionBoton(acc){
   const tel = TEL; if (!tel) { alert('Abre un chat primero'); return; }
-  const body = { action:'accion_boton', telefono: tel, accion: acc, vendedor: VEND || undefined, comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim() };
+  const body = { action:'accion_boton', telefono: tel, accion: acc, vendedor: VPARAM(), comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim() };
   if (acc === 'cita') {
     // por BOTONES (orden owner 2026-09-08): selectores nativos de fecha/hora + atajos, nada escrito a mano
     if (!body.fecha_iso) { abrirCitaM(); return; }
@@ -1073,7 +1122,7 @@ async function confirmarCitaM(btn){
   const f = document.getElementById('cita-fecha').value, h = document.getElementById('cita-hora').value;
   if (!f || !h) { alert('Elige día y hora'); return; }
   btn.disabled = true;
-  const body = { action:'accion_boton', telefono: TEL, accion: 'cita', vendedor: VEND || undefined, comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim(), fecha_iso: f, hora: h };
+  const body = { action:'accion_boton', telefono: TEL, accion: 'cita', vendedor: VPARAM(), comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim(), fecha_iso: f, hora: h };
   const d = await postAccion(body);
   btn.disabled = false;
   if (d && d.necesita === 'foco') { alert('⚠️ ' + d.error); return; }
@@ -1108,7 +1157,7 @@ async function guardarRec(btn){
   const cuando = Date.UTC(y, mo-1, dd, hh, mm) + 6*3600000;      // hora MTY exacta
   if (cuando < Date.now() && !confirm('Esa hora YA PASÓ — el mensaje saldría en el próximo barrido (minutos). ¿Seguro?')) return;
   btn.disabled = true; btn.textContent = '…';
-  const r = await postAccion({ action:'prog_crear', telefono: tel.slice(-10), texto, cuando_ts: cuando, con_foto: document.getElementById('rec-foto').checked, nombre: REC_NOMBRE, vendedor: VEND || undefined });
+  const r = await postAccion({ action:'prog_crear', telefono: tel.slice(-10), texto, cuando_ts: cuando, con_foto: document.getElementById('rec-foto').checked, nombre: REC_NOMBRE, vendedor: VPARAM() });
   btn.disabled = false; btn.textContent = '📨 Programar envío';
   if (r && r.ok) { cerrarRec(); alert('📨 Programado — sale el ' + f + ' a las ' + h + '\n(lo ves y lo cancelas también en el Calendar 🛟 MENSAJES)'); }
   else alert('⚠️ ' + ((r && r.error) || 'no se pudo programar'));
