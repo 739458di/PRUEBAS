@@ -190,7 +190,16 @@ module.exports = async function handler(req, res) {
             if (!conKey) return res.status(401).json({ ok: false, error: 'key inválida' });
             const r = await ACC.crearTicket(req.body.telefono);
             if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
-            return res.status(200).json({ ok: true, url: 'https://fyrachat.vercel.app/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(r.token), expira: r.expira });
+            const urlT = 'https://fyrachat.vercel.app/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(r.token);
+            // El ticket viaja SOLO al WhatsApp vinculado (quien tiene el teléfono), nunca al navegador que hizo el alta:
+            // un tercero puede dar de alta un número ajeno desde la web y no debe recibir la sesión de la víctima. 2026-09-10
+            if (req.body.enviar) {
+                const nom = String((r.tenant && r.tenant.nombre) || '').trim().split(/\s+/)[0];
+                const txt = 'Listo' + (nom ? ' ' + nom : '') + ', tu FyraChat ya está activo. Ábrelo aquí (link de un solo uso, vence en 15 min):\n' + urlT + '\n\nDespués entras en fyrachat.vercel.app con el código que te llega a este WhatsApp.';
+                const env = await citasVivas.enviarWA(r.tenant.telefono, txt, 0);
+                return res.status(200).json({ ok: true, enviado: !!env.ok, expira: r.expira });
+            }
+            return res.status(200).json({ ok: true, url: urlT, expira: r.expira });
         }
         if (action === 'acceso_canjear') {
             const r = await ACC.canjearTicket(String(req.query.t || ''), req.headers['user-agent']);

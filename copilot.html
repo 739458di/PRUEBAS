@@ -601,7 +601,7 @@ async function accEntrar(){
   location.replace('/copilot.html?bienvenida=1');
 }
 function accVolver(){ $a('acc-p2').style.display = 'none'; $a('acc-p1').style.display = ''; }
-function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; }
+function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const tq = (new URLSearchParams(location.search).get('tel') || '').replace(/\D/g,''); if (tq.length === 10) $a('acc-tel').value = tq; }
 async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/copilot.html?vendedor=entrar'); }
 function abrirGuia(){ $a('guia').classList.add('on'); }
 function cerrarGuia(){ $a('guia').classList.remove('on'); try { localStorage.setItem('fyra_guia_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
