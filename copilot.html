@@ -259,6 +259,7 @@
   <div class="caja">
     <h3>Así usas tu FyraChat</h3>
     <div class="sub">Todo lo que hagas aquí sale desde tu propio WhatsApp.</div>
+    <div id="guia-inicio" style="display:none;background:#eef3fb;border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:13.5px;line-height:1.45"><b>Agrégalo a tu inicio.</b> <span id="guia-inicio-txt"></span></div>
     <ol>
       <li><b>Nuevo comprador.</b> Cuando alguien te pregunte por un auto, tócalo arriba, elige el auto y pon su número. Ese chat queda a cargo del asistente.</li>
       <li><b>Tú decides cómo entra.</b> En silencio (solo se registra), con tu propio texto, o presentándose como tu asistente.</li>
@@ -705,12 +706,30 @@ async function simularRespuesta(){
 let DEMO_TEL_M = { resolve: null };
 function pedirTelDemo(){ return new Promise(resolve => { DEMO_TEL_M = { resolve }; document.getElementById('demotelmodal').classList.add('show'); }); }
 function cerrarDemoTel(ok){ document.getElementById('demotelmodal').classList.remove('show'); const r = DEMO_TEL_M.resolve; DEMO_TEL_M.resolve = null; if (r) r(ok ? (document.getElementById('demo-tel').value || '5210000000009') : null); }
-function abrirGuia(){ $a('guia').classList.add('on'); }
+function abrirGuia(){
+  // "Agrégalo a tu inicio" vive AQUÍ (orden owner 2026-09-10): se agrega el FyraChat, no fyradrive.com/seb. Solo si aún no está instalado.
+  try {
+    const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
+    const el = $a('guia-inicio'), tx = $a('guia-inicio-txt');
+    if (el && tx && !standalone && (ios || android)) {
+      tx.textContent = ios ? 'En Safari toca Compartir (el cuadrito con la flecha) y luego "Añadir a pantalla de inicio". Queda como una app.' : 'En Chrome toca el menú ⋮ y luego "Añadir a pantalla de inicio". Queda como una app.';
+      el.style.display = '';
+    }
+  } catch(e){}
+  $a('guia').classList.add('on');
+}
 function cerrarGuia(){ $a('guia').classList.remove('on'); try { localStorage.setItem('fyra_guia_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
 async function cargarTenant(){
   const qs = new URLSearchParams(location.search);
   try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; window.__desv = !!(yo && yo.desvinculado); } catch(e){ SESION = null; }
   if (!SESION && window.__desv) { mostrarAcceso('Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.'); return false; }
+  // 'entrar' = pantalla de código. Si ya hay sesión de OTRO número (p. ej. la maestra probando el simulador), se cierra esa sesión primero.
+  if (VEND === 'entrar') {
+    const telQ = (qs.get('tel') || '').replace(/\D/g, '');
+    if (SESION && telQ && !String(SESION.tenant.telefono || '').endsWith(telQ)) { try { await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); } catch(e){} SESION = null; }
+    VEND = '';
+  }
   if (!SESION) { mostrarAcceso(qs.get('aviso') || ''); return false; }          // SIN SESIÓN NO HAY UNIVERSO (también sin ?vendedor=) — bloque 2, 2026-09-10
   if (VEND === '0' && (SESION.maestra || SESION.staff)) { VEND = ''; T0 = true; }   // maestra / STAFF pidiendo el FyraChat de Fyradrive (clásico): se manda vendedor=0 explícito
   else if (!SESION.maestra || !VEND) VEND = String(SESION.tenant.id);          // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
