@@ -181,9 +181,66 @@
   .cmf input{background:#f6f8fc;border:1px solid #e6ebf3;border-radius:12px;padding:10px 12px;font-size:14.5px;font-family:inherit;color:var(--text);text-transform:none}
   .cm-add{width:100%;margin-top:7px;padding:14px;border:none;border-radius:15px;background:linear-gradient(135deg,#3f86f5,#2f6df0);color:#fff;font-size:15.5px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 6px 16px rgba(47,109,240,.32);transition:transform .08s}
   .cm-add:active{transform:scale(.98)}
+
+  /* ACCESO (2026-09-10): el universo lo dicta la sesión; sin sesión, código al WhatsApp */
+  #acceso{position:fixed;inset:0;background:#0b1730;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;padding:28px;z-index:60;text-align:center}
+  #acceso.on{display:flex}
+  #acceso h2{font-size:26px;font-weight:800;letter-spacing:-.3px;margin:0 0 6px}
+  #acceso p{color:#b8c4dc;font-size:14px;max-width:340px;margin:0 0 18px;line-height:1.45}
+  #acceso input{width:100%;max-width:320px;font-size:22px;letter-spacing:.08em;text-align:center;padding:14px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;outline:none}
+  #acceso button{margin-top:14px;width:100%;max-width:320px;padding:14px;border-radius:999px;border:0;background:linear-gradient(90deg,#35e0b0,#4f8bff);color:#0b1730;font-weight:800;font-size:15px;cursor:pointer}
+  #acceso .err{color:#ffb4b4;font-size:13px;min-height:18px;margin-top:10px}
+  #acceso .liga{background:none;color:#8fb3ff;font-weight:600;font-size:13px;margin-top:6px}
+  #guia{position:fixed;inset:0;background:rgba(11,23,48,.72);display:none;align-items:flex-end;justify-content:center;z-index:59}
+  #guia.on{display:flex}
+  #guia .caja{background:#fff;color:#1a2438;border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));max-width:520px;width:100%;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+  #guia h3{margin:0 0 4px;font-size:20px;font-weight:800}
+  #guia .sub{color:#5b6b85;font-size:13px;margin-bottom:14px}
+  #guia ol{margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.5}
+  #guia li{margin-bottom:9px}
+  #guia li b{color:#0b1730}
+  #guia button{margin-top:16px;width:100%;padding:13px;border-radius:999px;border:0;background:#2f6df0;color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+  .top .salir{background:none;border:0;color:#9aa3b5;font-size:12px;font-weight:700;cursor:pointer;margin-right:8px}
+  .top .ayuda{background:#eef3fb;border:0;color:#2f6df0;width:30px;height:30px;border-radius:50%;font-weight:800;cursor:pointer;margin-right:8px}
 </style>
 </head>
 <body>
+
+<!-- ACCESO: sin sesión no hay universo -->
+<div id="acceso">
+  <div style="font-size:12px;letter-spacing:.34em;font-weight:800;margin-bottom:22px">FYRADRIVE</div>
+  <div id="acc-p1">
+    <h2>Entra a tu FyraChat</h2>
+    <p>Escribe el WhatsApp que vinculaste. Te mandamos un código de 6 dígitos a ese mismo WhatsApp.</p>
+    <input id="acc-tel" inputmode="numeric" maxlength="12" placeholder="10 dígitos" autocomplete="tel">
+    <button onclick="accPedir()">Mandarme el código</button>
+    <div class="err" id="acc-err1"></div>
+  </div>
+  <div id="acc-p2" style="display:none">
+    <h2>Escribe el código</h2>
+    <p id="acc-sub">Te llegó a tu WhatsApp. Vence en 3 minutos.</p>
+    <input id="acc-cod" inputmode="numeric" maxlength="7" placeholder="000 000" autocomplete="one-time-code">
+    <button onclick="accEntrar()">Entrar</button>
+    <div class="err" id="acc-err2"></div>
+    <button class="liga" onclick="accVolver()">Pedir otro código</button>
+  </div>
+</div>
+
+<!-- GUÍA: cómo usar tu FyraChat (primera vez y con el botón ?) -->
+<div id="guia" onclick="if(event.target===this)cerrarGuia()">
+  <div class="caja">
+    <h3>Así usas tu FyraChat</h3>
+    <div class="sub">Todo lo que hagas aquí sale desde tu propio WhatsApp.</div>
+    <ol>
+      <li><b>Nuevo comprador.</b> Cuando alguien te pregunte por un auto, tócalo arriba, elige el auto y pon su número. Ese chat queda a cargo del asistente.</li>
+      <li><b>Tú decides cómo entra.</b> En silencio (solo se registra), con tu propio texto, o presentándose como tu asistente.</li>
+      <li><b>Botones dentro del chat.</b> Fotos, ubicación, tarjeta de precio y agendar cita, todo con un toque y desde tu número.</li>
+      <li><b>Lo demás sigue igual.</b> Tus otros chats no se tocan; el asistente solo ve los que tú le delegas. Puedes quitarlo cuando quieras desde Dispositivos vinculados en tu WhatsApp.</li>
+    </ol>
+    <button onclick="cerrarGuia()">Entendido</button>
+  </div>
+</div>
+
 
 <!-- PANTALLA 1: LISTA -->
 <div class="screen" id="scr-lista">
@@ -522,9 +579,37 @@ document.getElementById('pill-pend').onclick = function(){ SOLO_PEND=!SOLO_PEND;
 // primer mensaje desde FyraChat → nace como chat TUYO (el bot no se mete) y el mensaje
 // sale por el puente firmado como manual.
 // ══ FASE 2 — FYRACHAT POR VENDEDOR: ?vendedor=<tenant id o teléfono>. Sin parámetro = tenant 0 (owner).
-const VEND = (new URLSearchParams(location.search).get('vendedor') || '').trim();
+let VEND = (new URLSearchParams(location.search).get('vendedor') || '').trim();
+let SESION = null;   // { tenant:{id,nombre,telefono}, maestra }
 let TENANT = null;   // { id, nombre, telefono }, autos[]
+// ── ACCESO (2026-09-10): primero la sesión. Vendedor con sesión → SU universo, diga lo que diga el link.
+//    Sin sesión y con ?vendedor= → pantalla de código. Sin nada → FyraChat de Fyradrive (tenant 0), como siempre.
+const $a = (id) => document.getElementById(id);
+async function accPedir(){
+  const tel = ($a('acc-tel').value || '').replace(/\D/g,''); $a('acc-err1').textContent = '';
+  if (tel.length < 10) { $a('acc-err1').textContent = 'Son 10 dígitos.'; return; }
+  const r = await fetch(API+'?action=acceso_pedir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err1').textContent = r.error || 'No se pudo.'; return; }
+  sessionStorage.setItem('acc_tel', tel); $a('acc-sub').textContent = 'Te llegó a tu WhatsApp ' + (r.tel_mascara || '') + '. Vence en ' + (r.vida_min || 3) + ' minutos.';
+  $a('acc-p1').style.display = 'none'; $a('acc-p2').style.display = ''; setTimeout(() => $a('acc-cod').focus(), 50);
+}
+async function accEntrar(){
+  const tel = sessionStorage.getItem('acc_tel') || ''; const cod = ($a('acc-cod').value || '').replace(/\D/g,''); $a('acc-err2').textContent = '';
+  if (cod.length !== 6) { $a('acc-err2').textContent = 'Son 6 dígitos.'; return; }
+  const r = await fetch(API+'?action=acceso_entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel, codigo: cod})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err2').textContent = r.error || 'No se pudo.'; return; }
+  location.replace('/copilot.html?bienvenida=1');
+}
+function accVolver(){ $a('acc-p2').style.display = 'none'; $a('acc-p1').style.display = ''; }
+function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; }
+async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/copilot.html?vendedor=entrar'); }
+function abrirGuia(){ $a('guia').classList.add('on'); }
+function cerrarGuia(){ $a('guia').classList.remove('on'); try { localStorage.setItem('fyra_guia_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
 async function cargarTenant(){
+  const qs = new URLSearchParams(location.search);
+  try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; } catch(e){ SESION = null; }
+  if (SESION && !SESION.maestra) VEND = String(SESION.tenant.id);            // su universo, siempre
+  else if (!SESION && VEND) { mostrarAcceso(qs.get('aviso') || ''); return false; }   // sin sesión: código
   if (!VEND) return;
   try { document.getElementById('gen').style.display = 'none'; } catch(e){}   // Seb del tenant 0: NO en universos de vendedor
   try {
@@ -541,6 +626,12 @@ async function cargarTenant(){
       h1.innerHTML = '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FyraChat · ' + esc(TENANT.nombre || telFmt) + '</div>' + (TENANT.nombre && telFmt ? '<div style="font-size:12px;font-weight:500;color:#5b6b82;margin-top:2px;white-space:nowrap">📱 ' + telFmt + ' · universo ' + TENANT.id + '</div>' : '');
     }
     const btn = document.querySelector('#scr-lista .top .nuevo'); if (btn) btn.textContent = '＋ Nuevo comprador';
+    if (SESION && !SESION.maestra && btn && !document.querySelector('.top .salir')) {
+      const ay = document.createElement('button'); ay.className = 'ayuda'; ay.textContent = '?'; ay.title = 'Cómo usar tu FyraChat'; ay.onclick = abrirGuia; btn.parentNode.insertBefore(ay, btn);
+      const sa = document.createElement('button'); sa.className = 'salir'; sa.textContent = 'Salir'; sa.onclick = accSalir; btn.parentNode.insertBefore(sa, btn);
+      let vista = false; try { vista = !!localStorage.getItem('fyra_guia_' + TENANT.id); } catch(e){}
+      if (qs.get('bienvenida') === '1' || !vista) { abrirGuia(); if (qs.get('bienvenida')) history.replaceState(null, '', '/copilot.html'); }
+    }
     if (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado') toast('⚠️ Tu WhatsApp aún no está vinculado al asistente');
   } catch(e){}
 }
@@ -891,7 +982,7 @@ async function enviarManual(){
   ENVIANDO = false;
 }
 
-cargarTenant().then(cargarLista);   // Fase 2: primero el vendedor (si viene ?vendedor=), luego su lista
+cargarTenant().then(ok => { if (ok !== false) cargarLista(); });   // Fase 2: primero el vendedor (si viene ?vendedor=), luego su lista
 connectTimbre();   // 🔔 conecta el timbre (WebSocket) — mensajes en vivo sin quemar lecturas
 // Fallback lento por si el timbre se cae: refresca la lista cada 90s SOLO en la pantalla de lista.
 setInterval(()=>{ if(!document.getElementById('scr-chat').classList.contains('open')) cargarLista(); }, 90000);

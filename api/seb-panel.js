@@ -21,6 +21,7 @@ const { responderCont } = require('../lib/seb/continuacion.js');
 // dueño responde → IA interpreta → match/contrapropuesta; comprador en match →
 // cancelación/en-camino; señal manual del owner; recordatorios via cron.
 const citasVivas = require('../lib/seb/citas-vivas.js');
+const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
 // 🚩fyrachat#7: al confirmarse una cita, la fecha/hora del CERRADOR quedan como
 // CANÓNICAS (deterministas, sin IA) — el cita-extractor las usa tal cual.
 // ══ BITÁCORA DE ESCALADAS (opción A del owner, 2026-07-13): las escaladas de
@@ -149,6 +150,50 @@ module.exports = async function handler(req, res) {
 
     try {
         const action = (req.query && req.query.action) || (req.body && req.body.action) || '';
+
+        // ══════════ ACCESO DEL VENDEDOR (bloque 2 del blindaje, 2026-09-10) ══════════
+        // Regla: una sesión de vendedor SIEMPRE opera su propio universo (lo que diga ?vendedor= se ignora).
+        // ?vendedor= suelto solo lo aceptan la sesión MAESTRA (owner) o quien trae la key (puente / Sales Brain).
+        const KEY_PANEL = process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026';
+        const tokenSes = ACC.leerCookie(req);
+        const SES = tokenSes ? await ACC.sesionDe(tokenSes).catch(() => null) : null;
+        const conKey = String((req.body && req.body.key) || (req.query && req.query.key) || '') === KEY_PANEL || (!!process.env.BRIDGE_API_KEY && String(req.headers['x-api-key'] || '') === process.env.BRIDGE_API_KEY);
+        let VEND_PARAM = String((req.query && req.query.vendedor) || (req.body && req.body.vendedor) || '').trim();
+        if (SES && !SES.maestra) VEND_PARAM = String(SES.tenant_id);
+        else if (VEND_PARAM && !SES && !conKey) return res.status(401).json({ ok: false, error: 'Entra con el código que te llega a tu WhatsApp', login: true });
+
+        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra } : null });
+        if (action === 'acceso_pedir' && req.method === 'POST') {
+            const tel = ACC.tel521(req.body.telefono);
+            if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
+            const r = await ACC.pedirCodigo(tel);
+            if (!r.ok) return res.status(r.espera ? 429 : 404).json({ ok: false, error: r.error });
+            const texto = 'Tu código para entrar a FyraChat es *' + r.codigo.slice(0, 3) + ' ' + r.codigo.slice(3) + '*. Vence en ' + r.vida_min + ' minutos. Si no lo pediste, ignora este mensaje.';
+            const env = await citasVivas.enviarWA(tel, texto, 0);   // sale del número de Fyradrive
+            if (!env.ok) return res.status(502).json({ ok: false, error: 'No pude mandarte el código por WhatsApp. Intenta de nuevo.' });
+            return res.status(200).json({ ok: true, vida_min: r.vida_min, tel_mascara: '••• ••• ' + tel.slice(-4) });
+        }
+        if (action === 'acceso_entrar' && req.method === 'POST') {
+            const tel = ACC.tel521(req.body.telefono);
+            if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
+            const r = await ACC.entrarConCodigo(tel, String(req.body.codigo || ''), req.headers['user-agent']);
+            if (!r.ok) return res.status(401).json({ ok: false, error: r.error });
+            ACC.ponerCookie(res, r.token);
+            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra });
+        }
+        if (action === 'acceso_salir' && req.method === 'POST') { await ACC.cerrarSesion(tokenSes); ACC.borrarCookie(res); return res.status(200).json({ ok: true }); }
+        if (action === 'acceso_ticket' && req.method === 'POST') {
+            // lo llama fyradrive.com/seb al confirmar la vinculación (con key): ticket de un solo uso → sesión en ESE navegador
+            if (!conKey) return res.status(401).json({ ok: false, error: 'key inválida' });
+            const r = await ACC.crearTicket(req.body.telefono);
+            if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
+            return res.status(200).json({ ok: true, url: 'https://fyrachat.vercel.app/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(r.token), expira: r.expira });
+        }
+        if (action === 'acceso_canjear') {
+            const r = await ACC.canjearTicket(String(req.query.t || ''), req.headers['user-agent']);
+            if (!r.ok) { res.setHeader('Location', '/copilot.html?vendedor=entrar&aviso=' + encodeURIComponent(r.error)); return res.status(302).end(); }
+            ACC.ponerCookie(res, r.token); res.setHeader('Location', '/copilot.html?bienvenida=1'); return res.status(302).end();
+        }
         // CUOTA TURSO: el estado de conversación (etapa3.estadoConv) se cachea SOLO dentro de un
         // request — cada request nuevo arranca sin rastro (un mensaje nuevo cambia el estado).
         olvidar('estadoConv:');
@@ -196,8 +241,8 @@ module.exports = async function handler(req, res) {
             const duenos = await telefonosDueno();
             // Fase 2: ?vendedor=<tenant> → SOLO sus chats delegados (hilos con sufijo #t<id>); sin vendedor = tenant 0 (todo lo de siempre)
             let tenantIdChats = 0;
-            if (req.query.vendedor) {
-                const tR = await query("SELECT id FROM tenants WHERE (id = ? OR telefono = ?) AND activo=1", [/^\d{1,4}$/.test(String(req.query.vendedor)) ? Number(req.query.vendedor) : -1, (() => { const d = String(req.query.vendedor).replace(/\D/g, ''); return d.length === 10 ? '521' + d : d; })()]);
+            if (VEND_PARAM) {
+                const tR = await query("SELECT id FROM tenants WHERE (id = ? OR telefono = ?) AND activo=1", [/^\d{1,4}$/.test(String(VEND_PARAM)) ? Number(VEND_PARAM) : -1, (() => { const d = String(VEND_PARAM).replace(/\D/g, ''); return d.length === 10 ? '521' + d : d; })()]);
                 if (!tR.length) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
                 tenantIdChats = Number(tR[0].id);
             }
@@ -258,7 +303,7 @@ module.exports = async function handler(req, res) {
             const tel = String(req.query.telefono || '');
             const resets = await cargarResets();
             const resetTs = Number(resets[tel] || 0);   // MODO PRUEBA: todo lo ANTERIOR a esto se ignora (lead nuevo)
-            const tChat = req.query.vendedor ? await tenantDeParam(req.query.vendedor) : { id: 0 };
+            const tChat = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tChat) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", [hiloDe(tel, tChat.id)]);
             let mensajes = [];
@@ -470,7 +515,7 @@ module.exports = async function handler(req, res) {
                 if (!chatIdE) return res.status(200).json({ ok: true, handled: false, motivo: 'sin chat en ese universo' });
                 let pausaMin = null;
                 if (tE) { try { const tI = await tenantDeParam(String(tE)); pausaMin = tI && tI.config && Number(tI.config.pausa_min) || null; } catch (e) { } }
-                const r = await citasVivas.procesarEntrante({ tenantId: tE, chatId: chatIdE, tel: telE, texto: textoE, vendedor_ultimo_ts: Number(req.body.vendedor_ultimo_ts) || 0, enviar: !!tE, pausaMin });
+                const r = await citasVivas.procesarEntrante({ tenantId: tE, chatId: chatIdE, tel: telE, texto: textoE, vendedor_ultimo_ts: Number(VEND_PARAM_ultimo_ts) || 0, enviar: !!tE, pausaMin });
                 return res.status(200).json(Object.assign({ ok: true }, r));
             } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
         }
@@ -486,7 +531,7 @@ module.exports = async function handler(req, res) {
         }
         // Acciones del chat (para que FyraChat las pinte como parte del chat) — por índice (chat_id, ts)
         if (action === 'acciones') {
-            const tA = req.query.vendedor ? await tenantDeParam(req.query.vendedor) : { id: 0 };
+            const tA = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tA) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telA = String(req.query.telefono || '').replace(/\D/g, ''); if (telA.length === 10) telA = '521' + telA;
             if (!telA) return res.status(400).json({ ok: false, error: 'telefono requerido' });
@@ -603,7 +648,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, url: u });
         }
         if (action === 'foco_cambiar' && req.method === 'POST') {
-            const tF = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0 };
+            const tF = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tF) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telF = String(req.body.telefono || '').replace(/\D/g, ''); if (telF.length === 10) telF = '521' + telF;
             const idF = Number(req.body.auto_id) || 0;
@@ -617,7 +662,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, foco: { id: inv.id, web_id: inv.fyradrive_web_id, nombre: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' '), precio: inv.precio } });
         }
         if (action === 'tenant_info') {
-            const t = await tenantDeParam(req.query.vendedor);
+            const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             const autos = await autosDeTenant(t);
@@ -626,7 +671,7 @@ module.exports = async function handler(req, res) {
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
         if (action === 'delegar' && req.method === 'POST') {
-            const t = await tenantDeParam(req.body.vendedor);
+            const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
             if (!/^521\d{10}$/.test(telD)) return res.status(400).json({ ok: false, error: 'teléfono inválido — 10 dígitos' });
@@ -671,7 +716,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener }, r || {}));
         }
         if (action === 'soltar' && req.method === 'POST') {
-            const t = await tenantDeParam(req.body.vendedor);
+            const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
             // ETAPA 2 (tenant 0): la delegación se cierra aquí (idempotente); en universos ≠0 la cierra el puente (dual-write) porque es quien la carga en memoria
@@ -1776,7 +1821,7 @@ module.exports = async function handler(req, res) {
             const telFullB = telB.length === 10 ? '521' + telB : telB;
             // TENANT (orden owner 2026-09-08): los botones funcionan en cada universo, con el AUTO EN FOCO del contacto
             // (nace al delegar), restringidos a su catálogo, y TODO sale por el número de ESE tenant (jamás por el de Fyradrive).
-            const tAcc = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
+            const tAcc = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
             if (!tAcc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             const TID = tAcc.id;
             const catalogoT = TID ? await autosDeTenant(tAcc) : null;
@@ -1912,7 +1957,7 @@ module.exports = async function handler(req, res) {
         // ══ MENSAJES PROGRAMADOS (owner 2026-08-03): el Calendar agenda a mano ══
         if (action === 'prog_crear' && req.method === 'POST') {
             const prog = require('../lib/seb/programados.js');
-            const tP = req.body.vendedor ? await tenantDeParam(req.body.vendedor) : { id: 0 };
+            const tP = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tP) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0, tenantId: tP.id });
             return res.status(r.ok ? 200 : 400).json(r);
