@@ -40,10 +40,11 @@ async function logEscala(tel, motivo) {
     } catch (e) { }
 }
 
-async function regCanonica(tel, r) {
+// tenantId (2026-09-10): universo de la cita; opener_auto es del universo 0 (default)
+async function regCanonica(tel, r, tenantId) {
     try {
         if (r && r.cita_confirmada && r.cita_datos) {
-            await citasVivas.registrarCitaCanonica({ telefono: tel, fecha: r.cita_datos.fecha, hora: r.cita_datos.hora, lugar: r.cita_datos.lugar || null });
+            await citasVivas.registrarCitaCanonica({ telefono: tel, fecha: r.cita_datos.fecha, hora: r.cita_datos.hora, lugar: r.cita_datos.lugar || null, tenant_id: Number(tenantId) || 0 });
         }
     } catch (e) { console.error('[canonica]', e.message); }
 }
@@ -580,7 +581,8 @@ module.exports = async function handler(req, res) {
             const telT = String(req.body.telefono || '');
             const textoT = String(req.body.texto || '');
             if (!telT || !textoT) return res.status(400).json({ ok: false, error: 'telefono y texto requeridos' });
-            const rT = await citasVivas.ejecutarCierre({ tel: telT, texto: textoT, ts: Number(req.body.ts) || Date.now(), origen: 'timbre' });
+            // CITAS POR UNIVERSO (2026-09-10): el cierre del owner es del universo 0; si el puente etiqueta otro universo, no aplica
+            const rT = await citasVivas.ejecutarCierre({ tel: telT, texto: textoT, ts: Number(req.body.ts) || Date.now(), origen: 'timbre', tenant_id: Number(req.body.tenant_id) || 0 });
             return res.status(200).json(rT);
         }
 
@@ -1239,7 +1241,7 @@ module.exports = async function handler(req, res) {
                 if (cont && cont.segmentos && cont.segmentos.length) {
                     if (cont.cita_confirmada && cont.cita_datos) {
                         await regCanonica(tel, cont);
-                        try { await citasVivas.intentarMatchDirecto(tel, cont.cita_datos.fecha, cont.cita_datos.hora); } catch (e) { }
+                        try { await citasVivas.intentarMatchDirecto(tel, cont.cita_datos.fecha, cont.cita_datos.hora, 0); } catch (e) { }   // opener_auto = universo 0
                     }
                     return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero, pin_after_index: (cont.pin_after_index != null ? cont.pin_after_index : null), fotos: cont.fotos || null, fotos_after_index: (cont.fotos_after_index != null ? cont.fotos_after_index : null) });
                 }
@@ -1325,7 +1327,7 @@ module.exports = async function handler(req, res) {
                     // viva del dueño → match sin re-preguntarle (se le avisa "confirmó ✅").
                     if (e3.cita_confirmada && e3.cita_datos) {
                         await regCanonica(tel, e3);
-                        try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora); } catch (e) { }
+                        try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora, 0); } catch (e) { }   // opener_auto = universo 0
                     }
                     return res.status(200).json({ ok: true, modo: 'etapa3', tipo: 'e3_' + (e3.universo || ''), segmentos: e3.segmentos, ubicacion_auto_id: e3.ubicacion_auto_id || null, pin_primero: !!e3.pin_primero, pin_after_index: (e3.pin_after_index != null ? e3.pin_after_index : (e3.ubicacion_auto_id ? 0 : null)), fotos: e3.fotos || null, fotos_after_index: (e3.fotos_after_index != null ? e3.fotos_after_index : 0) });
                 }
@@ -1919,7 +1921,11 @@ module.exports = async function handler(req, res) {
             const resc = require('../lib/seb/rescate.js');
             const incluirPruebas = String(req.query.incluir_pruebas || '') === '1';
             const desde = Date.now() - 48 * 3600000;
-            let rows = await query("SELECT * FROM rescates WHERE estado='vivo' OR updated > ? ORDER BY proxima_ts ASC LIMIT 200", [desde]).catch(() => []);
+            // POR UNIVERSO (2026-09-10): la agenda es del universo del request (VEND_PARAM / sesión; sin él = 0). Los folios
+            // de rescate son SOLO del universo 0 (la máquina de rescate es de Fyradrive); los programados, los del universo.
+            const tAg = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
+            if (!tAg) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            let rows = Number(tAg.id) ? [] : await query("SELECT * FROM rescates WHERE (estado='vivo' OR updated > ?) AND COALESCE(tenant_id,0)=0 ORDER BY proxima_ts ASC LIMIT 200", [desde]).catch(() => []);
             if (!incluirPruebas) rows = rows.filter(r => !/^52100000000/.test(String(r.telefono)));
             // los folios que murieron BIEN (regresó a la cancha, renovada, contestó) son
             // puro ruido en el calendario — solo se enseñan vivos, cancelados y agotados
@@ -1943,7 +1949,7 @@ module.exports = async function handler(req, res) {
             let programados = [];
             try {
                 const prog = require('../lib/seb/programados.js');
-                programados = (await prog.listar({ incluirPruebas })).map(p => ({
+                programados = (await prog.listar({ incluirPruebas, tenantId: Number(tAg.id) || 0 })).map(p => ({
                     id: p.id, telefono: p.telefono, nombre: p.nombre || '', texto: p.texto,
                     con_foto: Number(p.con_foto) || 0, cuando_ts: Number(p.cuando_ts), estado: p.estado
                 }));
@@ -2123,7 +2129,10 @@ module.exports = async function handler(req, res) {
         }
         if (action === 'prog_cancelar' && req.method === 'POST') {
             const prog = require('../lib/seb/programados.js');
-            return res.status(200).json(await prog.cancelar(req.body.id));
+            // POR UNIVERSO (2026-09-10): solo cancela un programado de SU universo (VEND_PARAM → tenant; sin él = 0)
+            const tPc = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
+            if (!tPc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            return res.status(200).json(await prog.cancelar(req.body.id, tPc.id));
         }
         if (action === 'prog_machote') {
             // prellenado del popup: nombre + auto en foco → machote editable
@@ -2243,7 +2252,9 @@ module.exports = async function handler(req, res) {
             // ══ SEÑAL MANUAL (human-in-the-loop real): el owner escribe "cita confirmada"
             // (le confirmaron por teléfono) o "cita cancelada" en el chat del DUEÑO →
             // ejecuta el match/cancelación de verdad (confianza al comprador, recordatorios).
-            try { citasVivas.senalManual(tel, texto).catch(() => {}); } catch (e) { }
+            // CITAS POR UNIVERSO (2026-09-10): la señal en el chat del DUEÑO es del universo 0; un vendedor escribiendo
+            // "cita confirmada" en SU universo jamás toca la máquina del dueño de Fyradrive (el chat del dueño vive en t0).
+            if (!tMD || !Number(tMD.id)) { try { citasVivas.senalManual(tel, texto).catch(() => {}); } catch (e) { } }
             // consume_qid: en una SECUENCIA del banco, el PRIMER mensaje "consume" la
             // sugerencia encolada (marca enviado + avanza estado), sin re-enviar nada.
             const consumeQid = Number(req.body.consume_qid || 0) || null;
