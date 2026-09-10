@@ -609,7 +609,8 @@ async function cargarTenant(){
   const qs = new URLSearchParams(location.search);
   try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; window.__desv = !!(yo && yo.desvinculado); } catch(e){ SESION = null; }
   if (!SESION && window.__desv) { mostrarAcceso('Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.'); return false; }
-  if (SESION && !SESION.maestra) VEND = String(SESION.tenant.id);            // su universo, siempre
+  if (VEND === '0' && SESION && SESION.maestra) VEND = '';                    // maestra pidiendo el FyraChat de Fyradrive (clásico)
+  else if (SESION && (!SESION.maestra || !VEND)) VEND = String(SESION.tenant.id);   // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
   else if (!SESION && VEND) { mostrarAcceso(qs.get('aviso') || ''); return false; }   // sin sesión: código
   if (!VEND) return;
   try { document.getElementById('gen').style.display = 'none'; } catch(e){}   // Seb del tenant 0: NO en universos de vendedor

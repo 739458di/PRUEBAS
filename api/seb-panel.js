@@ -161,7 +161,9 @@ module.exports = async function handler(req, res) {
         const DESV = SES0 && SES0.desvinculado ? SES0.tenant : null;   // tenía sesión pero su WhatsApp ya no está vinculado
         const conKey = String((req.body && req.body.key) || (req.query && req.query.key) || '') === KEY_PANEL || (!!process.env.BRIDGE_API_KEY && String(req.headers['x-api-key'] || '') === process.env.BRIDGE_API_KEY);
         let VEND_PARAM = String((req.query && req.query.vendedor) || (req.body && req.body.vendedor) || '').trim();
-        if (SES && !SES.maestra) VEND_PARAM = String(SES.tenant_id);
+        // 'vendedor=0' = FyraChat de Fyradrive (tenant 0 clásico): solo la maestra o la key pueden pedirlo así
+        if (VEND_PARAM === '0' && (conKey || (SES && SES.maestra))) VEND_PARAM = '';
+        if (SES && (!SES.maestra || !VEND_PARAM)) VEND_PARAM = String(SES.tenant_id);   // toda sesión abre SU universo; la maestra puede pedir otro con ?vendedor=
         else if (VEND_PARAM && !SES && !conKey) return res.status(401).json({ ok: false, error: 'Entra con el código que te llega a tu WhatsApp', login: true });
 
         if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra } : null, desvinculado: DESV ? { tenant: DESV } : null });
