@@ -706,6 +706,19 @@ async function simularRespuesta(){
 let DEMO_TEL_M = { resolve: null };
 function pedirTelDemo(){ return new Promise(resolve => { DEMO_TEL_M = { resolve }; document.getElementById('demotelmodal').classList.add('show'); }); }
 function cerrarDemoTel(ok){ document.getElementById('demotelmodal').classList.remove('show'); const r = DEMO_TEL_M.resolve; DEMO_TEL_M.resolve = null; if (r) r(ok ? (document.getElementById('demo-tel').value || '5210000000009') : null); }
+function mostrarTipInicio(){
+  try {
+    if (localStorage.getItem('fyra_tip_inicio')) return;
+    const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
+    if (standalone || !(ios || android)) return;
+    const d = document.createElement('div'); d.id = 'tip-inicio';
+    d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:58;background:#0b1730;color:#fff;border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.35);display:flex;gap:10px;align-items:flex-start';
+    d.innerHTML = '<div style="flex:1"><b>Agrégalo a tu inicio.</b> ' + (ios ? 'En Safari toca Compartir (el cuadrito con la flecha) y luego "Añadir a pantalla de inicio".' : 'En Chrome toca el menú ⋮ y luego "Añadir a pantalla de inicio".') + '</div><button style="background:none;border:0;color:#8fb3ff;font-weight:800;font-size:16px;cursor:pointer" aria-label="Cerrar">×</button>';
+    d.querySelector('button').onclick = () => { d.remove(); try { localStorage.setItem('fyra_tip_inicio', '1'); } catch(e){} };
+    document.body.appendChild(d);
+  } catch(e){}
+}
 function abrirGuia(){
   // "Agrégalo a tu inicio" vive AQUÍ (orden owner 2026-09-10): se agrega el FyraChat, no fyradrive.com/seb. Solo si aún no está instalado.
   try {
@@ -755,9 +768,10 @@ async function cargarTenant(){
     }
     const btn = document.querySelector('#scr-lista .top .nuevo'); if (btn) btn.textContent = '＋ Nuevo comprador';
     if (SESION && !SESION.maestra && btn && !document.querySelector('.top .ayuda')) {
-      const ay = document.createElement('button'); ay.className = 'ayuda'; ay.textContent = '?'; ay.title = 'Cómo usar tu FyraChat'; ay.onclick = abrirGuia; btn.parentNode.insertBefore(ay, document.querySelector('.top .disp') || btn);
       let vista = false; try { vista = !!localStorage.getItem('fyra_guia_' + TENANT.id); } catch(e){}
-      if (qs.get('bienvenida') === '1' || !vista) { abrirGuia(); if (qs.get('bienvenida')) history.replaceState(null, '', '/copilot.html'); }
+      // GUÍA "Así funciona": APAGADA por orden del owner (2026-09-10) hasta que exista el tutorial interactivo dentro del FyraChat.
+      if (qs.get('bienvenida')) history.replaceState(null, '', '/copilot.html');
+      mostrarTipInicio();
     }
     if (!TENANT.demo && (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado')) toast('⚠️ Tu WhatsApp aún no está vinculado al asistente');
   } catch(e){}
