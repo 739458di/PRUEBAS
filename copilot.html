@@ -727,7 +727,9 @@ async function cargarTenant(){
   // 'entrar' = pantalla de código. Si ya hay sesión de OTRO número (p. ej. la maestra probando el simulador), se cierra esa sesión primero.
   if (VEND === 'entrar') {
     const telQ = (qs.get('tel') || '').replace(/\D/g, '');
-    if (SESION && telQ && !String(SESION.tenant.telefono || '').endsWith(telQ)) { try { await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); } catch(e){} SESION = null; }
+    const otroNumero = SESION && telQ && !String(SESION.tenant.telefono || '').endsWith(telQ);
+    const quiereDemo = SESION && qs.get('demo') === '1' && !(SESION.tenant && SESION.tenant.demo);   // simulador: nunca abrir el universo real de quien ya tenía sesión
+    if (otroNumero || quiereDemo) { try { await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); } catch(e){} SESION = null; }
     VEND = '';
   }
   if (!SESION) { mostrarAcceso(qs.get('aviso') || ''); return false; }          // SIN SESIÓN NO HAY UNIVERSO (también sin ?vendedor=) — bloque 2, 2026-09-10
