@@ -22,6 +22,7 @@ const { responderCont } = require('../lib/seb/continuacion.js');
 // cancelación/en-camino; señal manual del owner; recordatorios via cron.
 const citasVivas = require('../lib/seb/citas-vivas.js');
 const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
+const DEMO = require('../lib/seb/demo.js');    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
 // 🚩fyrachat#7: al confirmarse una cita, la fecha/hora del CERRADOR quedan como
 // CANÓNICAS (deterministas, sin IA) — el cita-extractor las usa tal cual.
 // ══ BITÁCORA DE ESCALADAS (opción A del owner, 2026-07-13): las escaladas de
@@ -228,6 +229,22 @@ module.exports = async function handler(req, res) {
         // ══ BITÁCORA (invariante 8): toda escritura con cookie deja sesion_id + ip (1 INSERT best-effort; GET no escribe)
         if (req.method === 'POST' && SES && !ACC_PUBLICAS.has(action)) await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action, ip: IP });
 
+        // ══════════ MODO PRUEBA (2026-09-10): la sesión del tenant demo opera SOLO su universo simulado ══════════
+        const SES_DEMO = !!(SES && SES.tenant && SES.tenant.demo);
+        if (SES_DEMO && ['sugerir', 'resolver', 'agregar_mensaje', 'nuevo_chat'].includes(action)) return res.status(400).json({ ok: false, error: 'no disponible en modo prueba' });   // escriben en hilos del tenant 0
+        if (action === 'demo_responder' && req.method === 'POST') {
+            if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
+            const tDm = await tenantDeParam(String(SES.tenant_id)); if (!tDm || !tDm.demo) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
+            const r = await DEMO.responder({ tenant: tDm, tel: req.body.telefono, texto: req.body.texto });
+            return res.status(r.ok ? 200 : 400).json(Object.assign({ simulado: true }, r));
+        }
+        if (action === 'demo_reset' && req.method === 'POST') {
+            if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
+            const tDr = await tenantDeParam(String(SES.tenant_id)); if (!tDr || !tDr.demo) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
+            const r = await DEMO.reset(tDr);
+            return res.status(r.ok ? 200 : 400).json(r);
+        }
+
         if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff } : null, desvinculado: DESV ? { tenant: DESV } : null });
         if (action === 'acceso_pedir' && req.method === 'POST') {
             // RESPUESTA UNIFORME (invariante 7): exista o no el número, la respuesta es la misma. 429 solo por tope de IP.
@@ -235,7 +252,7 @@ module.exports = async function handler(req, res) {
             if (telIn.length < 10) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
             const r = await ACC.pedirCodigo(telIn, IP);
             if (r.limite === 'ip') return res.status(429).json({ ok: false, error: r.error });
-            if (!r.silencioso && r.codigo) {
+            if (!r.silencioso && r.codigo && !DEMO.esDemo(r.tenant)) {   // MODO PRUEBA: al tenant demo no se le manda nada (entra con el código fijo)
                 const env = await citasVivas.enviarWA(r.tenant.telefono, ACC.textoCodigo(r.codigo, r.vida_min), 0);   // sale del número de Fyradrive
                 if (!env.ok) console.error('[acceso_pedir] envío falló:', env.error);
             }
@@ -403,9 +420,10 @@ module.exports = async function handler(req, res) {
         if (action === 'chat') {
             const tel = String(req.query.telefono || '');
             const resets = await cargarResets();
-            const resetTs = Number(resets[tel] || 0);   // MODO PRUEBA: todo lo ANTERIOR a esto se ignora (lead nuevo)
+            let resetTs = Number(resets[tel] || 0);   // MODO PRUEBA: todo lo ANTERIOR a esto se ignora (lead nuevo)
             const tChat = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tChat) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            if (tChat.demo) resetTs = 0;   // MODO PRUEBA: los reinicios del sandbox (por teléfono) no aplican al universo demo
             const conv = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", [hiloDe(tel, tChat.id)]);
             let mensajes = [];
             if (conv.length) {
@@ -423,7 +441,7 @@ module.exports = async function handler(req, res) {
             const draft = await query(
                 "SELECT id, borrador, intencion, creado_en FROM seb_queue WHERE telefono=? AND estado='pendiente' ORDER BY id DESC LIMIT 1",
                 [tel]);
-            let borrador = draft[0] || null;
+            let borrador = tChat.demo ? null : (draft[0] || null);   // demo: sin sugerencias de Seb (son del tenant 0)
             // La sugerencia se descarta si: (a) es anterior al reinicio de prueba, o
             // (b) llegó un mensaje ENTRANTE después de crearla (la conversación avanzó).
             if (borrador && resetTs && Number(borrador.creado_en) < resetTs) borrador = null;
@@ -680,7 +698,8 @@ module.exports = async function handler(req, res) {
             if (/^\d{1,4}$/.test(raw)) rows = await query("SELECT id, telefono, nombre, config_json FROM tenants WHERE id=? AND activo=1", [Number(raw)]);
             else { const t = digits.length === 10 ? '521' + digits : digits; rows = await query("SELECT id, telefono, nombre, config_json FROM tenants WHERE telefono=? AND activo=1", [t]); }
             if (!rows.length) return null;
-            return { id: Number(rows[0].id), telefono: String(rows[0].telefono || ''), nombre: String(rows[0].nombre || ''), config: (() => { try { return JSON.parse(rows[0].config_json || '{}'); } catch (e) { return {}; } })() };
+            const cfgT = (() => { try { return JSON.parse(rows[0].config_json || '{}'); } catch (e) { return {}; } })();
+            return { id: Number(rows[0].id), telefono: String(rows[0].telefono || ''), nombre: String(rows[0].nombre || ''), config: cfgT, demo: Number(cfgT.demo) === 1 };   // demo: FyraChat de prueba (nada sale al puente)
         }
         // Autos del tenant: los suyos (dueño por teléfono); el tenant 0 ve todo el inventario activo
         async function autosDeTenant(t) {
@@ -691,6 +710,10 @@ module.exports = async function handler(req, res) {
                                        FROM autos_universo au JOIN inventario_autos i ON i.id = au.inv_auto_id
                                        WHERE au.tenant_id = ? AND au.activo = 1 AND i.estado = 'activo'
                                        ORDER BY i.marca COLLATE NOCASE, i.modelo COLLATE NOCASE`, [Number(t.id) || 0]);
+                if (!r.length && t.demo) {   // MODO PRUEBA: 3 autos activos del inventario (solo lectura) — de preferencia con punto de venta, para que el botón de ubicación tenga qué mandar
+                    const conPunto = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' AND id IN (SELECT auto_id FROM punto_envio) ORDER BY id DESC LIMIT 3").catch(() => []);
+                    return conPunto.length ? conPunto : query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY id DESC LIMIT 3");
+                }
                 if (r.length || t.id) return r;
             } catch (e) { /* tabla aún no existe → camino viejo */ }
             return query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE");
@@ -734,6 +757,7 @@ module.exports = async function handler(req, res) {
             const tF = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tF) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telF = String(req.body.telefono || '').replace(/\D/g, ''); if (telF.length === 10) telF = '521' + telF;
+            if (tF.demo) telF = DEMO.telComprador(telF);   // MODO PRUEBA
             const idF = Number(req.body.auto_id) || 0;
             if (!telF || !idF) return res.status(400).json({ ok: false, error: 'telefono y auto_id requeridos' });
             // SOLO los autos habilitados para ese usuario (su catálogo)
@@ -748,8 +772,9 @@ module.exports = async function handler(req, res) {
             const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
+            if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
@@ -757,6 +782,7 @@ module.exports = async function handler(req, res) {
             const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
+            if (t.demo) telD = DEMO.telComprador(telD);   // MODO PRUEBA: el comprador es SIEMPRE del carril de pruebas
             if (!/^521\d{10}$/.test(telD)) return res.status(400).json({ ok: false, error: 'teléfono inválido — 10 dígitos' });
             const autos = await autosDeTenant(t);
             const auto = autos.find(a => Number(a.id) === Number(req.body.auto_id) || Number(a.fyradrive_web_id) === Number(req.body.auto_id));
@@ -783,6 +809,13 @@ module.exports = async function handler(req, res) {
                 try { if (chatD) await U.delegar(chatD, { auto_id: auto.fyradrive_web_id || auto.id, auto_nombre: autoNombre, activado_por: 'fyrachat' }); } catch (e) { }
             }
             let r = null;
+            if (t.demo) {
+                // MODO PRUEBA: NO se llama al puente. Se crea en local lo que el puente crearía (chat #t<id>, delegación + chats_activos,
+                // renglón 'sistema' y el opener como 'asistente' con prefijo [prueba]).
+                r = await DEMO.delegar({ tenant: t, tel: telD, auto_id: auto.fyradrive_web_id || auto.id, auto_nombre: autoNombre, nombre: nomC || null, opener: (modoE === 'silencio' ? '' : opener) });
+                try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: { auto: autoNombre, modo: modoE, opener_enviado: !!(r && r.opener_enviado), simulado: true }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
+                return res.status(r.ok ? 200 : 400).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener, simulado: true }, r || {}));
+            }
             try {
                 const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/delegar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD, car_id: auto.fyradrive_web_id || auto.id, car_nombre: autoNombre, comprador_nombre: nomC || null, opener_texto: t.id ? opener : null, activado_por: 'fyrachat' }) });
                 r = await fr.json().catch(() => ({ ok: false, error: 'puente ilegible' }));
@@ -802,6 +835,12 @@ module.exports = async function handler(req, res) {
             const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let telD = String(req.body.telefono || '').replace(/\D/g, ''); if (telD.length === 10) telD = '521' + telD;
+            if (t.demo) {   // MODO PRUEBA: sin puente — cierra la delegación local y deja el renglón 'sistema'
+                telD = DEMO.telComprador(telD);
+                const rS = await DEMO.soltar({ tenant: t, tel: telD });
+                try { const dS = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dS.chat_id, delegacion_id: dS.delegacion_id, tipo: 'soltado', meta: { simulado: true }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
+                return res.status(200).json(rS);
+            }
             // ETAPA 2 (tenant 0): la delegación se cierra aquí (idempotente); en universos ≠0 la cierra el puente (dual-write) porque es quien la carga en memoria
             if (!t.id) { try { const cS = await U.chatDe(0, telD); if (cS) await U.soltar(cS, 'fyrachat'); } catch (e) { } }
             try { const dS = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dS.chat_id, delegacion_id: dS.delegacion_id, tipo: 'soltado', meta: null, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
@@ -1919,14 +1958,16 @@ module.exports = async function handler(req, res) {
             const telB = String(req.body.telefono || '').replace(/\D/g, '');
             const accB = String(req.body.accion || '');
             if (!telB || !accB) return res.status(400).json({ ok: false, error: 'telefono y accion requeridos' });
-            const telFullB = telB.length === 10 ? '521' + telB : telB;
+            let telFullB = telB.length === 10 ? '521' + telB : telB;
             // TENANT (orden owner 2026-09-08): los botones funcionan en cada universo, con el AUTO EN FOCO del contacto
             // (nace al delegar), restringidos a su catálogo, y TODO sale por el número de ESE tenant (jamás por el de Fyradrive).
             const tAcc = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
             if (!tAcc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             const TID = tAcc.id;
+            const esDemoB = !!tAcc.demo;   // MODO PRUEBA: el comprador es de prueba y cada salida se REGISTRA en el hilo (nada al puente)
+            if (esDemoB) telFullB = DEMO.telComprador(telFullB);
             const catalogoT = TID ? await autosDeTenant(tAcc) : null;
-            const enCatalogo = a => !catalogoT || catalogoT.some(c => Number(c.id) === Number(a.id));
+            const enCatalogo = a => !catalogoT || esDemoB || catalogoT.some(c => Number(c.id) === Number(a.id));   // demo: cualquier auto activo del inventario (solo lectura)
             const H = require('../lib/seb/herramientas.js');
             const normB = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
             // ── 1) RESOLVER EL AUTO (fila de inventario) ──
@@ -1984,7 +2025,7 @@ module.exports = async function handler(req, res) {
                     const mch = await machoteDe(inv.id);
                     if (!mch) return res.status(200).json({ ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
                     await regAcc('boton_info', { simulado: esPrueba });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): machote de info', machote: String(mch).slice(0, 150) });
+                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, mch, 'asistente'); return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: (esDemoB ? 'SIMULADO (prueba): machote de info' : 'SIMULADO (carril pruebas): machote de info'), machote: String(mch).slice(0, 150) }); }
                     await enviarWA(telFullB, mch);
                     return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'machote completo de ' + nombreAuto });
                 }
@@ -1992,7 +2033,7 @@ module.exports = async function handler(req, res) {
                     const urls = await H.fotosDeAuto(inv.id, 8);
                     if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
                     await regAcc('boton_fotos', { n: urls.length, simulado: esPrueba });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): ' + (TID ? 'solo ' : 'texto + ') + urls.length + ' fotos' });
+                    if (esPrueba) { if (esDemoB) { const t0 = Date.now(); for (let i = 0; i < urls.length; i++) await DEMO.salidaMedia(tAcc, telFullB, 'image', urls[i], t0 + i); } return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ' + (TID ? 'solo ' : 'texto + ') + urls.length + ' fotos' }); }
                     if (!TID) await enviarWA(telFullB, 'Van, ahí te las mando 📸');     // en universos de vendedor: SOLO las fotos, sin redactar
                     const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(conTenant({ phone: telFullB, urls })) });
                     const df = await rf.json().catch(() => ({}));
@@ -2006,7 +2047,15 @@ module.exports = async function handler(req, res) {
                     const cap = pe.length ? pe[0] : {};
                     const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes';
                     await regAcc('boton_ubicacion', { punto, simulado: esPrueba });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): paquete de ubicación de ' + punto + (TID ? ' (sin pregunta de cita)' : '') });
+                    if (esPrueba) {
+                        if (esDemoB) {   // el paquete completo en el hilo: texto + captura (ubic-img) + pin, como lo pinta producción
+                            const t0 = Date.now();
+                            await DEMO.salida(tAcc, telFullB, texto, 'asistente', { ts: t0 });
+                            if (cap.image_b64) await DEMO.salidaMedia(tAcc, telFullB, 'image', 'ubic-img:' + inv.id, t0 + 1);
+                            if (cap.lat != null && cap.lng != null) await DEMO.salidaMedia(tAcc, telFullB, 'location', [cap.name || punto, cap.lat, cap.lng, ''].join('|||'), t0 + 2);
+                        }
+                        return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): paquete de ubicación de ' + punto + (TID ? ' (sin pregunta de cita)' : '') });
+                    }
                     const body = conTenant({ phone: telFullB, text: texto });
                     if (cap.image_b64) body.image = cap.image_b64;
                     if (cap.lat != null && cap.lng != null) body.location = { lat: cap.lat, lng: cap.lng, name: cap.name || punto };
@@ -2020,7 +2069,7 @@ module.exports = async function handler(req, res) {
                     const c = await H.cotizar({ auto_id: inv.id, enganche: req.body.enganche ? Number(req.body.enganche) : undefined, plazo_meses: req.body.plazo_meses ? Number(req.body.plazo_meses) : undefined });
                     if (!c.ok) return res.status(200).json({ ok: false, necesita: c.error === 'falta_enganche' ? 'datos' : undefined, error: c.error });
                     await regAcc('boton_cotizar', { enganche: req.body.enganche || null, plazo: req.body.plazo_meses || null, simulado: esPrueba });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cotización lista' + (TID ? ' (solo la tarjeta)' : ''), tarjeta: String(c.placeholders.cotizacion).slice(0, 200) });
+                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, c.placeholders.cotizacion, 'asistente'); return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): cotización lista' + (TID ? ' (solo la tarjeta)' : ''), tarjeta: String(c.placeholders.cotizacion).slice(0, 200) }); }
                     if (!TID) await enviarWA(telFullB, 'Va, mira cómo quedaría:');
                     await enviarWA(telFullB, c.placeholders.cotizacion);                 // vendedores: SOLO la tarjeta
                     if (!TID) await enviarWA(telFullB, '¿Cómo la ves?');
@@ -2030,23 +2079,25 @@ module.exports = async function handler(req, res) {
                     const fI = String(req.body.fecha_iso || ''), hI = String(req.body.hora || '');
                     if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return res.status(200).json({ ok: false, necesita: 'fecha_hora' });
                     await regAcc('cita_agendada', { fecha_iso: fI, hora: hI, simulado: esPrueba, via: 'boton' });
-                    if (esPrueba) return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'SIMULADO (carril pruebas): cita ' + fI + ' ' + hI });
+                    // MISMO machote dictado por el owner (2026-08-24) — solo cambia quién se presenta: el asistente del vendedor
+                    const msjCitaVend = (() => {
+                        const nomC = String(req.body.comprador_nombre || '').trim().split(/\s+/)[0] || '';
+                        const [y, mo, d] = fI.split('-').map(Number); const [hh, mi] = hI.split(':').map(Number);
+                        const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'], meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+                        const dt = new Date(Date.UTC(y, mo - 1, d, 12));
+                        const horaTxt = (hh % 12 === 0 ? 12 : hh % 12) + (mi ? ':' + String(mi).padStart(2, '0') : '') + (hh < 12 ? 'am' : 'pm');
+                        const vend = String(tAcc.nombre || '').split(/\s+/)[0] || 'tu vendedor';
+                        return 'Hola' + (nomC ? ' ' + nomC : '') + ', soy el asistente de ' + vend + ' 🤖\n' +
+                            'Ya quedó tu cita ✅ ' + dias[dt.getUTCDay()] + ' ' + d + ' de ' + meses[mo - 1] + ' a las ' + horaTxt + ' para ver el ' + nombreAuto + '.\n' +
+                            'Por aquí te estaré enviando las notificaciones previas a tu cita para comprar tu auto 👍';
+                    })();
+                    // MODO PRUEBA / carril: NO se crea cita en CRM ni en Calendar; en demo el machote de confirmación queda en el hilo
+                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, msjCitaVend, 'asistente'); return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): cita ' + fI + ' ' + hI + ' (sin CRM ni Calendar)' }); }
                     const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'cita_manual', phone: telB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }, TID ? {
                         // TENANT = DUEÑO (orden owner 2026-09-08): no se le pide confirmación a nadie — el vendedor la agenda él mismo;
                         // el bot Fyradrive le habla A ÉL (víspera/día D) y el comprador recibe el machote + recordatorios por el número del vendedor.
                         dueno_confirmado: 1, tenant_id: TID, dueno_tel: tAcc.telefono, dueno_nombre: tAcc.nombre,
-                        msj_confirmacion: (() => {
-                            const nomC = String(req.body.comprador_nombre || '').trim().split(/\s+/)[0] || '';
-                            const [y, mo, d] = fI.split('-').map(Number); const [hh, mi] = hI.split(':').map(Number);
-                            const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'], meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-                            const dt = new Date(Date.UTC(y, mo - 1, d, 12));
-                            const horaTxt = (hh % 12 === 0 ? 12 : hh % 12) + (mi ? ':' + String(mi).padStart(2, '0') : '') + (hh < 12 ? 'am' : 'pm');
-                            const vend = String(tAcc.nombre || '').split(/\s+/)[0] || 'tu vendedor';
-                            // MISMO machote dictado por el owner (2026-08-24) — solo cambia quién se presenta: el asistente del vendedor
-                            return 'Hola' + (nomC ? ' ' + nomC : '') + ', soy el asistente de ' + vend + ' 🤖\n' +
-                                'Ya quedó tu cita ✅ ' + dias[dt.getUTCDay()] + ' ' + d + ' de ' + meses[mo - 1] + ' a las ' + horaTxt + ' para ver el ' + nombreAuto + '.\n' +
-                                'Por aquí te estaré enviando las notificaciones previas a tu cita para comprar tu auto 👍';
-                        })()
+                        msj_confirmacion: msjCitaVend
                     } : {})) });
                     const dc = await rc.json().catch(() => ({}));
                     if (!dc.ok) return res.status(200).json({ ok: false, error: dc.error || 'no se pudo crear la cita' });
@@ -2060,6 +2111,12 @@ module.exports = async function handler(req, res) {
             const prog = require('../lib/seb/programados.js');
             const tP = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tP) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            if (tP.demo) {   // MODO PRUEBA: no se programa nada (el cron no lo toca); queda como renglón 'sistema' en el hilo
+                const cuP = Number(req.body.cuando_ts) || 0; const msP = cuP > 1e12 ? cuP : cuP * 1000;
+                let cuandoTxt = ''; try { cuandoTxt = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(msP)); } catch (e) { cuandoTxt = new Date(msP).toISOString(); }
+                const rP = await DEMO.sistema(tP, DEMO.telComprador(req.body.telefono), DEMO.PREFIJO + '⏰ Recordatorio programado para ' + cuandoTxt + ': «' + String(req.body.texto || '').slice(0, 300) + '»' + (req.body.con_foto === false || req.body.con_foto === 0 ? '' : ' (+ foto)'));
+                return res.status(rP.ok ? 200 : 400).json({ ok: !!rP.ok, simulado: true, id: null, error: rP.ok ? undefined : rP.error });
+            }
             const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0, tenantId: tP.id });
             if (r.ok) { try { let telPg = String(req.body.telefono || '').replace(/\D/g, ''); if (telPg.length === 10) telPg = '521' + telPg; const dP = await citasVivas.direccionDe(tP.id, telPg); await require('../lib/seb/acciones.js').registrar({ tenant_id: tP.id, chat_id: dP.chat_id, delegacion_id: dP.delegacion_id, tipo: 'programado', ref_id: r.id, meta: { cuando_ts: Number(req.body.cuando_ts) }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { } }
             return res.status(r.ok ? 200 : 400).json(r);
@@ -2176,6 +2233,13 @@ module.exports = async function handler(req, res) {
         if (action === 'manual_directo' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             const texto = String(req.body.texto || '').trim();
+            // MODO PRUEBA (2026-09-10): en el universo demo el texto del vendedor se registra en el hilo (emisor 'dueno', [prueba]) y NO va al puente
+            const tMD = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : null;
+            if (tMD && tMD.demo) {
+                if (!tel || !texto) return res.status(400).json({ error: 'telefono y texto requeridos' });
+                const rM = await DEMO.salida(tMD, tel, texto, 'dueno');
+                return res.status(200).json({ ok: true, enviado: !!rM.ok, simulado: true, error_envio: rM.ok ? null : (rM.error || 'no se registró') });
+            }
             // ══ SEÑAL MANUAL (human-in-the-loop real): el owner escribe "cita confirmada"
             // (le confirmaron por teléfono) o "cita cancelada" en el chat del DUEÑO →
             // ejecuta el match/cancelación de verdad (confianza al comprador, recordatorios).

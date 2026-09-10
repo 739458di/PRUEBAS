@@ -216,9 +216,21 @@
   #disp .todas{margin-top:16px;width:100%;padding:13px;border-radius:999px;border:0;background:#e53935;color:#fff;font-weight:800;font-size:15px;cursor:pointer}
   #disp .cerrar{margin-top:8px;width:100%;padding:11px;border-radius:999px;border:1px solid #e3e9f4;background:#fff;color:#5b6b85;font-weight:700;font-size:14px;cursor:pointer}
   .top .ayuda{background:#eef3fb;border:0;color:#2f6df0;width:30px;height:30px;border-radius:50%;font-weight:800;cursor:pointer;margin-right:8px}
+  /* MODO PRUEBA (2026-09-10): FyraChat del tenant demo PRUEBAS# — franja amarilla arriba, nada llega a WhatsApp */
+  #demo-franja{display:none;position:fixed;top:0;left:0;right:0;z-index:70;background:#ffd54a;color:#4a3a00;font-size:12px;font-weight:800;text-align:center;padding:calc(4px + env(safe-area-inset-top)) 10px 4px;letter-spacing:.02em}
+  body.demo #demo-franja{display:block}
+  body.demo .top{padding-top:calc(40px + env(safe-area-inset-top))}
+  body.demo .chead{padding-top:calc(33px + env(safe-area-inset-top))}
+  body.demo #acceso{padding-top:60px}
+  .top .reset{background:#fff3c4;border:0;color:#8a6a00;font-size:12px;font-weight:800;cursor:pointer;margin-right:8px;border-radius:999px;padding:6px 10px;white-space:nowrap}
+  #acc-demo1,#acc-demo{display:none;margin-top:10px;font-size:13px;font-weight:700;color:#ffd54a}
+  .acc-b.sim{background:#fff3c4;border-color:#ffd54a;color:#6b5200;display:none}
+  body.demo .acc-b.sim{display:inline-block}
+  #c-soltar{display:none;margin-left:8px;border:1px solid #f1c0c0;background:#fff5f5;color:#b3261e;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit}
 </style>
 </head>
 <body>
+<div id="demo-franja">🧪 Simulador: nada llega a WhatsApp</div>
 
 <!-- ACCESO: sin sesión no hay universo -->
 <div id="acceso">
@@ -228,12 +240,14 @@
     <p>Escribe el WhatsApp que vinculaste. Te mandamos un código de 6 dígitos a ese mismo WhatsApp.</p>
     <input id="acc-tel" inputmode="numeric" maxlength="12" placeholder="10 dígitos" autocomplete="tel">
     <button onclick="accPedir()">Mandarme el código</button>
+    <div id="acc-demo1">Modo prueba: usuario PRUEBAS# (8888888888). No llega ningún WhatsApp.</div>
     <div class="err" id="acc-err1"></div>
   </div>
   <div id="acc-p2" style="display:none">
     <h2>Escribe el código</h2>
     <p id="acc-sub">Te llegó a tu WhatsApp. Vence en 3 minutos.</p>
     <input id="acc-cod" inputmode="numeric" maxlength="7" placeholder="000 000" autocomplete="one-time-code">
+    <div id="acc-demo">Modo prueba: usa el código 000 000</div>
     <button onclick="accEntrar()">Entrar</button>
     <div class="err" id="acc-err2"></div>
     <button class="liga" onclick="accVolver()">Pedir otro código</button>
@@ -282,6 +296,7 @@
     <div class="ava" id="c-ava">?</div>
     <div class="who" onclick="abrirContacto()"><b id="c-nombre">—</b><span id="c-tel"></span></div>
     <div id="c-foco" onclick="cambiarFoco()" title="Auto en foco de este contacto — clic para cambiarlo" style="display:none;cursor:pointer;font-size:12px;color:var(--acc);white-space:nowrap;margin-left:6px">🚗 <span id="c-foco-txt">—</span> <span style="opacity:.7">· cambiar</span></div>
+    <button id="c-soltar" onclick="soltarChat()" title="El asistente deja de leer y registrar este chat">✋ Soltar</button>
   </div>
   <div id="msgs"></div>
   <div id="fab" onclick="document.getElementById('msgs').scrollTo({top:9e9,behavior:'smooth'})"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
@@ -295,6 +310,7 @@
     <button class="acc-b" onclick="accionBoton('cita')">📅 Agendar cita</button>
     <button class="acc-b" onclick="accionBoton('fotos')">📸 Enviar fotos</button>
     <button class="acc-b" onclick="recordatorioBoton()">📨 Recordatorio</button>
+    <button class="acc-b sim" onclick="simularRespuesta()" title="Modo prueba: escribe lo que contestaría el comprador">🧪 Simular respuesta del comprador</button>
   </div>
   <div id="gen"><button onclick="sugerir()"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px"><path d="M12 2l1.7 4.8L18.5 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.3-1.2L12 2z"/></svg> Generar sugerencia de Seb</button></div>
   <div id="copilot">
@@ -318,6 +334,19 @@
 
 <!-- MODAL RECORDATORIO (owner 2026-08-06): programa un mensaje para este chat —
      misma libreta mensajes_programados que el Calendar (y su veto al ghost). -->
+<!-- MODO PRUEBA: el teléfono del comprador es fijo (carril de pruebas) — prellenado y bloqueado -->
+<div class="cmodal" id="demotelmodal" onclick="if(event.target===this)cerrarDemoTel(false)">
+  <div class="cmcard">
+    <div class="cmgrab"></div>
+    <div class="cmbody">
+      <div class="cmtitle">📱 Teléfono del comprador</div>
+      <div class="cmhint">Número de prueba — en el simulador el comprador siempre es este.</div>
+      <input id="demo-tel" value="5210000000009" disabled style="width:100%;box-sizing:border-box;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit;color:#5b6b82;margin:10px 0 4px">
+      <div style="font-size:12px;color:#8a6a00;font-weight:700;margin-bottom:6px">🧪 número de prueba (bloqueado)</div>
+      <button class="cm-add" onclick="cerrarDemoTel(true)">Continuar</button>
+    </div>
+  </div>
+</div>
 <div class="cmodal" id="entradamodal" onclick="if(event.target===this)cerrarEntradaM(null)">
   <div class="cmcard">
     <div class="cmgrab"></div>
@@ -628,7 +657,10 @@ async function accEntrar(){
   location.replace('/copilot.html?bienvenida=1');
 }
 function accVolver(){ $a('acc-p2').style.display = 'none'; $a('acc-p1').style.display = ''; }
-function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search); const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
+function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search);
+  // MODO PRUEBA (2026-09-10): ?demo=1 → teléfono del usuario PRUEBAS# prellenado + leyenda del código fijo (solo vale para ese tenant)
+  if (q.get('demo') === '1') { $a('acc-tel').value = '8888888888'; $a('acc-demo1').style.display = 'block'; $a('acc-demo').style.display = 'block'; }
+  const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
 async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/copilot.html'); }
 // ── TUS DISPOSITIVOS (2026-09-10): lista de sesiones vivas del universo + cerrar todas
 function fechaCorta(ms){ try { return new Date(ms).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
@@ -651,7 +683,28 @@ function montarBotonesSesion(){
   if (!SESION || !btn || document.querySelector('.top .salir')) return;
   const di = document.createElement('button'); di.className = 'disp'; di.textContent = 'Tus dispositivos'; di.title = 'Dónde está abierto tu FyraChat'; di.onclick = abrirDispositivos; btn.parentNode.insertBefore(di, btn);
   const sa = document.createElement('button'); sa.className = 'salir'; sa.textContent = 'Salir'; sa.onclick = accSalir; btn.parentNode.insertBefore(sa, btn);
+  if (SESION.tenant && SESION.tenant.demo) { const rs = document.createElement('button'); rs.className = 'reset'; rs.textContent = '↺ Reiniciar prueba'; rs.title = 'Borra todo el universo de prueba'; rs.onclick = reiniciarPrueba; btn.parentNode.insertBefore(rs, sa); }
 }
+// ══ MODO PRUEBA (2026-09-10): el universo PRUEBAS# — todo se simula y se registra en el hilo ══
+async function reiniciarPrueba(){
+  if (!confirm('¿Reiniciar la prueba? Se borran TODOS los chats, delegaciones y mensajes del universo de prueba (nada real se toca).')) return;
+  const r = await postAccion({ action:'demo_reset' });
+  if (!r.ok) return alert('No se pudo: ' + (r.error || ''));
+  try { cerrarChat(); } catch(e){}
+  await cargarLista();
+  toast('🧪 Prueba reiniciada: universo en cero');
+}
+async function simularRespuesta(){
+  if (!TEL) return alert('Abre un chat primero');
+  const t = prompt('🧪 ¿Qué contesta el comprador? (se registra como mensaje entrante, nada sale a WhatsApp)'); if (t === null) return;
+  const texto = String(t).trim(); if (!texto) return;
+  const r = await postAccion({ action:'demo_responder', telefono: TEL, texto });
+  if (!r.ok) return alert('No se pudo: ' + (r.error || ''));
+  try { cargarChat(); } catch(e){}
+}
+let DEMO_TEL_M = { resolve: null };
+function pedirTelDemo(){ return new Promise(resolve => { DEMO_TEL_M = { resolve }; document.getElementById('demotelmodal').classList.add('show'); }); }
+function cerrarDemoTel(ok){ document.getElementById('demotelmodal').classList.remove('show'); const r = DEMO_TEL_M.resolve; DEMO_TEL_M.resolve = null; if (r) r(ok ? (document.getElementById('demo-tel').value || '5210000000009') : null); }
 function abrirGuia(){ $a('guia').classList.add('on'); }
 function cerrarGuia(){ $a('guia').classList.remove('on'); try { localStorage.setItem('fyra_guia_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
 async function cargarTenant(){
@@ -668,6 +721,8 @@ async function cargarTenant(){
     const d = await fetch(API+'?action=tenant_info&vendedor='+encodeURIComponent(VEND)).then(x=>x.json());
     if (!d.ok) { alert('Este link no corresponde a un vendedor dado de alta'); return; }
     TENANT = d.tenant; TENANT.autos = d.autos || []; TENANT.sesion = d.sesion || null;
+    if (TENANT.demo) { document.body.classList.add('demo'); document.title = 'FyraChat · PRUEBAS# · MODO PRUEBA'; document.getElementById('demo-tel').value = TENANT.comprador_prueba || '5210000000009'; }
+    try { document.getElementById('c-soltar').style.display = 'inline-block'; } catch(e){}   // universos de vendedor: se puede soltar el chat
     // el universo se identifica por NÚMERO (orden owner 2026-09-08): nombre + el WhatsApp por el que salen estos chats
     const telV = String(TENANT.telefono || '').replace(/\D/g, '');
     const telFmt = telV.length === 13 ? ('+' + telV.slice(0, 2) + ' ' + telV.slice(3, 6) + ' ' + telV.slice(6, 9) + ' ' + telV.slice(9)) : (telV ? '+' + telV : '');
@@ -675,7 +730,7 @@ async function cargarTenant(){
     if (h1) {
       // en universos de vendedor el título es más chico (cabe en un teléfono) y debajo va el NÚMERO del universo
       h1.style.fontSize = '20px'; h1.style.lineHeight = '1.15'; h1.style.minWidth = '0';
-      h1.innerHTML = '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FyraChat · ' + esc(TENANT.nombre || telFmt) + '</div>' + (TENANT.nombre && telFmt ? '<div style="font-size:12px;font-weight:500;color:#5b6b82;margin-top:2px;white-space:nowrap">📱 ' + telFmt + ' · universo ' + TENANT.id + '</div>' : '');
+      h1.innerHTML = '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FyraChat · ' + esc(TENANT.nombre || telFmt) + (TENANT.demo ? ' <span style="color:#8a6a00">· MODO PRUEBA</span>' : '') + '</div>' + (TENANT.nombre && telFmt ? '<div style="font-size:12px;font-weight:500;color:#5b6b82;margin-top:2px;white-space:nowrap">📱 ' + telFmt + ' · universo ' + TENANT.id + (TENANT.demo ? ' · simulador' : '') + '</div>' : '');
     }
     const btn = document.querySelector('#scr-lista .top .nuevo'); if (btn) btn.textContent = '＋ Nuevo comprador';
     if (SESION && !SESION.maestra && btn && !document.querySelector('.top .ayuda')) {
@@ -683,7 +738,7 @@ async function cargarTenant(){
       let vista = false; try { vista = !!localStorage.getItem('fyra_guia_' + TENANT.id); } catch(e){}
       if (qs.get('bienvenida') === '1' || !vista) { abrirGuia(); if (qs.get('bienvenida')) history.replaceState(null, '', '/copilot.html'); }
     }
-    if (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado') toast('⚠️ Tu WhatsApp aún no está vinculado al asistente');
+    if (!TENANT.demo && (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado')) toast('⚠️ Tu WhatsApp aún no está vinculado al asistente');
   } catch(e){}
 }
 const vendQS = () => VPARAM() != null ? '&vendedor='+encodeURIComponent(VPARAM()) : '';
@@ -712,7 +767,7 @@ async function nuevoComprador(){
   if (!TENANT) return nuevoChat();
   if (!TENANT.autos.length) return alert('No tienes autos activos dados de alta a tu nombre en el Sales Brain');
   const auto = await elegirAuto(TENANT.autos, '🚗 ¿Qué auto le interesa al comprador?'); if (!auto) return;
-  const t = prompt('📱 Teléfono del comprador (10 dígitos):'); if (!t) return;
+  const t = TENANT.demo ? await pedirTelDemo() : prompt('📱 Teléfono del comprador (10 dígitos):'); if (!t) return;   // MODO PRUEBA: número de prueba fijo (bloqueado)
   const tel = t.replace(/\D/g,''); if (tel.length !== 10 && !(tel.length === 13 && tel.startsWith('521'))) return alert('Teléfono inválido — 10 dígitos');
   const nombre = (prompt('👤 Nombre del comprador (opcional):') || '').trim();
   // la forma de entrada la elige el vendedor: primero pedimos el machote para mostrarlo/editarlo
@@ -723,8 +778,9 @@ async function nuevoComprador(){
   try {
     const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), auto_id: auto.id, telefono: tel, nombre, modo_entrada: entrada.modo, opener_texto: entrada.texto})}).then(x=>x.json());
     if (!r.ok) return alert('No se pudo: '+(r.error||'error'));
-    alert(entrada.modo === 'silencio' ? '🤫 Chat delegado en silencio (sin mensaje). Ya puedes escribirle o usar los botones.'
-        : (r.opener_enviado ? '✅ Chat delegado y primer mensaje enviado:\n\n«'+r.opener+'»' : '🟡 Chat delegado. El primer mensaje quedó pendiente: '+(r.error||'sin conexión')) );
+    const simTag = r.simulado ? ' (simulado — nada salió a WhatsApp)' : '';
+    alert(entrada.modo === 'silencio' ? '🤫 Chat delegado en silencio (sin mensaje)' + simTag + '. Ya puedes escribirle o usar los botones.'
+        : (r.opener_enviado ? '✅ Chat delegado y primer mensaje enviado' + simTag + ':\n\n«'+r.opener+'»' : '🟡 Chat delegado. El primer mensaje quedó pendiente: '+(r.error||'sin conexión')) );
     await cargarLista();
     abrirChat(r.telefono, nombre || null);
   } catch(e){ alert('Error de red: '+e.message); }
@@ -732,7 +788,7 @@ async function nuevoComprador(){
 async function soltarChat(){
   if (!TENANT || !TEL) return;
   if (!confirm('¿Soltar este chat? El asistente deja de leerlo y registrarlo.')) return;
-  try { const r = await fetch(API+'?action=soltar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), telefono: TEL})}).then(x=>x.json()); toast(r.ok ? 'Chat soltado' : ('No se pudo: '+(r.error||'')), !r.ok); } catch(e){ toast('Error: '+e.message, true); }
+  try { const r = await fetch(API+'?action=soltar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), telefono: TEL})}).then(x=>x.json()); toast(r.ok ? ('Chat soltado' + (r.simulado ? ' (simulado)' : '')) : ('No se pudo: '+(r.error||'')), !r.ok); if (r.ok) { try { cargarChat(); } catch(e){} } } catch(e){ toast('Error: '+e.message, true); }
 }
 async function nuevoChat(){
   const t = prompt('📱 Teléfono del contacto (10 dígitos):'); if (!t) return;

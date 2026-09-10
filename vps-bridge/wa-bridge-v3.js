@@ -1451,6 +1451,7 @@ async function cargarChatsActivos(U) {
     }
 }
 async function abrirUniverso(tenant) {
+    if (tenant && tenant.config && Number(tenant.config.demo) === 1) throw new Error('universo demo: no se abre en WhatsApp');   // simulador PRUEBAS#
     if (universos.has(tenant.id)) return universos.get(tenant.id);
     const U = crearUniverso(tenant);
     universos.set(tenant.id, U);
@@ -1496,6 +1497,7 @@ async function cargarTenantsDB() {
     await db.execute('CREATE TABLE IF NOT EXISTS wa_sessions (tenant_id INTEGER PRIMARY KEY, estado TEXT, motivo TEXT, ultimo_evento INTEGER, ultimo_mensaje INTEGER, qr_pendiente INTEGER DEFAULT 0, updated INTEGER)');
     const r = await db.execute('SELECT id, telefono, nombre, config_json FROM tenants WHERE activo = 1 ORDER BY id');
     let rows = r.rows.map(x => ({ id: Number(x.id), telefono: String(x.telefono || ''), nombre: String(x.nombre || ''), config: (() => { try { return JSON.parse(x.config_json || '{}'); } catch (e) { return {}; } })() }));
+    rows = rows.filter(t => Number(t.config && t.config.demo) !== 1);   // universo DEMO (simulador PRUEBAS#): jamás se abre en WhatsApp
     // TENANTS_SOLO=99,100 → arranque acotado (pruebas locales: JAMÁS abrir el tenant 0 fuera del VPS)
     if (process.env.TENANTS_SOLO) { const solo = new Set(process.env.TENANTS_SOLO.split(',').map(Number)); rows = rows.filter(t => solo.has(t.id)); }
     return rows;
