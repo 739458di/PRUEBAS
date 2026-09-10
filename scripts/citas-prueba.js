@@ -92,7 +92,7 @@ const diaDe = ts => DIAS[new Date(ts - MTY_OFF).getUTCDay()];
     ok(r1.ok && r1.match_id && r1.chat_id === chatC.id && r1.casillas > 0, 'matchDirectoCalendar ok', r1);
     const M1 = (await query('SELECT * FROM citas_match WHERE id=?', [r1.match_id]))[0];
     ok(M1.estado === 'match' && Number(M1.tenant_id) === 99 && Number(M1.chat_id) === chatC.id && Number(M1.delegacion_id) === dl.id && Number(M1.dueno_chat_id) === chatD.id, 'fila con dirección completa (tenant, chat, delegación, dueno_chat)', { t: M1.tenant_id, c: M1.chat_id, d: M1.delegacion_id, dc: M1.dueno_chat_id });
-    const ctx1 = { nombre: 'Prueba', dueno: 'Dueño', auto: 'BMW 530I 2019', hora: '11am', fecha: diaDe(ts1) };
+    const ctx1 = { nombre: 'Prueba', dueno: 'Dueño', auto: 'BMW 530I 2019', hora: '11am', fecha: diaDe(ts1), tenant_id: 99 };   // paridad: el plan por universo (sin sello en tenant≠0)
     const plan1 = CV.planRecordatorios(Number(M1.match_ts), ts1, ctx1);
     const cas1 = await query("SELECT * FROM cita_casillas WHERE cita_match_id=? ORDER BY due_ts", [M1.id]);
     ok(cas1.length === plan1.length && cas1.length >= 4, 'una casilla por recordatorio del plan (' + cas1.length + ')', { cas: cas1.length, plan: plan1.length });
