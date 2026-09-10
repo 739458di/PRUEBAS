@@ -227,6 +227,31 @@
   .acc-b.sim{background:#fff3c4;border-color:#ffd54a;color:#6b5200;display:none}
   body.demo .acc-b.sim{display:inline-block}
   #c-soltar{display:none;margin-left:8px;border:1px solid #f1c0c0;background:#fff5f5;color:#b3261e;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit}
+  /* 🎓 TUTORIAL DE PRIMERA VEZ (orden owner 2026-09-10): paso A pantalla completa + coach marks del paso B */
+  #tuto-inicio{position:fixed;inset:0;background:#0b1730;color:#fff;z-index:305;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 24px;text-align:center;overflow:auto}
+  #tuto-inicio .marca{font-size:12px;letter-spacing:.34em;font-weight:800;margin-bottom:18px;color:#b8c4dc}
+  #tuto-inicio h2{font-size:26px;font-weight:800;letter-spacing:-.3px;margin:0 0 8px}
+  #tuto-inicio p{color:#b8c4dc;font-size:14.5px;max-width:340px;line-height:1.5;margin:0 0 14px}
+  #tuto-inicio p b{color:#fff}
+  #tuto-inicio svg{width:min(250px,68vw);height:auto;margin:2px 0 18px;flex:none}
+  #tuto-inicio button{width:100%;max-width:320px;padding:14px;border-radius:999px;border:0;background:linear-gradient(90deg,#35e0b0,#4f8bff);color:#0b1730;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
+  #tuto-inicio .nota{margin-top:12px;font-size:12px;color:#8fb3ff}
+  #tuto-spot{position:fixed;z-index:300;border-radius:14px;pointer-events:none;box-shadow:0 0 0 9999px rgba(11,23,48,.72);outline:2px solid rgba(53,224,176,.95);transition:left .25s,top .25s,width .25s,height .25s;animation:tutoPulse 1.4s ease-in-out infinite}
+  @keyframes tutoPulse{0%,100%{outline-offset:0}50%{outline-offset:5px}}
+  #tuto-card{position:fixed;z-index:301;background:#fff;color:#1a2438;border-radius:18px;padding:16px 16px 13px;box-shadow:0 14px 44px rgba(0,0,0,.38);transition:left .25s,top .25s}
+  #tuto-card .tprog{display:flex;align-items:center;gap:4px;margin-bottom:9px}
+  #tuto-card .tprog i{width:6px;height:6px;border-radius:50%;background:#e3e9f4;display:block}
+  #tuto-card .tprog i.ok{background:#35c39a}
+  #tuto-card .tprog i.on{background:#2f6df0;width:16px;border-radius:3px}
+  #tuto-card .tprog span{margin-left:auto;font-size:11px;font-weight:700;color:#9aa3b5}
+  #tuto-card .ttit{font-size:17px;font-weight:800;letter-spacing:-.2px;margin-bottom:4px}
+  #tuto-card .ttxt{font-size:14px;line-height:1.45;color:#3b4660}
+  #tuto-card .tbtns{display:flex;gap:8px;margin-top:12px;align-items:center}
+  #tuto-card .tskip{background:none;border:0;color:#8a93a6;font-size:13px;font-weight:600;cursor:pointer;padding:8px 6px;font-family:inherit}
+  #tuto-card .tnext{margin-left:auto;background:#2f6df0;color:#fff;border:0;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}
+  #tuto-card .caret{position:absolute;width:14px;height:14px;background:#fff;transform:rotate(45deg);display:none}
+  #tuto-card .caret.top{top:-7px}
+  #tuto-card .caret.bottom{bottom:-7px}
 </style>
 </head>
 <body>
@@ -276,6 +301,7 @@
     <h3>Tus dispositivos</h3>
     <div class="sub">Navegadores con tu FyraChat abierto. Si ves uno que no reconoces, cierra todas las sesiones.</div>
     <ul id="disp-lista"><li>Cargando…</li></ul>
+    <button class="cerrar" id="disp-tuto" onclick="verTutorial()" style="display:none">🎓 Ver tutorial</button>
     <button class="todas" onclick="cerrarTodasSesiones()">Cerrar todas las sesiones</button>
     <button class="cerrar" onclick="cerrarDispositivos()">Volver</button>
   </div>
@@ -436,6 +462,7 @@
 
 <script>
 const API = '/api/seb-panel';
+let TUTO = false;   // 🎓 tutorial simulado en curso (nada toca el servidor mientras sea true) — motor al final del script
 let TEL = null, QID = null, EDITANDO = false, SOLO_PEND = false, CHATS = [];
 let OBJETIVO = null;   // mensaje del cliente seleccionado para "responder a" (msgId + texto)
 const SENTINEL = '||SEQ||';   // separa los mensajes de una SECUENCIA del banco
@@ -482,7 +509,7 @@ function burbujaHTML(m, prevDir){
     cont = '<a href="'+isrc+'" target="_blank" rel="noopener"><img class="bmedia" src="'+isrc+'" alt="mapa del punto" loading="lazy"></a>';
   } else if (m.tipo==='location'){                         // PIN (control): card de ubicación
     const p = (m.mensaje||'').split('|||'); const nom = esc(p[0]||'Ubicación'); const link = (p[3]||'').trim();
-    cont = '<div class="bloc">📍 <b>'+nom+'</b>'+(link?'<a href="'+esc(link)+'" target="_blank" rel="noopener">Ver en Maps</a>':'')+'</div>';
+    cont = '<div class="bloc">📍 <b>'+nom+'</b>'+(link?'<a href="'+esc0(link)+'" target="_blank" rel="noopener">Ver en Maps</a>':'')+'</div>';   // esc0: esc() auto-enlaza URLs y rompía el href
   } else {
     cont = esc(m.mensaje);
   }
@@ -569,6 +596,7 @@ function reconciliarNoLeidos(){
   persistUnread();
 }
 async function cargarLista(){
+  if (TUTO) return;                                   // 🎓 tutorial: la lista de mentira no se pisa
   const r = await fetch(API+'?action=chats'+vendQS()).then(x=>x.json());
   CHATS = r.chats || [];
   reconciliarNoLeidos();
@@ -586,6 +614,7 @@ async function connectTimbre(){
 }
 // Cuando suena el timbre con un mensaje nuevo: actualiza la lista y, si es el chat abierto, lo pinta al instante.
 function onTimbre(d){
+  if (TUTO) return;                                   // 🎓 tutorial: nada real se pinta encima; al terminar se recarga la lista
   // 1) LISTA: actualizar preview y subir el chat arriba (sin leer Turso)
   let ch = CHATS.find(c => c.telefono === d.telefono);
   if (!ch){ ch = { telefono:d.telefono, nombre:d.nombre||('+'+String(d.telefono).slice(0,3)+' '+String(d.telefono).slice(-10)), pendientes:0 }; }
@@ -667,6 +696,7 @@ async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST'
 function fechaCorta(ms){ try { return new Date(ms).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
 async function abrirDispositivos(){
   $a('disp').classList.add('on'); $a('disp-lista').innerHTML = '<li>Cargando…</li>';
+  try { const bt = $a('disp-tuto'); if (bt) bt.style.display = tutoElegible() ? '' : 'none'; } catch(e){}   // 🎓 reentrada al tutorial (solo sesiones de vendedor / demo)
   const r = await fetch(API+'?action=acceso_sesiones').then(x=>x.json()).catch(()=>({ok:false}));
   if (!r.ok) { $a('disp-lista').innerHTML = '<li>No pude leer tus sesiones.</li>'; return; }
   const ses = r.sesiones || [];
@@ -799,6 +829,7 @@ function cerrarEntradaM(modo){
   r({ modo, texto: modo === 'texto' ? (document.getElementById('entrada-texto').value || '').trim() : '' });
 }
 async function nuevoComprador(){
+  if (TUTO) return tutoAccion('nuevo');               // 🎓 tutorial: flujo de mentira, cero API
   if (!TENANT) return nuevoChat();
   if (!TENANT.autos.length) return alert('No tienes autos activos dados de alta a tu nombre en el Sales Brain');
   const auto = await elegirAuto(TENANT.autos, '🚗 ¿Qué auto le interesa al comprador?'); if (!auto) return;
@@ -839,6 +870,7 @@ async function nuevoChat(){
   } catch(e){ alert('Error de red: '+e.message); }
 }
 async function abrirChat(tel, nombre){
+  if (TUTO) { if (tel === TUTO_TEL) tutoAccion('abrir'); return; }   // 🎓 tutorial: solo se abre el chat de ejemplo, sin fetch
   TEL = tel; QID = null; EDITANDO = false; ULTIMA_IN_SUGERIDA = 0; RENDERED_COUNT = -1; ULT_TS = 0;
   OBJETIVO = null; document.getElementById('obj-banner').classList.remove('show');
   marcarLeido(tel); pintarLista();                   // abriste el chat → borra el contador AL INSTANTE (la lista está detrás)
@@ -864,6 +896,7 @@ async function abrirChat(tel, nombre){
 
 // Carga/refresca el chat. Token anti-stale (no pinta respuestas de un chat que ya cerraste).
 async function cargarChat(){
+  if (TUTO) return;                                   // 🎓 tutorial: las burbujas son de mentira
   const mio = TEL; if (!mio) return;
   let r;
   // INCREMENTAL (cuota Turso 2026-09-08): tras la primera carga solo se piden las burbujas nuevas (desde la última pintada)
@@ -1075,6 +1108,7 @@ function yoContesto(){
 }
 
 async function resolver(tipo){
+  if (TUTO) return tutoAccion('aprobar');             // 🎓 tutorial: "Enviar" pinta la burbuja de mentira
   if (ENVIANDO) return; ENVIANDO = true;               // BUG 4: anti doble-clic
   const texto = document.getElementById('draft').value;
   const btns = document.querySelectorAll('#copilot .cb');
@@ -1095,6 +1129,7 @@ async function resolver(tipo){
 }
 
 async function enviarManual(){
+  if (TUTO) return tutoManual();                      // 🎓 tutorial: lo que teclees solo se pinta aquí
   if (ENVIANDO) return;
   const inp = document.getElementById('manual');
   const texto = inp.value.trim(); if (!texto) return;
@@ -1124,7 +1159,7 @@ async function enviarManual(){
   ENVIANDO = false;
 }
 
-cargarTenant().then(ok => { if (ok !== false) cargarLista(); });   // Fase 2: primero el vendedor (si viene ?vendedor=), luego su lista
+cargarTenant().then(ok => { if (ok !== false) cargarLista().then(() => { try { tutoAutoArranque(); } catch(e){} }); });   // Fase 2: primero el vendedor (si viene ?vendedor=), luego su lista; 🎓 después, el tutorial si es la primera vez
 connectTimbre();   // 🔔 conecta el timbre (WebSocket) — mensajes en vivo sin quemar lecturas
 // Fallback lento por si el timbre se cae: refresca la lista cada 90s SOLO en la pantalla de lista.
 setInterval(()=>{ if(!document.getElementById('scr-chat').classList.contains('open')) cargarLista(); }, 90000);
@@ -1167,6 +1202,7 @@ async function postAccion(body){
   catch(e){ return { ok:false, error: e.message }; }
 }
 async function accionBoton(acc){
+  if (TUTO) return tutoAccion(acc);                   // 🎓 tutorial: cada botón pinta su burbuja de ejemplo
   const tel = TEL; if (!tel) { alert('Abre un chat primero'); return; }
   const body = { action:'accion_boton', telefono: tel, accion: acc, vendedor: VPARAM(), comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim() };
   if (acc === 'cita') {
@@ -1210,6 +1246,7 @@ function abrirCitaM(){
 }
 function cerrarCitaM(){ document.getElementById('citamodal').classList.remove('show'); }
 async function confirmarCitaM(btn){
+  if (TUTO) return tutoAccion('cita_ok');             // 🎓 tutorial: confirmación de cita de ejemplo
   const f = document.getElementById('cita-fecha').value, h = document.getElementById('cita-hora').value;
   if (!f || !h) { alert('Elige día y hora'); return; }
   btn.disabled = true;
@@ -1252,6 +1289,267 @@ async function guardarRec(btn){
   btn.disabled = false; btn.textContent = '📨 Programar envío';
   if (r && r.ok) { cerrarRec(); alert('📨 Programado — sale el ' + f + ' a las ' + h + '\n(lo ves y lo cancelas también en el Calendar 🛟 MENSAJES)'); }
   else alert('⚠️ ' + ((r && r.error) || 'no se pudo programar'));
+}
+
+// ══ 🎓 TUTORIAL DE PRIMERA VEZ (orden owner 2026-09-10) ══
+// Cuando un vendedor entra a SU FyraChat por primera vez (sesión de vendedor, no maestra/staff; el
+// universo demo también): PASO A "Agrégalo a tu inicio" (pantalla completa, se salta si ya corre
+// instalado) → PASO B tutorial SIMULADO sobre la UI real: se agrega un "Comprador de ejemplo" con el
+// BMW 330i 2021 y se ejecutan los botones. TODO es de mentira y vive solo en el cliente:
+//   · mientras TUTO=true, window.fetch a seb-panel devuelve {ok:true,simulado:true} (guard),
+//   · las puertas reales (nuevoComprador, abrirChat, accionBoton, confirmarCitaM, resolver,
+//     enviarManual, cargarLista, cargarChat, onTimbre) se desvían con `if (TUTO)`,
+//   · al terminar se restaura todo, se limpia la UI de mentira y se recarga la lista real.
+// Reentrada: "Tus dispositivos" → "🎓 Ver tutorial". Marca: localStorage fyra_tuto_<tenant id>.
+let TUTO_PASO = -1, TUTO_TARGET = null, TUTO_FETCH = null, TUTO_ORIG = null, TUTO_N = 0, TUTO_TIMER = null;
+const TUTO_TEL = '5218100000000';
+const TUTO_AUTO = { id: 'tuto-auto', nombre: 'BMW 330i 2021', precio: 520000 };
+const TUTO_KEY = () => 'fyra_tuto_' + (TENANT ? TENANT.id : 0);
+const TUTO_OPENER = () => 'Hola, soy el asistente de ' + ((TENANT && TENANT.nombre) || 'tu vendedor') + ' 👋 Vi que te interesa el BMW 330i 2021. ¿Te mando fotos o prefieres una cita para verlo?';
+function tutoElegible(){
+  // vendedor con sesión en SU universo (no maestra, no staff, no tenant 0); el universo demo siempre
+  try { return !!(TENANT && VEND && !T0 && SESION && (TENANT.demo || (!SESION.maestra && !SESION.staff))); } catch(e){ return false; }
+}
+function tutoHecho(){ try { return !!localStorage.getItem(TUTO_KEY()); } catch(e){ return true; } }
+function tutoMarcar(){ try { localStorage.setItem(TUTO_KEY(), '1'); } catch(e){} }
+const tutoStandalone = () => { try { return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch(e){ return false; } };
+function tutoAutoArranque(){ if (!tutoElegible() || tutoHecho()) return; tutoArrancar(); }
+function verTutorial(){
+  try { cerrarDispositivos(); } catch(e){}
+  if (!tutoElegible()) return;
+  try { if ($a('scr-chat').classList.contains('open')) cerrarChat(); } catch(e){}
+  tutoArrancar();
+}
+function tutoArrancar(){
+  try {
+    if (TUTO || $a('tuto-inicio')) return;
+    if (!tutoDomOk()) { tutoMarcar(); return; }        // falta algo del DOM esperado → se salta sin romper nada
+    if (tutoStandalone()) tutoPasoB(); else tutoPasoA(tutoPasoB);
+  } catch(e){ try { tutoTerminar(false, true); } catch(e2){} }
+}
+function tutoDomOk(){
+  const sels = ['#scr-lista .top .nuevo', '#lista', '#automodal', '#auto-lista', '#demotelmodal .cm-add', '#demo-tel', "#entradamodal button[onclick=\"cerrarEntradaM('bot')\"]", '#entrada-machote',
+    '#scr-chat', '#msgs', '#c-nombre', '#c-tel', '#c-ava', '#obj-banner', '#fab', '#copilot .cb.send', '#draft', '#c-int', '#gen', '#seqbox', '#manual',
+    "#acciones button[onclick=\"accionBoton('fotos')\"]", "#acciones button[onclick=\"accionBoton('ubicacion')\"]", "#acciones button[onclick=\"accionBoton('cotizar')\"]", "#acciones button[onclick=\"accionBoton('cita')\"]", '#citamodal .cm-add'];
+  const fns = [elegirAuto, pedirTelDemo, elegirEntrada, abrirCitaM, cerrarCitaM, insertarBurbuja, pintarLista, pintarFoco, cerrarChat, cargarLista, colorDe];
+  return sels.every(s => { try { return !!document.querySelector(s); } catch(e){ return false; } }) && fns.every(f => typeof f === 'function');
+}
+
+// ── PASO A: "Agrégalo a tu inicio" (pantalla completa) ──
+function tutoPasoA(despues){
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
+  const txt = ios ? 'En <b>Safari</b> toca <b>Compartir</b> (el cuadrito con la flecha hacia arriba) y luego <b>“Añadir a pantalla de inicio”</b>. Queda como una app, con su icono.'
+          : android ? 'En <b>Chrome</b> toca el menú <b>⋮</b> (arriba a la derecha) y luego <b>“Añadir a pantalla de inicio”</b>. Queda como una app, con su icono.'
+          : 'Desde tu <b>celular</b> verás cómo agregarlo a tu pantalla de inicio. Así lo abres como una app, sin buscar el link.';
+  const d = document.createElement('div'); d.id = 'tuto-inicio';
+  d.innerHTML = '<div class="marca">FYRADRIVE</div><h2>Agrégalo a tu inicio</h2><p>' + txt + '</p>' + tutoDibujoInicio(ios, android)
+    + '<button type="button" id="tuto-inicio-ok">' + ((ios || android) ? 'Ya lo agregué · Continuar' : 'Continuar') + '</button>'
+    + '<div class="nota">Después te enseñamos cómo se usa, con un comprador de ejemplo.</div>';
+  document.body.appendChild(d);
+  d.querySelector('#tuto-inicio-ok').onclick = () => {
+    d.remove();
+    try { localStorage.setItem('fyra_tip_inicio', '1'); const t = $a('tip-inicio'); if (t) t.remove(); } catch(e){}   // la franja chica ya no hace falta
+    if (despues) { try { despues(); } catch(e){ try { tutoTerminar(false, true); } catch(e2){} } }
+  };
+}
+function tutoDibujoInicio(ios, android){
+  const F = 'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif"';
+  const tel = '<rect x="62" y="8" width="96" height="184" rx="18" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.35)" stroke-width="2"/>'
+            + '<rect x="70" y="20" width="80" height="150" rx="8" fill="rgba(255,255,255,.07)"/>'
+            + '<rect x="76" y="28" width="44" height="9" rx="3" fill="rgba(255,255,255,.22)"/><rect x="76" y="44" width="60" height="6" rx="3" fill="rgba(255,255,255,.12)"/><rect x="76" y="56" width="52" height="6" rx="3" fill="rgba(255,255,255,.12)"/><rect x="76" y="68" width="62" height="6" rx="3" fill="rgba(255,255,255,.12)"/>';
+  const hoja = (x, y) => '<rect x="' + x + '" y="' + y + '" width="118" height="30" rx="9" fill="#fff"/><text x="' + (x + 10) + '" y="' + (y + 19) + '" font-size="10" font-weight="700" fill="#0b1730" ' + F + '>➕ Añadir a inicio</text>';
+  if (ios) return '<svg viewBox="0 0 230 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + tel
+    + '<rect x="70" y="170" width="80" height="20" fill="rgba(255,255,255,.1)"/>'
+    + '<g transform="translate(103,172)"><path d="M7 2v9M4 5l3-3 3 3M2 7v7h10V7" fill="none" stroke="#35e0b0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>'
+    + '<circle cx="110" cy="180" r="13" fill="none" stroke="#35e0b0" stroke-width="2"/>'
+    + '<path d="M123 178 C160 170 165 140 170 128" fill="none" stroke="#35e0b0" stroke-width="2" stroke-dasharray="4 3"/>'
+    + hoja(108, 96)
+    + '<text x="6" y="186" font-size="9.5" fill="#8fb3ff" ' + F + '>1. Compartir</text><text x="118" y="90" font-size="9.5" fill="#8fb3ff" ' + F + '>2. Añadir</text></svg>';
+  if (android) return '<svg viewBox="0 0 230 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + tel
+    + '<circle cx="142" cy="29" r="1.8" fill="#35e0b0"/><circle cx="142" cy="35" r="1.8" fill="#35e0b0"/><circle cx="142" cy="41" r="1.8" fill="#35e0b0"/>'
+    + '<circle cx="142" cy="35" r="11" fill="none" stroke="#35e0b0" stroke-width="2"/>'
+    + '<path d="M153 40 C170 50 172 70 170 80" fill="none" stroke="#35e0b0" stroke-width="2" stroke-dasharray="4 3"/>'
+    + hoja(106, 84)
+    + '<text x="160" y="27" font-size="9.5" fill="#8fb3ff" ' + F + '>1. Menú ⋮</text><text x="118" y="128" font-size="9.5" fill="#8fb3ff" ' + F + '>2. Añadir</text></svg>';
+  // computadora: el icono ya en la pantalla de inicio del celular
+  let iconos = '';
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) { const x = 78 + c * 22, y = 34 + r * 24; const fy = (r === 1 && c === 1);
+    iconos += '<rect x="' + x + '" y="' + y + '" width="16" height="16" rx="4" fill="' + (fy ? '#35e0b0' : 'rgba(255,255,255,.16)') + '"/>' + (fy ? '<text x="' + (x + 8) + '" y="' + (y + 12) + '" text-anchor="middle" font-size="10" font-weight="800" fill="#0b1730" ' + F + '>F</text>' : ''); }
+  return '<svg viewBox="0 0 230 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + tel.replace(/<rect x="76"[\s\S]*$/, '') + iconos
+    + '<circle cx="108" cy="66" r="14" fill="none" stroke="#35e0b0" stroke-width="2"/>'
+    + '<text x="108" y="120" text-anchor="middle" font-size="9.5" fill="#8fb3ff" ' + F + '>FyraChat</text>'
+    + '<text x="115" y="186" text-anchor="middle" font-size="9.5" fill="#8fb3ff" ' + F + '>en tu celular queda así</text></svg>';
+}
+
+// ── PASO B: tutorial simulado (coach marks sobre la UI real) ──
+// modo 'tap': el usuario toca el elemento resaltado (o "Siguiente" lo toca por él) y la puerta
+// interceptada llama tutoAccion(acc) → avanza. modo 'next': "Siguiente" avanza. fin: pantalla final.
+const TUTO_PASOS = [
+  { acc:'nuevo', modo:'tap', target:'#scr-lista .top .nuevo', titulo:'Agrega un comprador', texto:'Cuando alguien te pregunte por un auto, tócalo aquí. Ese chat queda a cargo del asistente, desde TU WhatsApp.' },
+  { modo:'tap', espera:340, target:'#auto-lista button', titulo:'Elige el auto', texto:'Aquí salen tus autos del Sales Brain. En este ejemplo solo hay uno: tócalo.',
+    prep(i){ setTimeout(() => { try { $a('auto-buscar').blur(); } catch(e){} }, 120);
+      elegirAuto([TUTO_AUTO], '🚗 ¿Qué auto le interesa al comprador?').then(a => { if (!TUTO || TUTO_PASO !== i) return; if (a) tutoIr(i + 1); else tutoIr(i); }); } },
+  { modo:'tap', espera:340, target:'#demotelmodal .cm-add', titulo:'El número del comprador', texto:'En tu FyraChat aquí escribes su WhatsApp (10 dígitos). En el ejemplo ya está puesto.',
+    prep(i){ const inp = $a('demo-tel'), hint = $a('demotelmodal').querySelector('.cmhint'), eti = inp.nextElementSibling;
+      if (!TUTO_ORIG) TUTO_ORIG = { tel: inp.value, hint: hint ? hint.textContent : '', eti: eti ? eti.textContent : '' };
+      inp.value = '81 000 000 00'; if (hint) hint.textContent = 'Ejemplo — aquí va el WhatsApp del comprador.'; if (eti) eti.textContent = '🎓 número de ejemplo (bloqueado)';
+      pedirTelDemo().then(() => { if (!TUTO || TUTO_PASO !== i) return; tutoIr(i + 1); }); } },
+  { modo:'tap', espera:340, target:"#entradamodal button[onclick=\"cerrarEntradaM('bot')\"]", titulo:'Tú decides cómo entra', texto:'En silencio (solo se registra), con tu propio texto, o presentándose como tu asistente. Toca la tercera opción.',
+    prep(i){ elegirEntrada(TUTO_OPENER()).then(() => { if (!TUTO || TUTO_PASO !== i) return; tutoIr(i + 1); }); } },
+  { acc:'abrir', modo:'tap', espera:300, target:'#lista .chatrow', titulo:'Ya está en tu lista', texto:'“Comprador de ejemplo” apareció arriba con el primer mensaje enviado. Tócalo para abrir el chat.',
+    prep(){ SOLO_PEND = false; try { $a('pill-pend').classList.remove('on'); $a('buscar').value = ''; } catch(e){}
+      CHATS = CHATS.filter(c => c.telefono !== TUTO_TEL);
+      CHATS.unshift({ telefono: TUTO_TEL, nombre: 'Comprador de ejemplo', ult_msg: TUTO_OPENER().slice(0, 90), ult_dir: 'out', ult_ts: Date.now(), pendientes: 0, tuto: true });
+      unread[TUTO_TEL] = 0; pintarLista(); } },
+  { modo:'next', espera:420, target:'#msgs', titulo:'El asistente se presentó', texto:'Ese primer mensaje salió desde tu WhatsApp. Aquí ves todo lo que sale y lo que contesta el comprador. Abajo tienes tus botones.' },
+  { acc:'fotos', modo:'tap', target:"#acciones button[onclick=\"accionBoton('fotos')\"]", titulo:'Fotos con un toque', texto:'Manda las fotos del auto en foco (el BMW). Tócalo.' },
+  { acc:'ubicacion', modo:'tap', target:"#acciones button[onclick=\"accionBoton('ubicacion')\"]", titulo:'Ubicación', texto:'Manda la ubicación de tu lote o punto de entrega: texto + pin de Maps.' },
+  { acc:'cotizar', modo:'tap', target:"#acciones button[onclick=\"accionBoton('cotizar')\"]", titulo:'Tarjeta de precio', texto:'Calcula enganche y mensualidad del auto y se la manda como tarjeta.' },
+  { acc:'cita', modo:'tap', target:"#acciones button[onclick=\"accionBoton('cita')\"]", titulo:'Agenda la cita', texto:'Eliges día y hora; se agenda para el auto en foco y se le confirma al comprador.' },
+  { acc:'cita_ok', modo:'tap', espera:340, target:'#citamodal .cm-add', titulo:'Confirma la cita', texto:'Mañana a las 11:00 ya está puesto (puedes cambiarlo con los atajos). Toca Agendar.', prep(){ abrirCitaM(); } },
+  { acc:'aprobar', modo:'tap', espera:900, target:'#copilot .cb.send', titulo:'El comprador contesta', texto:'Cuando te escribe, Seb te propone la respuesta. Tú la revisas y la apruebas con Enviar (o la editas, o contestas tú).',
+    prep(){ tutoBurbuja({ direccion:'in', mensaje:'¿Sigue disponible?' });
+      setTimeout(() => { if (!TUTO) return; QID = null; EDITANDO = false; $a('draft').value = 'Sí, sigue disponible 👍 Mañana a las 11:00 te lo tenemos listo para que lo veas. ¿Te confirmo?'; $a('draft').setAttribute('readonly', ''); $a('c-int').textContent = 'disponibilidad'; $a('gen').classList.remove('show'); $a('copilot').classList.add('show'); }, 500); } },
+  { fin:true, titulo:'Así trabajas', texto:'<b>Tú delegas</b> al comprador · <b>Seb responde</b> desde tu WhatsApp · <b>Tú apruebas</b> lo importante.<br><br>Nada de esto fue real: tu lista se queda como estaba.' }
+];
+function tutoPasoB(){
+  if (TUTO) return;
+  TUTO = true; TUTO_N = 0; TUTO_ORIG = null; TUTO_TARGET = null;
+  // guard: cero fetch a seb-panel mientras dure el tutorial
+  TUTO_FETCH = window.fetch;
+  window.fetch = function(u){ try { if (String(u).indexOf(API) === 0) return Promise.resolve(new Response(JSON.stringify({ ok:true, simulado:true }), { headers: { 'Content-Type': 'application/json' } })); } catch(e){} return TUTO_FETCH.apply(this, arguments); };
+  document.addEventListener('click', tutoGuard, true);
+  window.addEventListener('resize', tutoReposicionar);
+  document.addEventListener('scroll', tutoReposicionar, true);
+  document.addEventListener('transitionend', tutoReposicionar, true);   // la pantalla del chat se desliza → re-medir al llegar
+  document.addEventListener('animationend', tutoReposicionar, true);    // los modales suben (slideup) → re-medir al llegar
+  const root = document.createElement('div'); root.id = 'tuto-root'; root.innerHTML = '<div id="tuto-spot" style="display:none"></div><div id="tuto-card" style="display:none"></div>';
+  document.body.appendChild(root);
+  try { if ($a('scr-chat').classList.contains('open')) { TEL = null; $a('scr-chat').classList.remove('open'); } } catch(e){}
+  tutoIr(0);
+}
+function tutoIr(i){
+  if (!TUTO) return;
+  const p = TUTO_PASOS[i]; if (!p) return tutoTerminar(true);
+  TUTO_PASO = i; TUTO_TARGET = null; p.hecho = false; tutoOcultarCoach();
+  try { if (p.prep) p.prep(i); } catch(e){ return tutoTerminar(false, true); }
+  setTimeout(() => { if (!TUTO || TUTO_PASO !== i) return; try { tutoMostrarCoach(p, i); } catch(e){ tutoTerminar(false, true); } }, p.espera || 80);
+}
+function tutoMostrarCoach(p, i){
+  const card = $a('tuto-card'), spot = $a('tuto-spot'); if (!card || !spot) return tutoTerminar(false, true);
+  TUTO_TARGET = p.target ? document.querySelector(p.target) : null;
+  if (p.target && !TUTO_TARGET) return tutoIr(i + 1);           // el elemento no está → se salta ese paso
+  card.innerHTML = '<div class="tprog">' + TUTO_PASOS.map((_, k) => '<i class="' + (k < i ? 'ok' : (k === i ? 'on' : '')) + '"></i>').join('') + '<span>' + (i + 1) + '/' + TUTO_PASOS.length + '</span></div>'
+    + '<div class="ttit">' + p.titulo + '</div><div class="ttxt">' + p.texto + '</div>'
+    + '<div class="tbtns">' + (p.fin ? '' : '<button type="button" class="tskip">Saltar tutorial</button>') + '<button type="button" class="tnext">' + (p.fin ? 'Empezar' : 'Siguiente') + '</button></div><div class="caret"></div>';
+  const sk = card.querySelector('.tskip'); if (sk) sk.onclick = () => tutoTerminar(false);
+  card.querySelector('.tnext').onclick = () => {
+    if (p.fin) return tutoTerminar(true);
+    if (p.modo === 'tap' && TUTO_TARGET) { try { TUTO_TARGET.click(); } catch(e){ tutoIr(i + 1); } return; }   // "Siguiente" hace el toque por él
+    tutoIr(i + 1);
+  };
+  spot.style.transition = 'none'; card.style.transition = 'none';                    // el salto entre pasos es seco; los ajustes finos sí se animan
+  card.style.display = 'block'; spot.style.display = 'block';
+  tutoReposicionar();
+  setTimeout(() => { spot.style.transition = ''; card.style.transition = ''; }, 60);
+  // mientras el coach esté visible se re-mide seguido (modales que suben, pantalla del chat que se desliza, teclado): nunca se queda chueco
+  if (TUTO_TIMER) clearInterval(TUTO_TIMER);
+  TUTO_TIMER = setInterval(() => { if (!TUTO) return clearInterval(TUTO_TIMER); tutoReposicionar(); }, 150);
+}
+function tutoOcultarCoach(){ try { if (TUTO_TIMER) { clearInterval(TUTO_TIMER); TUTO_TIMER = null; } const c = $a('tuto-card'); c.style.display = 'none'; c.innerHTML = ''; $a('tuto-spot').style.display = 'none'; } catch(e){} }   // se vacía: nada viejo queda tocable
+function tutoReposicionar(){
+  if (!TUTO) return;
+  const card = $a('tuto-card'), spot = $a('tuto-spot'); if (!card || !spot || card.style.display === 'none') return;
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6;
+  let r;
+  if (TUTO_TARGET) { const b = TUTO_TARGET.getBoundingClientRect(); r = { left: b.left - pad, top: b.top - pad, w: b.width + 2 * pad, h: b.height + 2 * pad }; }
+  else r = { left: vw / 2, top: vh / 2, w: 0, h: 0 };                                  // sin objetivo: solo la penumbra
+  spot.style.left = r.left + 'px'; spot.style.top = r.top + 'px'; spot.style.width = r.w + 'px'; spot.style.height = r.h + 'px';
+  spot.style.outlineWidth = TUTO_TARGET ? '2px' : '0';
+  const cw = Math.min(vw - 24, 420); card.style.width = cw + 'px';
+  const ch = card.offsetHeight;
+  const left = Math.max(12, Math.min(vw - cw - 12, TUTO_TARGET ? (r.left + r.w / 2 - cw / 2) : (vw - cw) / 2));
+  let top, caret = 'none';
+  if (!TUTO_TARGET) top = Math.max(12, (vh - ch) / 2);
+  else if (vh - (r.top + r.h) >= ch + 24) { top = r.top + r.h + 14; caret = 'top'; }
+  else if (r.top >= ch + 24) { top = r.top - ch - 14; caret = 'bottom'; }
+  else top = Math.max(12, vh - ch - 16);                                                 // objetivo enorme (el chat): flota abajo
+  top = Math.max(8, Math.min(top, vh - ch - 8));                                         // siempre dentro de la pantalla
+  card.style.left = left + 'px'; card.style.top = top + 'px';
+  const c = card.querySelector('.caret');
+  if (c) { c.className = 'caret ' + caret; c.style.display = caret === 'none' ? 'none' : 'block'; c.style.left = Math.max(14, Math.min(cw - 28, (r.left + r.w / 2) - left - 7)) + 'px'; }
+}
+// Portero de clics: durante el tutorial solo se puede tocar el elemento resaltado o la tarjeta.
+function tutoGuard(e){
+  if (!TUTO) return;
+  const card = $a('tuto-card'); if (card && card.contains(e.target)) return;
+  if (TUTO_TARGET && (TUTO_TARGET === e.target || TUTO_TARGET.contains(e.target))) return;
+  e.stopPropagation(); e.preventDefault();
+}
+function tutoBurbuja(m){
+  TUTO_N++;
+  try { insertarBurbuja(Object.assign({ timestamp: Date.now(), msg_id: 'tuto:' + TUTO_N }, m)); } catch(e){}
+}
+function tutoFoto(n){
+  const s = '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e3a6e"/><stop offset="1" stop-color="#0b1730"/></linearGradient></defs><rect width="480" height="320" rx="24" fill="url(#g)"/>'
+    + '<path d="M70 232 v-42 l48-12 l46-52 h132 l64 54 h52 v52 z" fill="#35e0b0" opacity=".92"/><path d="M175 178 l36-42 h56 v42 z M282 136 h48 l48 42 h-96 z" fill="#0b1730" opacity=".55"/>'
+    + '<circle cx="150" cy="236" r="26" fill="#0b1730"/><circle cx="150" cy="236" r="11" fill="#b8c4dc"/><circle cx="360" cy="236" r="26" fill="#0b1730"/><circle cx="360" cy="236" r="11" fill="#b8c4dc"/>'
+    + '<text x="240" y="298" text-anchor="middle" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="17" fill="#b8c4dc">BMW 330i 2021 · foto de ejemplo ' + n + '</text></svg>';
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+}
+// El chat de ejemplo se abre SIN fetch (espejo de abrirChat) y nace con el opener del asistente
+function tutoAbrirChat(){
+  TEL = TUTO_TEL; QID = null; EDITANDO = false; OBJETIVO = null; SEQ = null; SEQ_CONSUMED = false;
+  $a('obj-banner').classList.remove('show');
+  $a('c-nombre').textContent = 'Comprador de ejemplo'; $a('c-tel').textContent = '+52 1 81 000 000 00';
+  $a('c-ava').textContent = 'C'; $a('c-ava').style.background = colorDe(TUTO_TEL);
+  $a('msgs').innerHTML = ''; $a('fab').classList.remove('show'); $a('copilot').classList.remove('show'); $a('gen').classList.remove('show');
+  $a('draft').value = ''; $a('seqbox').classList.remove('show');
+  $a('scr-chat').classList.add('open');
+  pintarFoco(TUTO_AUTO);
+  setTimeout(() => { if (TUTO) tutoBurbuja({ direccion:'out', ai:1, mensaje: TUTO_OPENER() }); }, 280);
+}
+// Cada puerta real interceptada llega aquí con su `acc`; solo cuenta si es el paso en curso.
+function tutoAccion(acc){
+  const p = TUTO_PASOS[TUTO_PASO]; if (!TUTO || !p || p.acc !== acc || p.hecho) return;
+  p.hecho = true; const desde = TUTO_PASO;
+  const out = (m, ms) => setTimeout(() => { if (TUTO) tutoBurbuja(Object.assign({ direccion:'out', ai:1 }, m)); }, ms || 0);
+  let esperar = 450;
+  try {
+    if (acc === 'nuevo' || acc === 'cita') esperar = 0;
+    else if (acc === 'abrir') { tutoAbrirChat(); esperar = 0; }
+    else if (acc === 'fotos') { out({ tipo:'image', mensaje: tutoFoto(1) }); out({ tipo:'image', mensaje: tutoFoto(2) }, 380); esperar = 950; }
+    else if (acc === 'ubicacion') { out({ mensaje: '📍 Estamos en Autos Ejemplo, Av. Ejemplo 123, Monterrey. Te comparto el pin para que llegues directo:' }); out({ tipo:'location', mensaje: 'Autos Ejemplo · Av. Ejemplo 123|||25.67|||-100.31|||https://maps.google.com/?q=25.67,-100.31' }, 380); esperar = 950; }
+    else if (acc === 'cotizar') out({ mensaje: '💳 BMW 330i 2021 · $520,000\n\nEnganche 20%: $104,000\nMensualidad: $11,980 × 60 meses\nBanco: HEY Banco\n\n(cifras de ejemplo)' });
+    else if (acc === 'cita_ok') { try { cerrarCitaM(); } catch(e){} out({ mensaje: '📅 Listo, quedó tu cita para ver el BMW 330i 2021:\nMañana a las 11:00 en Autos Ejemplo.\nUn día antes te la confirmo por aquí 👍' }); }
+    else if (acc === 'aprobar') { const t = $a('draft').value; $a('copilot').classList.remove('show'); out({ mensaje: t }); }
+  } catch(e){}
+  setTimeout(() => { if (TUTO && TUTO_PASO === desde) tutoIr(desde + 1); }, esperar);
+}
+function tutoManual(){
+  try { const inp = $a('manual'); const t = (inp.value || '').trim(); if (!t) return; inp.value = ''; inp.style.height = 'auto'; tutoBurbuja({ direccion:'out', ai:0, mensaje: t }); } catch(e){}
+}
+function tutoTerminar(completo, silencioso){
+  const estaba = TUTO; TUTO = false; TUTO_PASO = -1; TUTO_TARGET = null;
+  try { if (TUTO_TIMER) { clearInterval(TUTO_TIMER); TUTO_TIMER = null; } } catch(e){}
+  try { if (TUTO_FETCH) { window.fetch = TUTO_FETCH; TUTO_FETCH = null; } } catch(e){}
+  try { document.removeEventListener('click', tutoGuard, true); window.removeEventListener('resize', tutoReposicionar); document.removeEventListener('scroll', tutoReposicionar, true); document.removeEventListener('transitionend', tutoReposicionar, true); document.removeEventListener('animationend', tutoReposicionar, true); } catch(e){}
+  try { const r = $a('tuto-root'); if (r) r.remove(); const a = $a('tuto-inicio'); if (a) a.remove(); } catch(e){}
+  // modales y promesas colgadas del flujo de mentira
+  try { if (AUTO_M.resolve) cerrarAutoM(null); } catch(e){}
+  try { if (DEMO_TEL_M.resolve) cerrarDemoTel(false); } catch(e){}
+  try { if (ENTRADA_M.resolve) cerrarEntradaM(null); } catch(e){}
+  try { cerrarCitaM(); } catch(e){}
+  try { document.querySelectorAll('.cmodal.show').forEach(m => m.classList.remove('show')); } catch(e){}
+  // el modal del teléfono de prueba vuelve a como estaba (lo usa el universo demo)
+  try { if (TUTO_ORIG) { const inp = $a('demo-tel'), hint = $a('demotelmodal').querySelector('.cmhint'), eti = inp.nextElementSibling; inp.value = TUTO_ORIG.tel; if (hint) hint.textContent = TUTO_ORIG.hint; if (eti) eti.textContent = TUTO_ORIG.eti; } TUTO_ORIG = null; } catch(e){}
+  // limpiar la UI de mentira y volver a la lista REAL
+  try { CHATS = CHATS.filter(c => !c.tuto); delete unread[TUTO_TEL]; delete lastRead[TUTO_TEL]; persistUnread(); } catch(e){}
+  try { $a('copilot').classList.remove('show'); $a('draft').value = ''; $a('c-int').textContent = ''; QID = null; EDITANDO = false; limpiarObjetivo(); } catch(e){}
+  if (!estaba) return;
+  try { if (TEL === TUTO_TEL || $a('scr-chat').classList.contains('open')) { FOCO = null; $a('msgs').innerHTML = ''; cerrarChat(); } else cargarLista(); } catch(e){}   // cerrarChat → cargarLista()
+  tutoMarcar();
+  if (!silencioso) toast(completo ? '✅ Listo. Cuando quieras verlo otra vez: Tus dispositivos → Ver tutorial' : 'Tutorial saltado. Lo ves otra vez en: Tus dispositivos → Ver tutorial', 'ok');
 }
 </script>
 </body>
