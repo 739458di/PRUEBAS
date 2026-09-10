@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#050c2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FyraChat">
+<meta name="color-scheme" content="dark">
+<title>FyraChat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a1a4a'/%3E%3Ctext x='32' y='42' font-size='30' text-anchor='middle' font-family='sans-serif' font-weight='800' fill='%23fff'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="/seb-like.webp">
+<style>
+/* ═══════════ FYRACHAT v2 — tokens ═══════════ */
+:root{
+  --bg1:#050c2a; --bg2:#0a1a4a;
+  --card:rgba(30,58,140,.34); --card2:rgba(12,28,82,.62);
+  --azul:#1f6fff; --azul2:#3a8cff; --menta:#35e0b0; --lila:#4f8bff;
+  --txt:#ffffff; --txt2:#8ea3d6; --txt3:#5f74ad;
+  --sep:rgba(120,160,255,.12); --borde:rgba(90,140,255,.28); --navy-tr:rgba(8,22,70,.55);
+  --in:#132a6b; --out:#1f5fd6; --rojo:#ff6b7a; --amar:#ffd166;
+  --font:-apple-system,BlinkMacSystemFont,"Inter","SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--txt);background:var(--bg1);background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%) fixed;overscroll-behavior:none;-webkit-font-smoothing:antialiased;display:flex;justify-content:center}
+button,input,textarea,select{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+button:disabled{cursor:default;opacity:.55}
+::placeholder{color:var(--txt3)}
+a{color:var(--azul2)}
+[hidden]{display:none !important}
+
+/* ═══════════ columna de la app (móvil primero; desktop = misma columna centrada) ═══════════ */
+#app{position:relative;width:100%;max-width:430px;height:100dvh;min-height:100svh;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%)}
+@media (min-width:640px){#app{box-shadow:0 0 0 1px rgba(90,140,255,.14),0 30px 80px rgba(0,0,0,.45)}}
+.scr{position:absolute;inset:0;display:none;flex-direction:column;min-height:0}
+.scr.on{display:flex}
+
+/* ═══════════ header ═══════════ */
+.hdr{position:relative;flex:0 0 auto;height:152px;padding:calc(14px + env(safe-area-inset-top)) 18px 0;overflow:hidden}
+.logo{font-size:13px;font-weight:800;letter-spacing:.34em;line-height:1;color:#fff}
+.logo-bar{width:70px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--menta),var(--lila));margin-top:7px}
+.univ{margin-top:16px;font-size:21px;font-weight:800;letter-spacing:-.01em;line-height:1.15;max-width:60%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.univ small{display:block;font-size:12px;font-weight:600;color:var(--txt2);margin-top:3px;letter-spacing:0}
+.univ.sk{height:24px;width:52%;border-radius:8px;background:rgba(120,160,255,.14)}
+.hdr-r{position:absolute;right:0;top:0;bottom:0;width:190px;pointer-events:none}
+.bell{position:absolute;right:146px;top:calc(12px + env(safe-area-inset-top));width:42px;height:42px;border-radius:50%;background:var(--navy-tr);border:1px solid var(--borde);display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.bell svg{width:21px;height:21px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.bell .b{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--azul);color:#fff;font-size:11.5px;font-weight:800;display:none;align-items:center;justify-content:center;border:2px solid var(--bg1)}
+.bell .b.on{display:flex}
+.seb-img{position:absolute;right:2px;top:calc(4px + env(safe-area-inset-top));height:290px;width:auto;filter:drop-shadow(0 8px 18px rgba(0,0,0,.35));user-select:none;-webkit-user-drag:none}
+
+/* ═══════════ tarjeta / superficie ═══════════ */
+.card{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;background:linear-gradient(180deg,var(--card) 0%,var(--card2) 100%);border-radius:24px 24px 0 0;border-top:1px solid rgba(120,160,255,.16);padding:16px 14px 0}
+.buscar{position:relative}
+.buscar svg{position:absolute;left:16px;top:50%;transform:translateY(-50%);width:20px;height:20px;stroke:var(--txt2);fill:none;stroke-width:2;stroke-linecap:round}
+.buscar input{width:100%;height:50px;border-radius:16px;background:var(--navy-tr);border:1px solid var(--borde);padding:0 16px 0 46px;font-size:16px;color:#dbe6ff;outline:none;transition:border-color .15s,box-shadow .15s}
+.buscar input:focus{border-color:var(--azul2);box-shadow:0 0 0 3px rgba(31,111,255,.22)}
+.pills{display:flex;gap:8px;margin:12px 0 6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex:0 0 auto;height:36px;padding:0 16px;border-radius:999px;font-size:14px;font-weight:700;color:#c9d6ff;background:var(--navy-tr);border:1px solid var(--borde);transition:background .12s,transform .08s}
+.pill:active{transform:scale(.97)}
+.pill.on{background:var(--azul);border-color:var(--azul);color:#fff;box-shadow:0 6px 18px rgba(31,111,255,.35)}
+.lista{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;margin:0 -14px;padding:0 14px calc(96px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.fila{display:flex;align-items:center;gap:14px;min-height:74px;padding:10px 4px;border-bottom:1px solid var(--sep);border-radius:12px;width:100%;text-align:left;color:inherit;transition:background .1s;outline:none;cursor:pointer;position:relative}
+.fila:hover{background:rgba(120,160,255,.06)}
+.fila:active,.fila.press{background:rgba(120,160,255,.12)}
+.fila:focus-visible{box-shadow:inset 0 0 0 2px var(--azul2)}
+.ava{flex:0 0 50px;width:50px;height:50px;border-radius:50%;background:linear-gradient(145deg,var(--azul2),var(--azul));display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:#fff;letter-spacing:0;box-shadow:0 6px 16px rgba(31,111,255,.25)}
+.ava.gh{background:linear-gradient(145deg,#5f74ad,#3b4f8f)}
+.fila .mid{flex:1;min-width:0}
+.fila .nom{font-size:17px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.fila .nom .sug{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--menta);box-shadow:0 0 8px var(--menta)}
+.fila .prev{font-size:15px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.fila .prev .tu{color:#b7c6f5}
+.fila .der{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:44px}
+.fila .hora{font-size:13px;color:var(--txt2)}
+.fila .hora.new{color:var(--azul2);font-weight:700}
+.fila .bd{min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:var(--azul);color:#fff;font-size:12px;font-weight:800;display:none;align-items:center;justify-content:center}
+.fila .bd.on{display:flex}
+.fila.sk{pointer-events:none}
+.fila.sk .ava{background:rgba(120,160,255,.14);box-shadow:none}
+.fila.sk .l1{height:14px;width:55%;border-radius:7px;background:rgba(120,160,255,.16)}
+.fila.sk .l2{height:12px;width:80%;border-radius:6px;background:rgba(120,160,255,.10);margin-top:9px}
+.vacio{padding:48px 20px;text-align:center;color:var(--txt2);font-size:15px;line-height:1.5}
+.vacio b{display:block;color:#fff;font-size:17px;margin-bottom:6px}
+.masbtn{display:block;margin:14px auto 0;color:var(--txt2);font-size:13px;font-weight:700;padding:8px 14px}
+.lista-top{display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px}
+.lista-top h3{margin:0;font-size:13px;font-weight:800;letter-spacing:.08em;color:var(--txt2);text-transform:uppercase}
+.btn-mini{height:32px;padding:0 12px;border-radius:999px;background:rgba(31,111,255,.18);border:1px solid rgba(31,111,255,.45);color:#cfe0ff;font-size:13px;font-weight:800;display:inline-flex;align-items:center;gap:5px}
+.btn-mini:active{transform:scale(.97)}
+
+/* ═══════════ barra inferior ═══════════ */
+#tabbar{position:absolute;left:0;right:0;bottom:0;z-index:20;height:calc(70px + env(safe-area-inset-bottom));padding:0 10px env(safe-area-inset-bottom);background:linear-gradient(180deg,rgba(8,20,64,.75),rgba(6,14,48,.98));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--sep);display:flex;align-items:stretch;justify-content:space-around}
+#tabbar.hide{display:none}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--txt3);font-size:11px;font-weight:700;letter-spacing:.01em;transition:color .12s}
+.tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tab.on{color:var(--azul2)}
+.tab.mas-t{position:relative}
+.tab-plus{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;font-size:11px;font-weight:700;color:var(--txt3)}
+.plus{width:60px;height:60px;border-radius:50%;margin-top:-26px;background:linear-gradient(145deg,var(--azul2),var(--azul));display:flex;align-items:center;justify-content:center;box-shadow:0 10px 28px rgba(31,111,255,.55),0 0 0 6px rgba(31,111,255,.18);border:2px solid rgba(255,255,255,.14);transition:transform .1s}
+.plus:active{transform:scale(.95)}
+.plus svg{width:28px;height:28px;stroke:#fff;stroke-width:2.6;stroke-linecap:round;fill:none}
+
+/* ═══════════ pantallas simples (autos / ventas / más) ═══════════ */
+.sub-h{flex:0 0 auto;padding:calc(14px + env(safe-area-inset-top)) 18px 12px;display:flex;align-items:flex-end;justify-content:space-between}
+.sub-h h2{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
+.sub-h .logo{margin-bottom:8px}
+.cuerpo{flex:1;min-height:0;overflow-y:auto;padding:0 14px calc(96px + env(safe-area-inset-bottom))}
+.auto-c{display:flex;gap:14px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--sep)}
+.auto-c .ph{flex:0 0 84px;width:84px;height:64px;border-radius:14px;background:var(--navy-tr);border:1px solid var(--borde);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:22px}
+.auto-c .ph img{width:100%;height:100%;object-fit:cover}
+.auto-c .nm{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.auto-c .pr{font-size:15px;color:#cfe0ff;font-weight:700;margin-top:2px}
+.auto-c .km{font-size:12.5px;color:var(--txt2);margin-top:2px}
+.est{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;border:1px solid;letter-spacing:.02em;white-space:nowrap}
+.est.activo{color:var(--menta);border-color:rgba(53,224,176,.45);background:rgba(53,224,176,.1)}
+.est.revision{color:var(--amar);border-color:rgba(255,209,102,.45);background:rgba(255,209,102,.1)}
+.est.vendido{color:var(--txt2);border-color:var(--borde);background:var(--navy-tr)}
+.pronto{padding:60px 24px;text-align:center;color:var(--txt2);font-size:15px;line-height:1.55}
+.pronto .ico{font-size:44px;margin-bottom:10px}
+.pronto b{display:block;color:#fff;font-size:18px;margin-bottom:4px}
+.opc{width:100%;display:flex;align-items:center;gap:14px;padding:16px 14px;border-radius:18px;background:var(--navy-tr);border:1px solid var(--borde);text-align:left;margin-bottom:10px;font-size:16px;font-weight:700;color:#fff;transition:transform .08s}
+.opc:active{transform:scale(.985)}
+.opc .i{width:40px;height:40px;border-radius:12px;background:rgba(31,111,255,.18);display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 40px}
+.opc small{display:block;font-size:12.5px;font-weight:500;color:var(--txt2);margin-top:2px}
+.opc.rojo{color:var(--rojo)}
+.opc .chev{margin-left:auto;color:var(--txt3)}
+
+/* ═══════════ CHAT ═══════════ */
+#scr-chat{z-index:30;background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%);transform:translateX(100%);transition:transform .22s cubic-bezier(.2,.8,.2,1);display:flex;visibility:hidden}
+#scr-chat.on{transform:none;visibility:visible}
+.ch-h{flex:0 0 auto;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;border-bottom:1px solid var(--sep);background:rgba(6,14,48,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.ch-h .l1{display:flex;align-items:center;gap:8px}
+.ch-h .back{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 40px}
+.ch-h .back svg{width:24px;height:24px;stroke:#fff;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.ch-h .ava{flex:0 0 40px;width:40px;height:40px;font-size:17px}
+.ch-h .who{flex:1;min-width:0}
+.ch-h .who b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-h .who small{display:block;font-size:12px;color:var(--txt2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{flex:0 0 auto;max-width:44%;height:34px;padding:0 10px 0 12px;border-radius:999px;background:rgba(31,111,255,.16);border:1px solid rgba(31,111,255,.5);color:#dbe6ff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip span{overflow:hidden;text-overflow:ellipsis}
+.chip.none{border-style:dashed;color:var(--txt2)}
+.chip:active{transform:scale(.97)}
+.ch-h .l2{display:flex;align-items:center;gap:8px;margin-top:6px;padding-left:4px;flex-wrap:wrap;min-height:0}
+.bot-st{height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--borde);background:var(--navy-tr);color:#cfe0ff}
+.bot-st.seb{color:var(--menta);border-color:rgba(53,224,176,.4)}
+.bot-st.humano{color:#ffd9a3;border-color:rgba(255,209,102,.4)}
+.bot-st.pausado{color:var(--txt2)}
+.ghost{height:26px;padding:0 6px 0 10px;border-radius:999px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:8px;background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.35);color:#ffe3a3}
+.ghost button{height:20px;padding:0 9px;border-radius:999px;background:var(--amar);color:#3a2a00;font-size:11.5px;font-weight:800}
+.err-line{font-size:12px;color:var(--rojo);padding:2px 4px 0;width:100%}
+.msgs{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 12px 8px;display:flex;flex-direction:column;gap:6px;-webkit-overflow-scrolling:touch;position:relative}
+.msgs .cargando{align-self:center;color:var(--txt3);font-size:12px;padding:6px 0}
+.dia{align-self:center;font-size:11.5px;font-weight:700;color:var(--txt2);background:var(--navy-tr);border:1px solid var(--sep);border-radius:999px;padding:4px 12px;margin:8px 0 4px}
+.msg{max-width:82%;padding:9px 12px 7px;border-radius:18px;font-size:15.5px;line-height:1.38;word-wrap:break-word;white-space:pre-wrap;position:relative;animation:pop .16s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+.msg.in{align-self:flex-start;background:var(--in);border-bottom-left-radius:6px;color:#eaf0ff}
+.msg.out{align-self:flex-end;background:var(--out);border-bottom-right-radius:6px;color:#fff}
+.msg.out.bot{background:#174ea8}
+.msg .meta{display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6);margin-top:3px;white-space:nowrap;user-select:none}
+.msg.in .meta{color:rgba(200,215,255,.6)}
+.msg .meta .quien{margin-right:auto;font-weight:700;color:rgba(255,255,255,.55)}
+.msg .st{font-weight:700}
+.msg .st.error{color:#ffb3bb;cursor:pointer;text-decoration:underline}
+.msg .st.entregado{color:#9fe3ff}
+.msg img.med{display:block;max-width:100%;border-radius:12px;margin:2px 0 4px}
+.msg a.med{display:inline-flex;align-items:center;gap:6px;color:#dbe6ff;font-weight:700;text-decoration:none;background:rgba(0,0,0,.18);border-radius:10px;padding:8px 10px;margin-bottom:4px}
+.msg audio{width:220px;max-width:100%;margin-bottom:4px}
+.sis{align-self:center;max-width:88%;text-align:center;font-size:12.5px;color:#b7c6f5;background:rgba(120,160,255,.08);border:1px solid var(--sep);border-radius:14px;padding:7px 12px;margin:4px 0;white-space:pre-wrap;line-height:1.35}
+.sis i{display:block;font-style:normal;font-size:10.5px;color:var(--txt3);margin-top:3px;font-weight:700;letter-spacing:.02em}
+.nuevos{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(126px + env(safe-area-inset-bottom));z-index:5;height:34px;padding:0 14px;border-radius:999px;background:var(--azul);color:#fff;font-size:13px;font-weight:800;box-shadow:0 8px 22px rgba(31,111,255,.45);display:none;align-items:center;gap:6px}
+.nuevos.on{display:flex}
+.acciones{flex:0 0 auto;display:flex;gap:8px;padding:8px 10px 0;overflow-x:auto;scrollbar-width:none}
+.acciones::-webkit-scrollbar{display:none}
+.acc{flex:0 0 auto;height:34px;padding:0 13px;border-radius:999px;background:var(--navy-tr);border:1px solid var(--borde);color:#dbe6ff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;transition:transform .08s,background .1s}
+.acc:active{transform:scale(.96);background:rgba(31,111,255,.25)}
+.acc.run{opacity:.6}
+.composer{flex:0 0 auto;display:flex;align-items:flex-end;gap:8px;padding:8px 10px calc(10px + env(safe-area-inset-bottom));background:rgba(6,14,48,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.composer textarea{flex:1;min-height:44px;max-height:132px;resize:none;border-radius:22px;background:var(--navy-tr);border:1px solid var(--borde);padding:11px 16px;font-size:16px;line-height:1.3;color:#eaf0ff;outline:none}
+.composer textarea:focus{border-color:var(--azul2)}
+.composer .send{flex:0 0 44px;width:44px;height:44px;border-radius:50%;background:var(--azul);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(31,111,255,.4);transition:transform .08s}
+.composer .send:active{transform:scale(.93)}
+.composer .send svg{width:20px;height:20px;fill:#fff;margin-left:2px}
+
+/* ═══════════ hojas (sheets) — reemplazan alert/prompt/confirm ═══════════ */
+.sh-bg{position:absolute;inset:0;z-index:60;background:rgba(2,6,24,.62);display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .18s}
+.sh-bg.on{opacity:1}
+.sh{width:100%;max-height:92%;background:linear-gradient(180deg,#10265f,#0a1a4a);border-radius:24px 24px 0 0;border-top:1px solid rgba(120,160,255,.25);display:flex;flex-direction:column;transform:translateY(24px);transition:transform .2s cubic-bezier(.2,.8,.2,1);box-shadow:0 -20px 60px rgba(0,0,0,.45)}
+.sh-bg.on .sh{transform:none}
+.sh.full{height:100%;max-height:100%;border-radius:0}
+.sh-grab{width:40px;height:4px;border-radius:2px;background:rgba(120,160,255,.35);margin:10px auto 0}
+.sh-head{display:flex;align-items:center;gap:10px;padding:12px 18px 6px}
+.sh-head b{flex:1;font-size:18px;font-weight:800;letter-spacing:-.01em}
+.sh-head .x{width:34px;height:34px;border-radius:50%;background:var(--navy-tr);border:1px solid var(--borde);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center}
+.sh-body{flex:1;min-height:0;overflow-y:auto;padding:6px 18px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.hint{font-size:13.5px;color:var(--txt2);line-height:1.45;margin:0 0 12px}
+.lbl{display:block;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);margin:14px 0 6px}
+.inp{width:100%;height:50px;border-radius:14px;background:var(--navy-tr);border:1px solid var(--borde);padding:0 14px;font-size:17px;color:#eaf0ff;outline:none}
+.inp:focus{border-color:var(--azul2);box-shadow:0 0 0 3px rgba(31,111,255,.2)}
+.inp.err{border-color:var(--rojo)}
+.inp:disabled{opacity:.6}
+textarea.inp{height:auto;min-height:96px;padding:12px 14px;resize:vertical;line-height:1.35}
+.inp[type=date],.inp[type=time]{-webkit-appearance:none;appearance:none;color-scheme:dark}
+.f-err{font-size:12.5px;color:var(--rojo);margin-top:5px;min-height:0}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips .c{height:40px;padding:0 16px;border-radius:12px;background:var(--navy-tr);border:1px solid var(--borde);color:#dbe6ff;font-size:15px;font-weight:700;transition:background .1s}
+.chips .c.on{background:var(--azul);border-color:var(--azul);color:#fff}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cta{width:100%;height:52px;border-radius:16px;background:var(--azul);color:#fff;font-size:16px;font-weight:800;margin-top:18px;box-shadow:0 10px 26px rgba(31,111,255,.4);display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .08s}
+.cta:active{transform:scale(.985)}
+.cta.sec{background:var(--navy-tr);border:1px solid var(--borde);box-shadow:none;color:#dbe6ff;margin-top:10px}
+.cta.rojo{background:#c8323f;box-shadow:0 10px 26px rgba(200,50,63,.35)}
+.cta.run::after{content:"";width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.g-err{font-size:13.5px;color:var(--rojo);margin-top:10px;line-height:1.4;white-space:pre-wrap}
+.auto-card{display:flex;align-items:center;gap:12px;padding:10px;border-radius:16px;background:var(--navy-tr);border:1px solid var(--borde)}
+.auto-card .ph{flex:0 0 64px;width:64px;height:50px;border-radius:12px;overflow:hidden;background:rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:20px}
+.auto-card .ph img{width:100%;height:100%;object-fit:cover}
+.auto-card b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.auto-card small{display:block;font-size:13px;color:#cfe0ff;font-weight:700;margin-top:2px}
+.auto-l{display:flex;flex-direction:column;gap:8px}
+.auto-l .auto-card{width:100%;text-align:left;color:inherit;cursor:pointer}
+.auto-l .auto-card.on{border-color:var(--azul2);background:rgba(31,111,255,.2)}
+.auto-l .auto-card:active{transform:scale(.99)}
+.op-l{display:flex;flex-direction:column;gap:8px}
+.op{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;border-radius:16px;background:var(--navy-tr);border:1px solid var(--borde);color:#fff;font-size:15.5px;font-weight:700;transition:transform .08s}
+.op:active{transform:scale(.99)}
+.op.on{border-color:var(--azul2);background:rgba(31,111,255,.2)}
+.op .e{font-size:20px;width:28px;text-align:center;flex:0 0 28px}
+.op small{display:block;font-size:12.5px;font-weight:500;color:var(--txt2);margin-top:2px;line-height:1.3}
+.op.rojo{color:var(--rojo)}
+.paso{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--azul2);text-transform:uppercase;margin-bottom:6px}
+.existe{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(53,224,176,.08);border:1px solid rgba(53,224,176,.35);margin-top:10px;font-size:14px}
+.existe b{display:block;font-size:14px}
+.existe small{color:var(--txt2);font-size:12.5px}
+.existe button{margin-left:auto;height:32px;padding:0 12px;border-radius:999px;background:var(--menta);color:#05301f;font-weight:800;font-size:13px}
+.fotos-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.foto{position:relative;aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:var(--navy-tr);border:1px solid var(--borde)}
+.foto img{width:100%;height:100%;object-fit:cover;display:block}
+.foto .n{position:absolute;left:6px;top:6px;min-width:20px;height:20px;border-radius:10px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 6px}
+.foto .n.p{background:var(--azul)}
+.foto .ctl{position:absolute;right:4px;bottom:4px;display:flex;gap:3px}
+.foto .ctl button{width:26px;height:26px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.foto .ok{position:absolute;inset:0;background:rgba(31,111,255,.35);display:none;align-items:center;justify-content:center;font-size:22px}
+.foto.subida .ok{display:flex}
+.add-f{aspect-ratio:4/3;border-radius:12px;border:1.5px dashed var(--borde);background:rgba(31,111,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#cfe0ff;font-size:12.5px;font-weight:700}
+.add-f svg{width:26px;height:26px;stroke:#cfe0ff;fill:none;stroke-width:2;stroke-linecap:round}
+.prog{height:8px;border-radius:4px;background:var(--navy-tr);border:1px solid var(--borde);overflow:hidden;margin-top:10px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--menta),var(--lila));transition:width .25s}
+.prog-t{font-size:12.5px;color:var(--txt2);margin-top:6px;text-align:center}
+.disp li{list-style:none;display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--sep);font-size:14px}
+.disp{padding:0;margin:0}
+.disp .nav{font-weight:700}
+.disp .fecha{font-size:12px;color:var(--txt2);margin-top:2px}
+.disp .este{margin-left:auto;font-size:11px;font-weight:800;color:var(--menta);border:1px solid rgba(53,224,176,.4);border-radius:999px;padding:3px 8px;white-space:nowrap}
+.aviso{position:absolute;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));z-index:80;background:#3a1220;border:1px solid rgba(255,107,122,.5);color:#ffd7dc;border-radius:14px;padding:10px 14px;font-size:13.5px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.4);display:none;align-items:flex-start;gap:10px}
+.aviso.on{display:flex}
+.aviso button{margin-left:auto;color:#ffd7dc;font-weight:800;font-size:16px}
+.demo-tag{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#3a2a00;background:var(--amar);border-radius:6px;padding:2px 6px;margin-left:8px;vertical-align:middle}
+
+/* ═══════════ ACCESO (mismo flujo que copilot.html, diseño navy) ═══════════ */
+#acceso{position:absolute;inset:0;z-index:100;display:none;flex-direction:column;justify-content:center;padding:32px 26px calc(32px + env(safe-area-inset-bottom));background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%)}
+#acceso.on{display:flex}
+#acceso .logo{margin-bottom:0}
+#acceso h2{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:28px 0 8px}
+#acceso p{font-size:15px;color:var(--txt2);line-height:1.5;margin:0 0 18px}
+#acceso .inp{height:56px;font-size:22px;letter-spacing:.06em;text-align:center}
+#acceso .cta{margin-top:14px}
+#acceso .liga{display:block;margin:18px auto 0;color:var(--azul2);font-weight:700;font-size:14px}
+#acceso .err{color:var(--rojo);font-size:13.5px;margin-top:10px;min-height:18px;line-height:1.4}
+#acc-demo1,#acc-demo{display:none;margin-top:10px;font-size:13px;font-weight:700;color:var(--amar)}
+#acceso .seb-acc{position:absolute;right:-10px;bottom:-30px;height:260px;opacity:.9;pointer-events:none}
+
+/* ═══════════ PRIMERA VEZ: agrégalo a tu inicio ═══════════ */
+#tuto{position:absolute;inset:0;z-index:90;display:none;flex-direction:column;padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%);overflow-y:auto}
+#tuto.on{display:flex}
+#tuto h2{font-size:28px;font-weight:800;letter-spacing:-.02em;margin:22px 0 8px;line-height:1.1}
+#tuto p{font-size:15px;color:var(--txt2);line-height:1.5;margin:0 0 16px}
+#tuto .pl{display:flex;gap:8px;margin-bottom:14px}
+#tuto .paso-i{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--sep);font-size:15px;line-height:1.45}
+#tuto .paso-i .n{flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:var(--azul);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+#tuto .fin{margin-top:auto;padding-top:22px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══════ ACCESO ═══════ -->
+  <div id="acceso">
+    <div class="logo">FYRADRIVE</div><div class="logo-bar"></div>
+    <div id="acc-p1">
+      <h2>Entra a tu FyraChat</h2>
+      <p>Escribe el WhatsApp que vinculaste. Te mandamos un código de 6 dígitos a ese mismo WhatsApp.</p>
+      <input id="acc-tel" class="inp" inputmode="numeric" maxlength="12" placeholder="10 dígitos" autocomplete="tel">
+      <button class="cta" onclick="accPedir()">Mandarme el código</button>
+      <div id="acc-demo1">Modo prueba: usuario PRUEBAS# (8888888888). No llega ningún WhatsApp.</div>
+      <div class="err" id="acc-err1"></div>
+    </div>
+    <div id="acc-p2" style="display:none">
+      <h2>Escribe el código</h2>
+      <p id="acc-sub">Te llegó a tu WhatsApp. Vence en 3 minutos.</p>
+      <input id="acc-cod" class="inp" inputmode="numeric" maxlength="7" placeholder="000 000" autocomplete="one-time-code">
+      <div id="acc-demo">Modo prueba: usa el código 000 000</div>
+      <button class="cta" onclick="accEntrar()">Entrar</button>
+      <div class="err" id="acc-err2"></div>
+      <button class="liga" onclick="accVolver()">Pedir otro código</button>
+    </div>
+  </div>
+
+  <!-- ═══════ PRIMERA VEZ ═══════ -->
+  <div id="tuto">
+    <div class="logo">FYRADRIVE</div><div class="logo-bar"></div>
+    <h2>Agrégalo a tu inicio</h2>
+    <p>Así tu FyraChat queda como una app: un toque y abre, sin buscar el link.</p>
+    <div class="pl chips">
+      <button class="c" data-pl="ios" onclick="tutoPlataforma('ios')">iPhone</button>
+      <button class="c" data-pl="android" onclick="tutoPlataforma('android')">Android</button>
+      <button class="c" data-pl="pc" onclick="tutoPlataforma('pc')">Computadora</button>
+    </div>
+    <div id="tuto-pasos"></div>
+    <div class="fin">
+      <button class="cta" onclick="tutoListo()">Listo, ya lo tengo</button>
+      <button class="cta sec" onclick="tutoListo()">Después</button>
+    </div>
+  </div>
+
+  <!-- ═══════ INICIO (lista) ═══════ -->
+  <div class="scr on" id="scr-inicio">
+    <div class="hdr">
+      <div class="logo">FYRADRIVE</div><div class="logo-bar"></div>
+      <div class="univ sk" id="univ"></div>
+      <div class="hdr-r">
+        <button class="bell" id="bell" aria-label="No leídos" onclick="bellClick()">
+          <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          <span class="b" id="bell-b">0</span>
+        </button>
+        <img class="seb-img" src="/seb-like.webp" alt="" draggable="false">
+      </div>
+    </div>
+    <div class="card">
+      <div class="buscar">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Buscar conversaciones" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+      </div>
+      <div class="pills" id="pills">
+        <button class="pill on" data-f="todos" onclick="setFiltro('todos')">Todos</button>
+        <button class="pill" data-f="sugerencia" onclick="setFiltro('sugerencia')">Con sugerencia</button>
+        <button class="pill" data-f="compradores" onclick="setFiltro('compradores')">Compradores</button>
+      </div>
+      <div class="lista-top">
+        <h3 id="lista-titulo">Conversaciones</h3>
+        <button class="btn-mini" onclick="abrirNuevoComprador()">＋ comprador</button>
+      </div>
+      <div class="lista" id="lista"></div>
+    </div>
+  </div>
+
+  <!-- ═══════ AUTOS ═══════ -->
+  <div class="scr" id="scr-autos">
+    <div class="sub-h"><div><div class="logo">FYRADRIVE</div><div class="logo-bar"></div><h2 style="margin-top:14px">Autos</h2></div><button class="btn-mini" onclick="abrirSubirAuto()">＋ Subir auto</button></div>
+    <div class="cuerpo" id="autos-lista"></div>
+  </div>
+
+  <!-- ═══════ VENTAS ═══════ -->
+  <div class="scr" id="scr-ventas">
+    <div class="sub-h"><div><div class="logo">FYRADRIVE</div><div class="logo-bar"></div><h2 style="margin-top:14px">Ventas</h2></div></div>
+    <div class="cuerpo"><div class="pronto"><div class="ico">📈</div><b>Pronto</b>Aquí verás tus ventas y citas cerradas.</div></div>
+  </div>
+
+  <!-- ═══════ MÁS ═══════ -->
+  <div class="scr" id="scr-mas">
+    <div class="sub-h"><div><div class="logo">FYRADRIVE</div><div class="logo-bar"></div><h2 style="margin-top:14px">Más</h2></div></div>
+    <div class="cuerpo" id="mas-cuerpo"></div>
+  </div>
+
+  <!-- ═══════ CHAT ═══════ -->
+  <div class="scr" id="scr-chat">
+    <div class="ch-h">
+      <div class="l1">
+        <button class="back" onclick="cerrarChat()" aria-label="Volver"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="ava" id="ch-ava">?</div>
+        <div class="who"><b id="ch-nombre">—</b><small id="ch-tel"></small></div>
+        <button class="chip none" id="ch-chip" onclick="abrirSelectorAuto()"><span>Elegir auto</span> ▾</button>
+      </div>
+      <div class="l2" id="ch-l2"></div>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <button class="nuevos" id="nuevos" onclick="irAlFondo(true)">Nuevos mensajes ↓</button>
+    <div class="acciones" id="acciones">
+      <button class="acc" data-acc="cotizar" onclick="abrirCotizar()">💰 Cotizar</button>
+      <button class="acc" data-acc="cita" onclick="abrirCita()">📅 Agendar cita</button>
+      <button class="acc" onclick="abrirSelectorAuto()">🚗 Auto ▾</button>
+      <button class="acc" onclick="abrirMasAcciones()">•••</button>
+    </div>
+    <div class="composer">
+      <textarea id="tx" rows="1" placeholder="Escribe un mensaje…" enterkeyhint="send"></textarea>
+      <button class="send" id="send" aria-label="Enviar" onmousedown="event.preventDefault()" ontouchend="event.preventDefault();enviarTexto()" onclick="enviarTexto()"><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- ═══════ BARRA INFERIOR ═══════ -->
+  <nav id="tabbar">
+    <button class="tab on" data-t="inicio" onclick="irTab('inicio')"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>Inicio</button>
+    <button class="tab" data-t="autos" onclick="irTab('autos')"><svg viewBox="0 0 24 24"><path d="M5 16l1.5-5.5a2 2 0 0 1 1.9-1.5h7.2a2 2 0 0 1 1.9 1.5L19 16"/><path d="M4 16h16v3H4z"/><circle cx="7.5" cy="19.5" r="1.5"/><circle cx="16.5" cy="19.5" r="1.5"/></svg>Autos</button>
+    <button class="tab-plus" onclick="abrirSubirAuto()" aria-label="Subir auto"><span class="plus"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Subir</button>
+    <button class="tab" data-t="ventas" onclick="irTab('ventas')"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 16l4-5 3 3 5-7"/></svg>Ventas</button>
+    <button class="tab" data-t="mas" onclick="irTab('mas')"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Más</button>
+  </nav>
+
+  <div class="aviso" id="aviso"><span id="aviso-t"></span><button onclick="ocultarAviso()" aria-label="Cerrar">×</button></div>
+</div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════════════════
+   FYRACHAT v2 — front (2026-09-10). Codifica CONTRA docs/fyrachat-v2-contrato-2026-09-10.md.
+   La UI nunca decide el destino: manda chat_id + clave; el servidor resuelve.
+   Sin alert/prompt/confirm; sin toasts de éxito (la burbuja es la confirmación).
+   ════════════════════════════════════════════════════════════════════════ */
+const API = '/api/seb-panel';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+const clave = (acc, chatId) => acc + ':' + (chatId || '-') + ':' + uuid();
+const ms = (ts) => { ts = Number(ts) || 0; return ts && ts < 1e12 ? ts * 1000 : ts; };
+const DEMO_TEL = '5210000000009';
+const HOVER = !!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches);
+
+// ══════════ SESIÓN / ACCESO — copiado tal cual de copilot.html (acciones acceso_*, cookie fyra_v) ══════════
+let VEND = (new URLSearchParams(location.search).get('vendedor') || '').trim();
+let SESION = null;   // { tenant:{id,nombre,telefono,demo}, maestra, staff }
+let T0 = false;      // la maestra / STAFF pidió el FyraChat de Fyradrive (tenant 0 clásico) con ?vendedor=0
+const VPARAM = () => VEND || (T0 ? '0' : undefined);
+const vendQS = () => VPARAM() != null ? '&vendedor=' + encodeURIComponent(VPARAM()) : '';
+let TENANT = null;   // { id, nombre, telefono, demo, autos[] }
+const $a = $;
+async function accPedir(){
+  const tel = ($a('acc-tel').value || '').replace(/\D/g,''); $a('acc-err1').textContent = '';
+  if (tel.length < 10) { $a('acc-err1').textContent = 'Son 10 dígitos.'; return; }
+  const r = await fetch(API+'?action=acceso_pedir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err1').textContent = r.error || 'No se pudo.'; return; }
+  sessionStorage.setItem('acc_tel', tel); $a('acc-sub').textContent = 'Te llegó a tu WhatsApp ' + (r.tel_mascara || '') + '. Vence en ' + (r.vida_min || 3) + ' minutos.';
+  $a('acc-p1').style.display = 'none'; $a('acc-p2').style.display = ''; setTimeout(() => $a('acc-cod').focus(), 50);
+}
+async function accEntrar(){
+  const tel = sessionStorage.getItem('acc_tel') || ''; const cod = ($a('acc-cod').value || '').replace(/\D/g,''); $a('acc-err2').textContent = '';
+  if (cod.length !== 6) { $a('acc-err2').textContent = 'Son 6 dígitos.'; return; }
+  const r = await fetch(API+'?action=acceso_entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel, codigo: cod})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err2').textContent = r.error || 'No se pudo.'; return; }
+  location.replace('/fyrachat.html?bienvenida=1');
+}
+function accVolver(){ $a('acc-p2').style.display = 'none'; $a('acc-p1').style.display = ''; }
+function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search);
+  // MODO PRUEBA: ?demo=1 → teléfono del usuario PRUEBAS# prellenado + leyenda del código fijo (solo vale para ese tenant)
+  if (q.get('demo') === '1') { $a('acc-tel').value = '8888888888'; $a('acc-demo1').style.display = 'block'; $a('acc-demo').style.display = 'block'; }
+  const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
+async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/fyrachat.html'); }
+function fechaCorta(x){ try { return new Date(ms(x)).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
+async function abrirDispositivos(){
+  const sh = sheet({ titulo:'Tus dispositivos', html:'<ul class="disp" id="disp-lista"><li>Cargando…</li></ul><button class="cta rojo" id="disp-cerrar">Cerrar todas las sesiones</button>' });
+  sh.body.querySelector('#disp-cerrar').onclick = () => cerrarTodasSesiones(sh);
+  const r = await fetch(API+'?action=acceso_sesiones').then(x=>x.json()).catch(()=>({ok:false}));
+  const ul = sh.body.querySelector('#disp-lista'); if (!ul) return;
+  if (!r.ok) { ul.innerHTML = '<li>No pude leer tus sesiones.</li>'; return; }
+  const ses = r.sesiones || [];
+  ul.innerHTML = ses.length ? ses.map(x => '<li><div><div class="nav">' + esc(x.navegador || 'Navegador') + '</div><div class="fecha">Entró ' + esc(fechaCorta(x.creada)) + ' · último uso ' + esc(fechaCorta(x.ultimo_uso)) + (x.ip_mascara ? ' · ' + esc(x.ip_mascara) : '') + '</div></div>' + (x.actual ? '<span class="este">este dispositivo</span>' : '') + '</li>').join('') : '<li>Sin sesiones abiertas.</li>';
+}
+async function cerrarTodasSesiones(shPadre){
+  const ok = await confirmar({ titulo:'¿Cerrar TODAS las sesiones?', texto:'Se cierra tu FyraChat en todos los dispositivos (incluido este). Para volver a entrar pedirás un código.', ok:'Cerrar todas', peligro:true });
+  if (!ok) return;
+  await fetch(API+'?action=acceso_cerrar_todas',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{});
+  location.replace('/fyrachat.html');
+}
+async function cargarTenant(){
+  const qs = new URLSearchParams(location.search);
+  try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; window.__desv = !!(yo && yo.desvinculado); } catch(e){ SESION = null; }
+  if (!SESION && window.__desv) { mostrarAcceso('Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.'); return false; }
+  // 'entrar' = pantalla de código. Si ya hay sesión de OTRO número (p. ej. la maestra probando el simulador), se cierra esa sesión primero.
+  if (VEND === 'entrar') {
+    const telQ = (qs.get('tel') || '').replace(/\D/g, '');
+    const otroNumero = SESION && telQ && !String(SESION.tenant.telefono || '').endsWith(telQ);
+    const quiereDemo = SESION && qs.get('demo') === '1' && !(SESION.tenant && SESION.tenant.demo);   // simulador: nunca abrir el universo real de quien ya tenía sesión
+    if (otroNumero || quiereDemo) { try { await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); } catch(e){} SESION = null; }
+    VEND = '';
+  }
+  if (!SESION) { mostrarAcceso(qs.get('aviso') || ''); return false; }          // SIN SESIÓN NO HAY UNIVERSO
+  if (VEND === '0' && (SESION.maestra || SESION.staff)) { VEND = ''; T0 = true; }   // maestra / STAFF pidiendo el FyraChat de Fyradrive (clásico)
+  else if (!SESION.maestra || !VEND) VEND = String(SESION.tenant.id);          // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
+  // tenant provisional desde la sesión (pinta el header al instante); tenant_info lo completa con autos
+  TENANT = Object.assign({ id: 0, nombre: '', telefono: '', demo: false, autos: [] }, SESION.tenant || {});
+  if (T0) TENANT = { id: 0, nombre: 'Fyradrive', telefono: '', demo: false, autos: [] };
+  pintarUniverso();
+  if (qs.get('bienvenida')) history.replaceState(null, '', location.pathname + (qs.get('demo') === '1' ? '?demo=1' : ''));
+  return true;
+}
+async function cargarTenantInfo(){
+  const d = await apiGet('tenant_info', {});
+  if (!d.ok) { avisoError(d.error || 'Este link no corresponde a un vendedor dado de alta'); return; }
+  TENANT = Object.assign({}, TENANT, d.tenant, { autos: d.autos || [], sesion: d.sesion || null });
+  if (TENANT.demo) { document.body.classList.add('demo'); document.title = 'FyraChat · PRUEBAS# · MODO PRUEBA'; }
+  pintarUniverso();
+  if (!TENANT.demo && !T0 && (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado')) avisoError('Tu WhatsApp aún no está vinculado al asistente. Vincúlalo en fyradrive.com/seb.');
+}
+function pintarUniverso(){
+  const el = $('univ'); if (!TENANT) return;
+  const telV = String(TENANT.telefono || '').replace(/\D/g, '');
+  const telFmt = telV.length === 13 ? ('+' + telV.slice(0, 2) + ' ' + telV.slice(3, 6) + ' ' + telV.slice(6, 9) + ' ' + telV.slice(9)) : (telV ? '+' + telV : '');
+  el.classList.remove('sk');
+  el.innerHTML = esc(TENANT.nombre || telFmt || 'Mi universo') + (TENANT.demo ? '<span class="demo-tag">PRUEBA</span>' : '') + (telFmt && TENANT.nombre ? '<small>' + esc(telFmt) + '</small>' : '');
+  el.title = TENANT.nombre || '';
+}
+
+// ══════════ API — nunca más de 1 request en vuelo por acción (INFLIGHT por clave/llave) ══════════
+const INFLIGHT = new Map();
+function correr(key, fn){ if (INFLIGHT.has(key)) return INFLIGHT.get(key); const p = Promise.resolve().then(fn).finally(() => INFLIGHT.delete(key)); INFLIGHT.set(key, p); return p; }
+async function apiGet(action, params){
+  const u = API + '?action=' + action + (params ? '&' + new URLSearchParams(params).toString() : '') + vendQS();
+  try { const r = await fetch(u, { credentials: 'same-origin' }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); return j; }
+  catch (e) { return { ok: false, error: 'Sin conexión' }; }
+}
+async function apiPost(action, body){
+  const b = Object.assign({}, body || {}, { action }); if (VPARAM() != null) b.vendedor = VPARAM();
+  try { const r = await fetch(API + '?action=' + action + vendQS(), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); return j; }
+  catch (e) { return { ok: false, error: 'Sin conexión' }; }
+}
+let SES_CAIDA = false;
+function sesionCaida(){ if (SES_CAIDA) return; SES_CAIDA = true; try { if (WS) WS.close(); } catch(e){} mostrarAcceso('Tu sesión terminó. Vuelve a entrar.'); }
+// error inline (nunca toasts de éxito; los errores sí se dicen, sin alert)
+let AVISO_T = null;
+function avisoError(txt){ const a = $('aviso'); $('aviso-t').textContent = txt; a.classList.add('on'); clearTimeout(AVISO_T); AVISO_T = setTimeout(ocultarAviso, 6000); }
+function ocultarAviso(){ $('aviso').classList.remove('on'); }
+const textoEnviado = (r, porDefecto) => (r && typeof r.enviado === 'string' && r.enviado.trim()) ? r.enviado : porDefecto;
+
+// ══════════ HOJAS (sheets) ══════════
+const SHEETS = [];
+function sheet({ titulo, html, full, alCerrar }){
+  const bg = document.createElement('div'); bg.className = 'sh-bg';
+  bg.innerHTML = '<div class="sh' + (full ? ' full' : '') + '" role="dialog" aria-modal="true">' + (full ? '' : '<div class="sh-grab"></div>') + '<div class="sh-head"><b>' + esc(titulo || '') + '</b><button class="x" aria-label="Cerrar">✕</button></div><div class="sh-body">' + (html || '') + '</div></div>';
+  $('app').appendChild(bg);
+  const s = { el: bg, body: bg.querySelector('.sh-body'), head: bg.querySelector('.sh-head'), cerrada: false, alCerrar: alCerrar || null, cerrar(){ if (s.cerrada) return; s.cerrada = true; bg.classList.remove('on'); setTimeout(() => bg.remove(), 200); const i = SHEETS.indexOf(s); if (i >= 0) SHEETS.splice(i, 1); if (s.alCerrar) s.alCerrar(); } };
+  bg.querySelector('.x').onclick = s.cerrar;
+  bg.addEventListener('click', (e) => { if (e.target === bg) s.cerrar(); });
+  void bg.offsetHeight; bg.classList.add('on');   // reflow forzado → la transición corre aunque la pestaña esté oculta
+  SHEETS.push(s); return s;
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && SHEETS.length) SHEETS[SHEETS.length - 1].cerrar(); });
+function confirmar({ titulo, texto, ok, peligro }){
+  return new Promise(res => {
+    const s = sheet({ titulo, html: '<p class="hint">' + esc(texto || '') + '</p><button class="cta' + (peligro ? ' rojo' : '') + '" id="cf-ok">' + esc(ok || 'Sí') + '</button><button class="cta sec" id="cf-no">Cancelar</button>', alCerrar: () => res(false) });
+    s.body.querySelector('#cf-ok').onclick = () => { res(true); s.alCerrar = null; s.cerrar(); };
+    s.body.querySelector('#cf-no').onclick = () => s.cerrar();
+  });
+}
+// botón bloqueado mientras corre (<100 ms de feedback: se marca ANTES del await)
+function bloquear(btn, on){ if (!btn) return; btn.disabled = !!on; btn.classList.toggle('run', !!on); }
+
+// ══════════ TABS ══════════
+let TAB = 'inicio';
+function irTab(t){
+  TAB = t; document.querySelectorAll('#tabbar .tab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  ['inicio', 'autos', 'ventas', 'mas'].forEach(x => $('scr-' + x).classList.toggle('on', x === t));
+  if (t === 'autos') cargarAutos(); if (t === 'mas') pintarMas();
+}
+function pintarMas(){
+  const c = $('mas-cuerpo'); if (!TENANT) return;
+  let h = '';
+  h += '<div class="opc" style="cursor:default"><div class="i">👤</div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(TENANT.nombre || 'Mi universo') + '</div><small>Universo ' + esc(TENANT.id) + (TENANT.telefono ? ' · +' + esc(String(TENANT.telefono).replace(/\D/g, '')) : '') + (TENANT.demo ? ' · MODO PRUEBA' : '') + '</small></div></div>';
+  h += '<button class="opc" onclick="abrirDispositivos()"><div class="i">📱</div><div>Tus dispositivos<small>Dónde está abierto tu FyraChat</small></div><span class="chev">›</span></button>';
+  if (TENANT.demo) h += '<button class="opc" onclick="reiniciarPrueba()"><div class="i">↺</div><div>Reiniciar prueba<small>Borra todo el universo de prueba (nada real se toca)</small></div><span class="chev">›</span></button>';
+  h += '<button class="opc" style="opacity:.55;cursor:default"><div class="i">⚙️</div><div>Ajustes<small>Pronto</small></div></button>';
+  h += '<button class="opc" style="opacity:.55;cursor:default"><div class="i">🎓</div><div>Tutorial<small>Pronto</small></div></button>';
+  h += '<button class="opc rojo" onclick="accSalir()"><div class="i">🚪</div><div>Salir</div></button>';
+  c.innerHTML = h;
+}
+async function reiniciarPrueba(){
+  const ok = await confirmar({ titulo:'¿Reiniciar la prueba?', texto:'Se borran TODOS los chats, delegaciones y mensajes del universo de prueba. Nada real se toca.', ok:'Reiniciar', peligro:true });
+  if (!ok) return;
+  const r = await apiPost('demo_reset', {});
+  if (!r.ok) return avisoError('No se pudo: ' + (r.error || ''));
+  HILOS.clear(); cerrarChat(); AUTOS = null; await cargarInbox({ reset: true }); irTab('inicio');
+}
+
+// ══════════ INBOX (lista) — cache en memoria, diff por chat_id, cursor, búsqueda en servidor ══════════
+const INBOX = { rows: new Map(), cursor: null, fin: false, q: '', filtro: 'todos', gen: 0, cargado: false, cargando: false };
+function skeleton(){ $('lista').innerHTML = Array.from({ length: 7 }, () => '<div class="fila sk"><div class="ava"></div><div class="mid"><div class="l1"></div><div class="l2"></div></div></div>').join(''); }
+function horaCorta(ts){
+  const t = ms(ts); if (!t) return ''; const d = new Date(t), h = new Date();
+  const mismoDia = d.toDateString() === h.toDateString();
+  if (mismoDia) return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const ayer = new Date(h); ayer.setDate(h.getDate() - 1); if (d.toDateString() === ayer.toDateString()) return 'Ayer';
+  if (h - d < 6 * 864e5) return d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '');
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' });
+}
+function iniDe(c){ const n = String(c.ini || c.nombre || '').trim(); if (n && /^[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(n)) return n[0].toUpperCase(); return '#'; }
+function previewDe(c){
+  const t = String(c.ult_texto || '').replace(/\s+/g, ' ').trim();
+  const mio = c.ult_dir === 'out';
+  const quien = mio ? (c.ult_emisor === 'bot' || c.ult_emisor === 'asistente' ? 'Seb: ' : 'Tú: ') : '';
+  return (quien ? '<span class="tu">' + esc(quien) + '</span>' : '') + esc(t || (c.delegado ? 'Conversación delegada' : 'Sin mensajes'));
+}
+function filaHTML(c){
+  return '<div class="ava' + (c.ghost_dias >= 1 ? ' gh' : '') + '">' + esc(iniDe(c)) + '</div>' +
+    '<div class="mid"><div class="nom"><span class="nomt">' + esc(c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''))) + '</span>' + (c.sugerencia ? '<span class="sug" title="Con sugerencia"></span>' : '') + '</div><div class="prev">' + previewDe(c) + '</div></div>' +
+    '<div class="der"><span class="hora' + (c.no_leidos > 0 ? ' new' : '') + '">' + esc(horaCorta(c.ult_ts)) + '</span><span class="bd' + (c.no_leidos > 0 ? ' on' : '') + '">' + (c.no_leidos > 99 ? '99+' : (c.no_leidos || 0)) + '</span></div>';
+}
+function crearFila(c){
+  const el = document.createElement('div'); el.className = 'fila'; el.tabIndex = 0; el.setAttribute('role', 'button'); el.dataset.id = c.chat_id;
+  el.innerHTML = filaHTML(c);
+  el.onclick = () => abrirChat(c.chat_id);
+  el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirChat(c.chat_id); } };
+  el.onpointerdown = () => el.classList.add('press'); el.onpointerup = el.onpointercancel = el.onpointerleave = () => el.classList.remove('press');
+  if (HOVER) el.onmouseenter = () => { const h = HILOS.get(c.chat_id); if (!h || !h.cargado) cargarHilo(c.chat_id, { previo: true }).catch(() => {}); };   // prefetch del hilo al hover (desktop)
+  return el;
+}
+function pintarFila(c, { arriba } = {}){
+  const lista = $('lista'); let el = lista.querySelector('.fila[data-id="' + CSS.escape(String(c.chat_id)) + '"]');
+  if (el) { el.innerHTML = filaHTML(c); if (arriba && el !== lista.firstElementChild) lista.prepend(el); }
+  else { el = crearFila(c); const v = lista.querySelector('.vacio'); if (v) v.remove(); if (arriba) lista.prepend(el); else { const m = lista.querySelector('.masbtn'); if (m) lista.insertBefore(el, m); else lista.appendChild(el); } }
+  return el;
+}
+function pintarBell(){ let n = 0; INBOX.rows.forEach(c => { n += Number(c.no_leidos) || 0; }); const b = $('bell-b'); b.textContent = n > 99 ? '99+' : n; b.classList.toggle('on', n > 0); }
+function bellClick(){ irTab('inicio'); setFiltro('todos'); $('lista').scrollTo({ top: 0, behavior: 'smooth' }); }
+async function cargarInbox({ reset, mas } = {}){
+  if (reset) { INBOX.gen++; INBOX.cursor = null; INBOX.fin = false; INBOX.rows.clear(); if (!INBOX.cargado || $('lista').children.length === 0) skeleton(); }
+  if (mas && (INBOX.fin || !INBOX.cursor)) return;
+  const gen = INBOX.gen;
+  return correr('inbox', async () => {
+    const params = { limit: 40 }; if (INBOX.q) params.q = INBOX.q; if (INBOX.filtro && INBOX.filtro !== 'todos') params.filtro = INBOX.filtro; else params.filtro = 'todos'; if (mas && INBOX.cursor) params.cursor = INBOX.cursor;
+    const r = await apiGet('inbox', params);
+    if (gen !== INBOX.gen) return;   // llegó tarde: ya hay otra búsqueda/filtro
+    if (!r.ok) { if (!mas) $('lista').innerHTML = '<div class="vacio"><b>No pude cargar</b>' + esc(r.error || '') + '<br><button class="masbtn" onclick="cargarInbox({reset:true})">Reintentar</button></div>'; return; }
+    const lista = $('lista');
+    if (!mas) lista.innerHTML = '';
+    const viejo = lista.querySelector('.masbtn'); if (viejo) viejo.remove();
+    (r.chats || []).forEach(c => { INBOX.rows.set(c.chat_id, c); pintarFila(c); });
+    INBOX.cursor = r.cursor_next || null; INBOX.fin = !INBOX.cursor; INBOX.cargado = true;
+    if (!INBOX.rows.size) lista.innerHTML = '<div class="vacio"><b>' + (INBOX.q ? 'Nada con “' + esc(INBOX.q) + '”' : 'Aún no hay conversaciones') + '</b>' + (INBOX.q ? 'Prueba con otro nombre o teléfono.' : 'Toca “＋ comprador” para delegar el primero.') + '</div>';
+    else if (!INBOX.fin) { const b = document.createElement('button'); b.className = 'masbtn'; b.textContent = 'Cargar más'; b.onclick = () => cargarInbox({ mas: true }); lista.appendChild(b); }
+    pintarBell();
+  });
+}
+let Q_T = null;
+$('q').addEventListener('input', () => { clearTimeout(Q_T); Q_T = setTimeout(() => { const v = $('q').value.trim(); if (v === INBOX.q) return; INBOX.q = v; cargarInbox({ reset: true }); }, 250); });
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('q').blur(); } });
+function setFiltro(f){ document.querySelectorAll('#pills .pill').forEach(p => p.classList.toggle('on', p.dataset.f === f)); if (f === INBOX.filtro) return; INBOX.filtro = f; cargarInbox({ reset: true }); }
+$('lista').addEventListener('scroll', () => { const l = $('lista'); if (l.scrollHeight - l.scrollTop - l.clientHeight < 240 && !INBOX.fin && INBOX.cursor && !INFLIGHT.has('inbox')) cargarInbox({ mas: true }); }, { passive: true });
+// una fila que no conocemos (timbre de un chat nuevo): pedimos SOLO la cabecera del hilo sin marcar leído (antes en el futuro, limit 1)
+async function filaDesdeServidor(chatId){
+  const r = await apiGet('hilo', { chat_id: chatId, antes: Date.now() + 1000, limit: 1 });
+  if (!r.ok || !r.chat) return null;
+  const ch = r.chat, ml = r.mensajes || [], m = ml.length ? ml[ml.length - 1] : null;
+  const c = { chat_id: ch.chat_id || chatId, telefono: ch.telefono, nombre: ch.nombre, ini: ch.ini, ult_texto: m ? textoDe(m) : '', ult_dir: m ? m.dir : 'in', ult_emisor: m ? m.emisor : '', ult_ts: m ? m.ts : Date.now(), no_leidos: Number(ch.no_leidos) || 0, sugerencia: false, delegado: !!ch.delegado, auto: ch.auto || null, bot: ch.bot || 'n/a', ghost_dias: ch.ghost_dias == null ? null : ch.ghost_dias };
+  INBOX.rows.set(c.chat_id, c); const h = hiloDe(c.chat_id); h.chat = ch; return c;
+}
+
+// ══════════ HILOS (cache por chat_id con ULT_TS) ══════════
+const HILOS = new Map();
+function hiloDe(id){ if (!HILOS.has(id)) HILOS.set(id, { id, chat: null, msgs: [], keys: new Set(), hay_mas: true, ult_ts: 0, cargado: false, leido: false }); return HILOS.get(id); }
+const keyDe = (m) => m.id != null && m.id !== '' ? 'id:' + m.id : (m.msg_id ? 'mid:' + m.msg_id : (m.local ? 'l:' + m.local : 'x:' + (m.ts || 0) + ':' + String(m.texto || '').slice(0, 40)));
+function textoDe(m){ if (m.texto) return m.texto; if (m.media) return m.media.tipo === 'imagen' ? '📷 Foto' : m.media.tipo === 'ubicacion' ? '📍 Ubicación' : m.media.tipo === 'audio' ? '🎤 Audio' : '📎 Archivo'; return ''; }
+function mezclar(h, mensajes){
+  const nuevos = [];
+  for (const m of (mensajes || [])) {
+    const k = keyDe(m);
+    if (h.keys.has(k)) { if (m.dir === 'out' && m.emisor !== 'sistema') { const ya = h.msgs.find(x => keyDe(x) === k || (m.id != null && x.id === m.id)); if (ya && ya.estado !== 'entregado' && ya.estado !== 'error') { ya.estado = 'entregado'; nuevos.push(Object.assign(ya, { _eco: true })); } } continue; }
+    // ECO de un optimista mío (mismo texto saliente, <60 s): adopta el id del servidor en vez de duplicar
+    if (m.dir === 'out' && m.emisor !== 'sistema') { const op = h.msgs.find(x => x.local && x.estado !== 'error' && x.texto === m.texto && Math.abs(ms(m.ts) - ms(x.ts)) < 60000 && !x.id); if (op) { op.id = m.id; op.msg_id = m.msg_id; op.estado = 'entregado'; h.keys.add(k); nuevos.push(Object.assign(op, { _eco: true })); continue; } }
+    h.keys.add(k); h.msgs.push(m); nuevos.push(m);
+    if (ms(m.ts) > h.ult_ts) h.ult_ts = ms(m.ts);
+  }
+  h.msgs.sort((a, b) => ms(a.ts) - ms(b.ts));
+  return nuevos;
+}
+async function cargarHilo(id, opts = {}){
+  const h = hiloDe(id);
+  return correr('hilo:' + id, async () => {
+    const params = { chat_id: id, limit: 40 };
+    if (opts.previo) params.antes = Date.now() + 1000;                 // prefetch: sin marcar leído
+    else if (h.cargado && h.ult_ts) params.desde = h.ult_ts;           // ya tengo el hilo: pido solo lo nuevo (si el servidor ignora `desde`, el merge dedup lo resuelve)
+    const r = await apiGet('hilo', params);
+    if (!r.ok) return r;
+    if (r.chat) { h.chat = r.chat; sincronizarFilaConChat(r.chat); }
+    if (!h.cargado) { h.hay_mas = !!r.hay_mas; }
+    const nuevos = mezclar(h, r.mensajes || []);
+    h.cargado = true;
+    if (!opts.previo) { h.leido = true; const c = INBOX.rows.get(id); if (c && c.no_leidos) { c.no_leidos = 0; pintarFila(c); pintarBell(); } }
+    return { ok: true, nuevos, hay_mas: r.hay_mas };
+  });
+}
+function sincronizarFilaConChat(ch){
+  const c = INBOX.rows.get(ch.chat_id); if (!c) return;
+  let cambio = false;
+  ['nombre', 'ini', 'telefono', 'auto', 'bot', 'delegado', 'ghost_dias'].forEach(k => { if (ch[k] !== undefined && JSON.stringify(ch[k]) !== JSON.stringify(c[k])) { c[k] = ch[k]; cambio = true; } });
+  if (cambio) pintarFila(c);
+}
+
+// ══════════ CHAT ══════════
+let CHAT_ID = null, CARGANDO_ANTES = false, HIST = false;
+function abrirChat(id){
+  if (!id) return;
+  CHAT_ID = id; const h = hiloDe(id); const c = INBOX.rows.get(id);
+  $('nuevos').classList.remove('on'); ocultarAviso();
+  pintarCabecera(h.chat || c || { chat_id: id });
+  $('msgs').innerHTML = h.msgs.length ? '' : '<div class="cargando">Cargando…</div>';
+  if (h.msgs.length) { pintarMensajes(h); }
+  $('scr-chat').classList.add('on'); $('tabbar').classList.add('hide');
+  if (!HIST) { try { history.pushState({ chat: id }, ''); HIST = true; } catch(e){} }
+  cargarHilo(id).then(r => {
+    if (CHAT_ID !== id) return;
+    if (!r.ok) { if (!h.msgs.length) $('msgs').innerHTML = '<div class="vacio"><b>No pude abrir el chat</b>' + esc(r.error || '') + '</div>'; return; }
+    pintarCabecera(h.chat || c);
+    if ($('msgs').querySelector('.cargando') || !$('msgs').querySelector('.msg,.sis')) pintarMensajes(h);
+    else if (r.nuevos && r.nuevos.length) r.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true }));
+    if (!h.msgs.length) $('msgs').innerHTML = '<div class="vacio"><b>Sin mensajes todavía</b>Escribe abajo o usa una acción.</div>';
+  });
+}
+function cerrarChat(){
+  if (!CHAT_ID) return;
+  CHAT_ID = null; $('scr-chat').classList.remove('on'); $('tabbar').classList.remove('hide'); $('nuevos').classList.remove('on');
+  if (HIST) { HIST = false; try { history.back(); } catch(e){} }
+}
+window.addEventListener('popstate', () => { if (CHAT_ID) { HIST = false; cerrarChat(); } });
+function pintarCabecera(ch){
+  if (!ch) return;
+  const c = INBOX.rows.get(ch.chat_id) || {};
+  const nombre = ch.nombre || c.nombre || ('+' + String(ch.telefono || c.telefono || '').replace(/\D/g, ''));
+  $('ch-ava').textContent = iniDe({ ini: ch.ini || c.ini, nombre }); $('ch-ava').classList.toggle('gh', (ch.ghost_dias != null ? ch.ghost_dias : c.ghost_dias) >= 1);
+  $('ch-nombre').textContent = nombre;
+  const tel = String(ch.telefono || c.telefono || '').replace(/\D/g, ''); $('ch-tel').textContent = tel ? '+' + tel + (ch.delegado || c.delegado ? ' · delegado' : '') : '';
+  const auto = ch.auto !== undefined ? ch.auto : c.auto;
+  const chip = $('ch-chip'); chip.classList.toggle('none', !auto); chip.innerHTML = '<span>' + esc(auto ? auto.nombre : 'Elegir auto') + '</span> ▾';
+  // línea 2: estado del bot (solo si bot ≠ n/a) + ghosting inline
+  const bot = ch.bot !== undefined ? ch.bot : c.bot; const gd = ch.ghost_dias != null ? ch.ghost_dias : c.ghost_dias;
+  let l2 = '';
+  if (bot && bot !== 'n/a') {
+    if (bot === 'seb') l2 += '<button class="bot-st seb" onclick="cambiarBot(\'humano\', this)">● Seb atendiendo · tomar control</button>';
+    else if (bot === 'humano') l2 += '<button class="bot-st humano" onclick="cambiarBot(\'seb\', this)">○ Tú tienes el control · devolver a Seb</button>';
+    else l2 += '<button class="bot-st pausado" onclick="cambiarBot(\'seb\', this)">◐ Seb en pausa · reanudar</button>';
+  }
+  if (gd >= 1) l2 += '<span class="ghost">👻 Sin respuesta · ' + esc(gd) + (gd === 1 ? ' día' : ' días') + ' <button onclick="reactivar(this)">Reactivar</button></span>';
+  $('ch-l2').innerHTML = l2; $('ch-l2').style.display = l2 ? '' : 'none';
+}
+function diaDe(ts){ const d = new Date(ms(ts)), h = new Date(); if (d.toDateString() === h.toDateString()) return 'Hoy'; const ay = new Date(h); ay.setDate(h.getDate() - 1); if (d.toDateString() === ay.toDateString()) return 'Ayer'; return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }); }
+function estadoHTML(m){
+  if (m.dir !== 'out' || m.emisor === 'sistema') return '';
+  const e = m.estado || 'enviado';
+  if (e === 'enviando') return '<span class="st enviando" title="Enviando">◌</span>';
+  if (e === 'error') return '<span class="st error" onclick="reintentar(\'' + esc(m.local || '') + '\')">⚠ reintentar</span>';
+  if (e === 'entregado') return '<span class="st entregado">✓✓</span>';
+  return '<span class="st">✓</span>';
+}
+function burbujaHTML(m){
+  const k = keyDe(m);
+  if (m.emisor === 'sistema') return '<div class="sis" data-k="' + esc(k) + '">' + esc(m.texto || textoDe(m)) + '<i>👁 Solo tú lo ves</i></div>';
+  const out = m.dir === 'out';
+  let med = '';
+  if (m.media && m.media.url) {
+    if (m.media.tipo === 'imagen') med = '<a href="' + esc(m.media.url) + '" target="_blank" rel="noopener"><img class="med" src="' + esc(m.media.url) + '" alt="" loading="lazy"></a>';
+    else if (m.media.tipo === 'ubicacion') med = '<a class="med" href="' + esc(m.media.url) + '" target="_blank" rel="noopener">📍 Ver ubicación</a>';
+    else if (m.media.tipo === 'audio') med = '<audio controls preload="none" src="' + esc(m.media.url) + '"></audio>';
+    else med = '<a class="med" href="' + esc(m.media.url) + '" target="_blank" rel="noopener">📎 Archivo</a>';
+  } else if (m.media && !m.texto) med = esc(textoDe(m));
+  const quien = out ? (m.emisor === 'bot' || m.emisor === 'asistente' ? 'Seb' : '') : '';
+  const hora = new Date(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + (ms(m.ts) || 0) + '">' + med + esc(m.texto || '') + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
+}
+function pintarMensajes(h){
+  const box = $('msgs'); let html = '', dia = '';
+  if (h.hay_mas) html += '<div class="cargando" id="mas-arriba">Desliza arriba para ver anteriores</div>';
+  for (const m of h.msgs) { const d = diaDe(m.ts); if (d !== dia) { dia = d; html += '<div class="dia">' + esc(d) + '</div>'; } html += burbujaHTML(m); }
+  box.innerHTML = html; irAlFondo(false);
+}
+const enElFondo = () => { const b = $('msgs'); return b.scrollHeight - b.scrollTop - b.clientHeight < 80; };
+function irAlFondo(suave){ const b = $('msgs'); b.scrollTo({ top: b.scrollHeight, behavior: suave ? 'smooth' : 'auto' }); $('nuevos').classList.remove('on'); }
+$('msgs').addEventListener('scroll', () => { if (enElFondo()) $('nuevos').classList.remove('on'); if ($('msgs').scrollTop < 80) cargarAnteriores(); }, { passive: true });
+function insertarBurbuja(m, { auto } = {}){
+  const box = $('msgs'); const abajo = enElFondo();
+  const v = box.querySelector('.vacio, .cargando:not(#mas-arriba)'); if (v) v.remove();
+  const tmp = document.createElement('div'); tmp.innerHTML = burbujaHTML(m); const el = tmp.firstElementChild;
+  const ts = ms(m.ts) || Date.now();
+  // casi siempre es el más nuevo: se anexa; si no, se busca su lugar por ts
+  const last = [...box.querySelectorAll('.msg,.sis')].pop();
+  if (!last || Number(last.dataset.ts || 0) <= ts) { const d = diaDe(ts); const dias = box.querySelectorAll('.dia'); const ud = dias[dias.length - 1]; if (!ud || ud.textContent !== d) { const dv = document.createElement('div'); dv.className = 'dia'; dv.textContent = d; box.appendChild(dv); } box.appendChild(el); }
+  else { let ref = null; for (const x of box.querySelectorAll('.msg,.sis')) { if (Number(x.dataset.ts || 0) > ts) { ref = x; break; } } box.insertBefore(el, ref); }
+  if (abajo || m.dir === 'out' || !auto) irAlFondo(true); else $('nuevos').classList.add('on');
+}
+function actualizarBurbuja(m){
+  const box = $('msgs'); const el = box.querySelector('[data-k="' + CSS.escape(m.local ? 'l:' + m.local : keyDe(m)) + '"]') || box.querySelector('[data-k="' + CSS.escape(keyDe(m)) + '"]');
+  if (!el) { insertarBurbuja(m, { auto: true }); return; }
+  const tmp = document.createElement('div'); tmp.innerHTML = burbujaHTML(m); const nuevo = tmp.firstElementChild; nuevo.dataset.k = el.dataset.k; el.replaceWith(nuevo);
+}
+async function cargarAnteriores(){
+  const id = CHAT_ID; if (!id || CARGANDO_ANTES) return; const h = hiloDe(id); if (!h.cargado || !h.hay_mas || !h.msgs.length) return;
+  CARGANDO_ANTES = true; const box = $('msgs'); const marca = $('mas-arriba'); if (marca) marca.textContent = 'Cargando…';
+  const antes = ms(h.msgs[0].ts);
+  const r = await apiGet('hilo', { chat_id: id, antes, limit: 40 });
+  CARGANDO_ANTES = false;
+  if (CHAT_ID !== id) return;
+  if (!r.ok) { if (marca) marca.textContent = 'No pude cargar anteriores'; return; }
+  h.hay_mas = !!r.hay_mas; const nuevos = mezclar(h, r.mensajes || []).filter(m => !m._eco);
+  if (!nuevos.length) { h.hay_mas = false; if (marca) marca.remove(); return; }
+  const hAntes = box.scrollHeight, tAntes = box.scrollTop;
+  pintarMensajes(h);
+  box.scrollTop = box.scrollHeight - hAntes + tAntes;   // preserva la posición de lectura
+}
+async function marcarLeidoAbierto(id){ const c = INBOX.rows.get(id); if (c) { c.no_leidos = 0; pintarFila(c); pintarBell(); } await cargarHilo(id).catch(() => {}); }   // hilo sin `antes` = el servidor pone no_leidos=0
+
+// composer
+const TX = $('tx');
+TX.addEventListener('input', () => { TX.style.height = 'auto'; TX.style.height = Math.min(TX.scrollHeight, 132) + 'px'; });
+TX.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarTexto(); } });
+function enviarTexto(){
+  const id = CHAT_ID; if (!id) return;
+  const texto = TX.value.replace(/\s+$/, ''); if (!texto.trim()) return;
+  TX.value = ''; TX.style.height = 'auto';   // se vacía ANTES de mandar → doble clic no duplica
+  const h = hiloDe(id); const local = clave('enviar', id);
+  const m = { local, dir: 'out', emisor: 'dueno', texto, ts: Date.now(), estado: 'enviando', clave: local };
+  h.keys.add(keyDe(m)); h.msgs.push(m); insertarBurbuja(m);
+  actualizarFilaLocal(id, m);
+  mandar(id, m);
+}
+async function mandar(id, m){
+  const h = hiloDe(id);
+  await correr('enviar:' + m.clave, async () => {
+    const r = await apiPost('enviar', { chat_id: id, texto: m.texto, clave: m.clave });
+    if (r.ok && r.mensaje) {
+      const sk = 'id:' + r.mensaje.id;
+      if (h.keys.has(sk) && !m.id) { // el eco del timbre llegó antes que la respuesta → quitar el optimista, quedarse con el del servidor
+        const dup = h.msgs.find(x => x !== m && keyDe(x) === sk); if (dup) { dup.estado = 'entregado'; h.msgs = h.msgs.filter(x => x !== m); const el = $('msgs').querySelector('[data-k="' + CSS.escape('l:' + m.local) + '"]'); if (el) el.remove(); if (CHAT_ID === id) actualizarBurbuja(dup); return; }
+      }
+      m.id = r.mensaje.id; m.msg_id = r.mensaje.msg_id; if (r.mensaje.ts) m.ts = r.mensaje.ts; m.estado = m.estado === 'entregado' ? 'entregado' : (r.mensaje.estado === 'error' ? 'error' : 'enviado'); h.keys.add(sk);
+    } else { m.estado = 'error'; m._err = r.error || 'No se pudo enviar'; }
+    if (CHAT_ID === id) actualizarBurbuja(m);
+    if (m.estado === 'error') avisoError('No se envió: ' + (m._err || '') + ' — toca ⚠ para reintentar');
+  });
+}
+function reintentar(local){ const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const m = h.msgs.find(x => x.local === local); if (!m || m.estado !== 'error') return; m.estado = 'enviando'; m.ts = Date.now(); actualizarBurbuja(m); mandar(id, m); }   // MISMA clave → idempotente
+function actualizarFilaLocal(id, m){ const c = INBOX.rows.get(id); if (!c) return; c.ult_texto = textoDe(m); c.ult_dir = m.dir; c.ult_emisor = m.emisor; c.ult_ts = m.ts; pintarFila(c, { arriba: true }); }
+// nota local (solo tú la ves) para acciones cuyo resultado no vuelve como texto
+function notaLocal(id, texto){ const h = hiloDe(id); const m = { local: 'nota:' + uuid(), dir: 'out', emisor: 'sistema', texto, ts: Date.now() }; h.keys.add(keyDe(m)); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); }
+function burbujaSalida(id, texto, r){ const h = hiloDe(id); const m = { local: 'acc:' + uuid(), dir: 'out', emisor: 'dueno', texto, ts: Date.now(), estado: (r && r.enviado === false) ? 'error' : 'enviado' }; h.keys.add(keyDe(m)); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); actualizarFilaLocal(id, m); }
+
+// ══════════ ACCIONES DEL CHAT ══════════
+async function cambiarBot(estado, btn){
+  const id = CHAT_ID; if (!id) return; bloquear(btn, true);
+  const r = await apiPost('bot_estado', { chat_id: id, estado });
+  bloquear(btn, false);
+  if (!r.ok) return avisoError(r.error || 'No se pudo cambiar el estado del bot');
+  const h = hiloDe(id); if (h.chat) h.chat.bot = r.bot || estado; const c = INBOX.rows.get(id); if (c) c.bot = r.bot || estado; pintarCabecera(h.chat || c);
+}
+async function reactivar(btn){
+  const id = CHAT_ID; if (!id) return; bloquear(btn, true); btn.textContent = '…';
+  const r = await apiPost('reactivar', { chat_id: id, clave: clave('reactivar', id) });
+  if (!r.ok) { bloquear(btn, false); btn.textContent = 'Reactivar'; return avisoError(r.error || 'No se pudo programar la reactivación'); }
+  notaLocal(id, '👻 Reactivación programada' + (r.programado_ts ? ' · sale ' + fechaCorta(r.programado_ts) : ''));
+  const h = hiloDe(id); if (h.chat) h.chat.ghost_dias = 0; const c = INBOX.rows.get(id); if (c) c.ghost_dias = 0; pintarCabecera(h.chat || c); if (c) pintarFila(c);
+}
+function autosDisponibles(){ const h = CHAT_ID ? hiloDe(CHAT_ID) : null; const a = (h && h.chat && h.chat.autos_disponibles && h.chat.autos_disponibles.length) ? h.chat.autos_disponibles : (TENANT && TENANT.autos) || []; return a; }
+const precioFmt = (p) => { const n = Number(p) || 0; return n ? '$' + n.toLocaleString('es-MX', { maximumFractionDigits: 0 }) : ''; };
+const autoCardHTML = (a, on) => '<button type="button" class="auto-card' + (on ? ' on' : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : '🚗') + '</div><div style="min-width:0;flex:1"><b>' + esc(a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' ')) + '</b><small>' + esc(precioFmt(a.precio)) + '</small></div></button>';
+function abrirSelectorAuto(){
+  const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const actual = h.chat && h.chat.auto ? h.chat.auto.id : null;
+  const autos = autosDisponibles();
+  const s = sheet({ titulo: 'Auto en foco', html: '<input class="inp" id="sel-q" placeholder="Buscar marca, modelo o año…" autocomplete="off"><div class="auto-l" id="sel-l" style="margin-top:10px"></div>' });
+  const pintar = (q) => { const qq = (q || '').toLowerCase().trim(); const l = autos.filter(a => !qq || String(a.nombre || '').toLowerCase().includes(qq)); s.body.querySelector('#sel-l').innerHTML = l.length ? l.map(a => autoCardHTML(a, Number(a.id) === Number(actual))).join('') : '<div class="hint">No hay autos que coincidan.</div>'; };
+  pintar('');
+  s.body.querySelector('#sel-q').oninput = (e) => pintar(e.target.value);
+  s.body.addEventListener('click', async (e) => {
+    const b = e.target.closest('.auto-card'); if (!b) return;
+    const a = autos.find(x => String(x.id) === b.dataset.id); if (!a) return;
+    // optimista
+    const previo = h.chat ? h.chat.auto : null; if (!h.chat) h.chat = { chat_id: id }; h.chat.auto = { id: a.id, nombre: a.nombre, precio: a.precio, portada: a.portada }; pintarCabecera(h.chat); s.cerrar();
+    const r = await correr('foco:' + id, () => apiPost('foco', { chat_id: id, auto_id: a.id }));
+    if (!r.ok) { h.chat.auto = previo; pintarCabecera(h.chat); return avisoError(r.error || 'No se pudo cambiar el auto'); }
+    if (r.auto) h.chat.auto = r.auto; const c = INBOX.rows.get(id); if (c) { c.auto = h.chat.auto; pintarFila(c); } pintarCabecera(h.chat);
+  });
+  if (HOVER) setTimeout(() => s.body.querySelector('#sel-q').focus(), 60);
+}
+function abrirCotizar(){
+  const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const auto = h.chat && h.chat.auto;
+  if (!auto) { const s0 = sheet({ titulo: 'Cotizar', html: '<p class="hint">Primero elige el auto en foco de este chat.</p><button class="cta" id="c0">Elegir auto</button>' }); s0.body.querySelector('#c0').onclick = () => { s0.cerrar(); abrirSelectorAuto(); }; return; }
+  let plazo = 48;
+  const s = sheet({ titulo: 'Cotizar', html: autoCardHTML(auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') +
+    '<label class="lbl" for="cot-eng">Enganche</label><input class="inp" id="cot-eng" inputmode="numeric" placeholder="$ 0" autocomplete="off"><div class="f-err" id="cot-err"></div>' +
+    '<span class="lbl">Plazo</span><div class="chips" id="cot-pl"><button type="button" class="c" data-p="36">36 meses</button><button type="button" class="c on" data-p="48">48 meses</button><button type="button" class="c" data-p="60">60 meses</button></div>' +
+    '<button class="cta" id="cot-go">Generar cotización</button><div class="g-err" id="cot-gerr"></div>' });
+  const eng = s.body.querySelector('#cot-eng');
+  eng.oninput = () => { const n = eng.value.replace(/\D/g, ''); eng.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; };
+  s.body.querySelector('#cot-pl').onclick = (e) => { const b = e.target.closest('.c'); if (!b) return; plazo = Number(b.dataset.p); s.body.querySelectorAll('#cot-pl .c').forEach(x => x.classList.toggle('on', x === b)); };
+  const go = s.body.querySelector('#cot-go'); const cl = clave('cotizar', id);   // clave fija para esta hoja: reintentar = mismo resultado
+  go.onclick = async () => {
+    const n = Number(eng.value.replace(/\D/g, '')) || 0; s.body.querySelector('#cot-err').textContent = ''; s.body.querySelector('#cot-gerr').textContent = '';
+    if (!n) { s.body.querySelector('#cot-err').textContent = 'Escribe el enganche.'; eng.classList.add('err'); eng.focus(); return; }
+    bloquear(go, true);
+    const r = await correr('cotizar:' + cl, () => apiPost('cotizar_v2', { chat_id: id, enganche: n, plazo, clave: cl }));
+    bloquear(go, false);
+    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } if (r.necesita === 'enganche') { s.body.querySelector('#cot-err').textContent = r.error || 'Falta el enganche'; return; } s.body.querySelector('#cot-gerr').textContent = r.error || 'No se pudo cotizar'; return; }
+    s.cerrar();
+    burbujaSalida(id, r.texto_tarjeta || textoEnviado(r, '💰 Cotización enviada'), r);
+  };
+  setTimeout(() => eng.focus(), 80);
+}
+const isoLocal = (d) => { const p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+function citaFormHTML(pref){
+  return '<span class="lbl">Día</span><div class="chips" id="ci-dia"><button type="button" class="c on" data-d="hoy">Hoy</button><button type="button" class="c" data-d="man">Mañana</button><button type="button" class="c" data-d="otro">Otro día</button></div>' +
+    '<input type="date" class="inp" id="ci-fecha" style="margin-top:8px;display:none">' +
+    '<span class="lbl">Hora</span><div class="chips" id="ci-hora"><button type="button" class="c" data-h="10:00">10:00</button><button type="button" class="c" data-h="12:00">12:00</button><button type="button" class="c" data-h="16:00">16:00</button><button type="button" class="c" data-h="18:00">18:00</button></div>' +
+    '<input type="time" class="inp" id="ci-time" style="margin-top:8px" step="900"><div class="f-err" id="ci-err"></div>' + (pref || '');
+}
+function citaFormWire(body){
+  const st = { dia: 'hoy', fecha: isoLocal(new Date()), hora: '' };
+  const fe = body.querySelector('#ci-fecha'), ti = body.querySelector('#ci-time');
+  body.querySelector('#ci-dia').onclick = (e) => { const b = e.target.closest('.c'); if (!b) return; st.dia = b.dataset.d; body.querySelectorAll('#ci-dia .c').forEach(x => x.classList.toggle('on', x === b)); const d = new Date(); if (st.dia === 'man') d.setDate(d.getDate() + 1); if (st.dia === 'otro') { fe.style.display = ''; fe.min = isoLocal(new Date()); if (!fe.value) fe.value = isoLocal(d); st.fecha = fe.value; if (fe.showPicker) { try { fe.showPicker(); } catch(x){} } } else { fe.style.display = 'none'; st.fecha = isoLocal(d); } };
+  fe.onchange = () => { st.fecha = fe.value; };
+  body.querySelector('#ci-hora').onclick = (e) => { const b = e.target.closest('.c'); if (!b) return; st.hora = b.dataset.h; ti.value = st.hora; body.querySelectorAll('#ci-hora .c').forEach(x => x.classList.toggle('on', x === b)); };
+  ti.onchange = () => { st.hora = ti.value; body.querySelectorAll('#ci-hora .c').forEach(x => x.classList.toggle('on', x.dataset.h === ti.value)); };
+  st.valida = () => { const err = body.querySelector('#ci-err'); err.textContent = ''; if (!st.fecha) { err.textContent = 'Elige el día.'; return false; } if (!/^\d{2}:\d{2}$/.test(st.hora || '')) { err.textContent = 'Elige la hora.'; return false; } return true; };
+  return st;
+}
+function abrirCita(){
+  const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const auto = h.chat && h.chat.auto;
+  const s = sheet({ titulo: 'Agendar cita', html: (auto ? autoCardHTML(auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') : '<p class="hint">Sin auto en foco: el servidor lo pedirá si hace falta.</p>') + citaFormHTML('<button class="cta" id="ci-go">Agendar</button><div class="g-err" id="ci-gerr"></div>') });
+  const st = citaFormWire(s.body); const go = s.body.querySelector('#ci-go'); const cl = clave('cita', id);
+  go.onclick = async () => {
+    if (!st.valida()) return; s.body.querySelector('#ci-gerr').textContent = '';
+    bloquear(go, true);
+    const r = await correr('cita:' + cl, () => apiPost('cita_v2', { chat_id: id, fecha_iso: st.fecha, hora: st.hora, clave: cl }));
+    bloquear(go, false);
+    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } s.body.querySelector('#ci-gerr').textContent = r.error || 'No se pudo agendar'; return; }
+    s.cerrar();
+    const c = r.cita || {}; burbujaSalida(id, textoEnviado(r, '📅 Cita agendada · ' + (c.fecha || st.fecha) + ' ' + (c.hora || st.hora) + (c.auto ? ' · ' + c.auto : '')), r);
+    const row = INBOX.rows.get(id); if (row) { pintarFila(row); }
+  };
+}
+function abrirMasAcciones(){
+  const id = CHAT_ID; if (!id) return;
+  const demo = !!(TENANT && TENANT.demo);
+  const s = sheet({ titulo: 'Más acciones', html: '<div class="op-l">' +
+    '<button class="op" data-a="fotos"><span class="e">📸</span><div>Fotos del auto<small>Le manda las fotos del auto en foco, sin texto.</small></div></button>' +
+    '<button class="op" data-a="ubicacion"><span class="e">📍</span><div>Ubicación<small>Texto + captura + pin de Maps.</small></div></button>' +
+    '<button class="op" data-a="info"><span class="e">📄</span><div>Información<small>La ficha completa del auto.</small></div></button>' +
+    '<button class="op" data-a="recordatorio"><span class="e">📨</span><div>Recordatorio<small>Programa un mensaje (máximo 2 por chat).</small></div></button>' +
+    (demo ? '<button class="op" data-a="sim"><span class="e">🧪</span><div>Simular respuesta<small>Escribe lo que contestaría el comprador (nada sale a WhatsApp).</small></div></button>' : '') +
+    '<button class="op rojo" data-a="soltar"><span class="e">✋</span><div>Soltar chat<small>El asistente deja de leer y registrar este chat.</small></div></button>' +
+    '</div>' });
+  s.body.onclick = async (e) => {
+    const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
+    if (a === 'recordatorio') { s.cerrar(); return abrirRecordatorio(); }
+    if (a === 'sim') { s.cerrar(); return abrirSimular(); }
+    if (a === 'soltar') { s.cerrar(); return soltarChat(); }
+    bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
+    const r = await accionSimple(id, a);
+    s.cerrar();
+    if (!r.ok) { if (r.necesita === 'auto' || r.necesita === 'foco') return abrirSelectorAuto(); return avisoError(r.error || 'No se pudo'); }
+    const et = { fotos: '📸 Fotos enviadas', ubicacion: '📍 Ubicación enviada', info: '📄 Información enviada' }[a];
+    if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r); else notaLocal(id, et);
+  };
+}
+// SUPUESTO: el contrato no define endpoint v2 para fotos/ubicación/info en un chat existente → `accion_v2 {chat_id, accion, clave}`;
+// si el servidor no lo conoce, cae al `accion_boton` actual (telefono+vendedor) para no dejar el botón muerto.
+async function accionSimple(id, accion){
+  const cl = clave(accion, id);
+  return correr('acc:' + id + ':' + accion, async () => {
+    let r = await apiPost('accion_v2', { chat_id: id, accion, clave: cl });
+    if (!r.ok && /acci[oó]n (desconocida|no (soportada|válida))|unknown|no existe/i.test(String(r.error || ''))) {
+      const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
+      r = await apiPost('accion_boton', { telefono: tel, accion, comprador_nombre: (h.chat && h.chat.nombre) || '' });
+    }
+    return r;
+  });
+}
+function recKey(id){ return 'fyra_rec_' + id; }
+function recPendientes(id){ try { const l = JSON.parse(localStorage.getItem(recKey(id)) || '[]').filter(t => t > Date.now()); localStorage.setItem(recKey(id), JSON.stringify(l)); return l; } catch(e){ return []; } }
+function abrirRecordatorio(){
+  const id = CHAT_ID; if (!id) return;
+  const pend = recPendientes(id);
+  if (pend.length >= 2) { sheet({ titulo: 'Recordatorio', html: '<p class="hint">Este chat ya tiene 2 recordatorios programados (' + pend.map(t => esc(fechaCorta(t))).join(' y ') + '). Máximo 2 por chat.</p>' }); return; }
+  const man = new Date(); man.setDate(man.getDate() + 1);
+  const s = sheet({ titulo: 'Recordatorio', html: '<p class="hint">Se manda SOLO a la hora que pongas. ' + (pend.length ? 'Ya hay 1 programado (' + esc(fechaCorta(pend[0])) + ').' : '') + '</p><div class="grid2"><div><span class="lbl">Fecha</span><input type="date" class="inp" id="re-f" value="' + isoLocal(man) + '" min="' + isoLocal(new Date()) + '"></div><div><span class="lbl">Hora</span><input type="time" class="inp" id="re-h" value="09:00"></div></div><span class="lbl">Mensaje</span><textarea class="inp" id="re-t" placeholder="El mensaje…"></textarea><div class="f-err" id="re-err"></div><button class="cta" id="re-go">Programar</button>' });
+  const go = s.body.querySelector('#re-go'); const cl = clave('recordatorio', id);
+  go.onclick = async () => {
+    const f = s.body.querySelector('#re-f').value, hh = s.body.querySelector('#re-h').value, t = s.body.querySelector('#re-t').value.trim(); const err = s.body.querySelector('#re-err'); err.textContent = '';
+    if (!f || !hh) { err.textContent = 'Falta fecha u hora.'; return; } if (!t) { err.textContent = 'Falta el mensaje.'; return; }
+    const cuando = new Date(f + 'T' + hh + ':00').getTime(); if (cuando < Date.now()) { err.textContent = 'Esa hora ya pasó.'; return; }
+    bloquear(go, true);
+    // SUPUESTO: `recordatorio_v2 {chat_id, fecha_iso, hora, texto, clave}`; si no existe → `prog_crear` actual (telefono)
+    let r = await apiPost('recordatorio_v2', { chat_id: id, fecha_iso: f, hora: hh, texto: t, cuando_ts: cuando, clave: cl });
+    if (!r.ok && /acci[oó]n (desconocida|no (soportada|válida))|unknown|no existe/i.test(String(r.error || ''))) { const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, ''); r = await apiPost('prog_crear', { telefono: tel.slice(-10), texto: t, cuando_ts: cuando, con_foto: true }); }
+    bloquear(go, false);
+    if (!r.ok) { err.textContent = r.error || 'No se pudo programar'; return; }
+    try { const l = recPendientes(id); l.push(cuando); localStorage.setItem(recKey(id), JSON.stringify(l)); } catch(e){}
+    s.cerrar(); notaLocal(id, '📨 Recordatorio programado · ' + fechaCorta(cuando) + '\n«' + t + '»');
+  };
+}
+async function soltarChat(){
+  const id = CHAT_ID; if (!id) return;
+  const ok = await confirmar({ titulo: '¿Soltar este chat?', texto: 'El asistente deja de leer y registrar esta conversación. Puedes volver a delegarla después.', ok: 'Soltar', peligro: true });
+  if (!ok) return;
+  const r = await correr('soltar:' + id, () => apiPost('soltar_v2', { chat_id: id }));
+  if (!r.ok) return avisoError(r.error || 'No se pudo soltar');
+  const h = hiloDe(id); if (h.chat) h.chat.delegado = false; const c = INBOX.rows.get(id); if (c) { c.delegado = false; pintarFila(c); }
+  notaLocal(id, '✋ Chat soltado'); pintarCabecera(h.chat || c);
+}
+function abrirSimular(){
+  const id = CHAT_ID; if (!id) return; const h = hiloDe(id);
+  const s = sheet({ titulo: '🧪 Simular respuesta', html: '<p class="hint">Se registra como mensaje entrante del comprador. Nada sale a WhatsApp.</p><textarea class="inp" id="si-t" placeholder="¿Qué contesta el comprador?"></textarea><button class="cta" id="si-go">Registrar</button><div class="g-err" id="si-err"></div>' });
+  const go = s.body.querySelector('#si-go');
+  go.onclick = async () => {
+    const t = s.body.querySelector('#si-t').value.trim(); if (!t) return;
+    bloquear(go, true);
+    const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
+    const r = await apiPost('demo_responder', { chat_id: id, telefono: tel, texto: t });
+    bloquear(go, false);
+    if (!r.ok) { s.body.querySelector('#si-err').textContent = r.error || 'No se pudo'; return; }
+    s.cerrar();
+    setTimeout(() => { if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }, 900);   // respaldo si el timbre tarda
+  };
+  setTimeout(() => s.body.querySelector('#si-t').focus(), 80);
+}
+
+// ══════════ + COMPRADOR / DELEGAR (delegar_v2) ══════════
+function abrirNuevoComprador(){
+  const demo = !!(TENANT && TENANT.demo);
+  const st = { tel: demo ? DEMO_TEL.slice(-10) : '', nombre: '', auto: null, modo: null, texto: '', enganche: 0, cita: null };
+  const s = sheet({ titulo: '＋ Nuevo comprador', html: '<div id="nc"></div>' });
+  const box = s.body.querySelector('#nc');
+  const paso1 = () => {
+    box.innerHTML = '<div class="paso">Paso 1 de 3 · Teléfono</div>' +
+      '<label class="lbl" for="nc-tel">WhatsApp del comprador</label><input class="inp" id="nc-tel" inputmode="numeric" maxlength="10" placeholder="10 dígitos" autocomplete="off" value="' + esc(st.tel) + '"' + (demo ? ' disabled' : '') + '>' +
+      (demo ? '<div class="f-err" style="color:var(--amar)">🧪 número de prueba (bloqueado)</div>' : '<div class="f-err" id="nc-terr"></div>') +
+      '<div id="nc-existe"></div>' +
+      '<label class="lbl" for="nc-nom">Nombre (opcional)</label><input class="inp" id="nc-nom" placeholder="Cómo se llama" autocomplete="off" value="' + esc(st.nombre) + '">' +
+      '<button class="cta" id="nc-next">Continuar</button>';
+    const ti = box.querySelector('#nc-tel'), ex = box.querySelector('#nc-existe'); let tT = null;
+    const buscar = async () => { const v = ti.value.replace(/\D/g, ''); ex.innerHTML = ''; if (v.length !== 10) return; const r = await apiGet('inbox', { q: v, limit: 5, filtro: 'todos' }); const c = (r.chats || []).find(x => String(x.telefono || '').replace(/\D/g, '').endsWith(v)); if (!c || ti.value.replace(/\D/g, '') !== v) return; ex.innerHTML = '<div class="existe"><div class="ava" style="width:36px;height:36px;flex:0 0 36px;font-size:15px">' + esc(iniDe(c)) + '</div><div><b>' + esc(c.nombre || '+' + v) + '</b><small>Ya hay una conversación' + (c.delegado ? ' delegada' : '') + '</small></div><button type="button" id="nc-abrir">Abrir</button></div>'; ex.querySelector('#nc-abrir').onclick = () => { INBOX.rows.set(c.chat_id, c); s.cerrar(); abrirChat(c.chat_id); }; };
+    if (!demo) { ti.oninput = () => { ti.value = ti.value.replace(/\D/g, '').slice(0, 10); clearTimeout(tT); tT = setTimeout(buscar, 250); }; setTimeout(() => ti.focus(), 80); }
+    else buscar();
+    box.querySelector('#nc-next').onclick = () => { const v = ti.value.replace(/\D/g, ''); if (v.length !== 10) { const e = box.querySelector('#nc-terr'); if (e) e.textContent = 'Son 10 dígitos.'; ti.classList.add('err'); return; } st.tel = v; st.nombre = box.querySelector('#nc-nom').value.trim(); paso2(); };
+  };
+  const paso2 = async () => {
+    box.innerHTML = '<div class="paso">Paso 2 de 3 · Auto</div><input class="inp" id="nc-q" placeholder="Buscar marca, modelo o año…" autocomplete="off"><div class="auto-l" id="nc-l" style="margin-top:10px"><div class="hint">Cargando autos…</div></div><button class="cta" id="nc-next2" disabled>Continuar</button><button class="cta sec" id="nc-back">Atrás</button>';
+    let autos = await autosParaDelegar();
+    if (autos.length === 1 && !st.auto) st.auto = autos[0];
+    const l = box.querySelector('#nc-l'), next = box.querySelector('#nc-next2');
+    const pintar = (q) => { const qq = (q || '').toLowerCase().trim(); const f = autos.filter(a => !qq || String(a.nombre || '').toLowerCase().includes(qq)); l.innerHTML = f.length ? f.map(a => autoCardHTML(a, st.auto && Number(st.auto.id) === Number(a.id))).join('') : '<div class="hint">' + (autos.length ? 'Nada coincide.' : 'Este universo aún no tiene autos. Súbelo con el botón (+).') + '</div>'; next.disabled = !st.auto; };
+    pintar('');
+    box.querySelector('#nc-q').oninput = (e) => pintar(e.target.value);
+    l.onclick = (e) => { const b = e.target.closest('.auto-card'); if (!b) return; st.auto = autos.find(a => String(a.id) === b.dataset.id) || null; pintar(box.querySelector('#nc-q').value); };
+    next.onclick = () => { if (st.auto) paso3(); };
+    box.querySelector('#nc-back').onclick = paso1;
+  };
+  const paso3 = () => {
+    box.innerHTML = '<div class="paso">Paso 3 de 3 · ¿Cómo entra?</div>' + autoCardHTML(st.auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') +
+      '<span class="lbl">Ejecuta una acción · sin presentarse</span><div class="op-l">' +
+      '<button class="op" data-m="cotizar"><span class="e">💰</span><div>Cotizar<small>Le manda solo la tarjeta de precio con el enganche que pongas.</small></div></button>' +
+      '<button class="op" data-m="cita"><span class="e">📅</span><div>Agendar cita<small>Eliges día y hora; le confirma la cita y programa los recordatorios.</small></div></button>' +
+      '<button class="op" data-m="fotos"><span class="e">📸</span><div>Fotos del vehículo<small>Solo las fotos del auto, sin texto.</small></div></button>' +
+      '<button class="op" data-m="ubicacion"><span class="e">📍</span><div>Ubicación<small>Dónde está el auto: texto + captura + pin de Maps.</small></div></button>' +
+      '<button class="op" data-m="info"><span class="e">📄</span><div>Información<small>La ficha completa del auto.</small></div></button></div>' +
+      '<span class="lbl">Solo un primer mensaje</span><div class="op-l">' +
+      '<button class="op" data-m="bot"><span class="e">🤖</span><div>Se presenta a tu nombre<small>El asistente manda el primer mensaje firmado como tuyo.</small></div></button>' +
+      '<button class="op" data-m="texto"><span class="e">✍️</span><div>Escribo yo el mensaje<small>Tu texto, literal, firmado como tuyo.</small></div></button></div>' +
+      '<span class="lbl">Sin decir nada</span><div class="op-l"><button class="op" data-m="silencio"><span class="e">🤫</span><div>Entra callado<small>Solo entra al chat. No manda mensaje.</small></div></button></div>' +
+      '<div id="nc-extra"></div><button class="cta" id="nc-go" disabled>Delegar</button><div class="g-err" id="nc-gerr"></div><button class="cta sec" id="nc-back3">Atrás</button>';
+    const extra = box.querySelector('#nc-extra'), go = box.querySelector('#nc-go'); let ciSt = null;
+    box.querySelectorAll('.op').forEach(b => b.onclick = () => {
+      st.modo = b.dataset.m; box.querySelectorAll('.op').forEach(x => x.classList.toggle('on', x === b)); ciSt = null; go.disabled = false;
+      if (st.modo === 'cotizar') { extra.innerHTML = '<label class="lbl" for="nc-eng">Enganche</label><input class="inp" id="nc-eng" inputmode="numeric" placeholder="$ 0"><div class="f-err" id="nc-eerr"></div>'; const e = extra.querySelector('#nc-eng'); e.oninput = () => { const n = e.value.replace(/\D/g, ''); e.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; }; setTimeout(() => e.focus(), 60); }
+      else if (st.modo === 'cita') { extra.innerHTML = citaFormHTML(''); ciSt = citaFormWire(extra); }
+      else if (st.modo === 'texto') { extra.innerHTML = '<label class="lbl" for="nc-tx">Tu mensaje</label><textarea class="inp" id="nc-tx" placeholder="Hola, soy…"></textarea><div class="f-err" id="nc-txerr"></div>'; setTimeout(() => extra.querySelector('#nc-tx').focus(), 60); }
+      else extra.innerHTML = '';
+      go.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    box.querySelector('#nc-back3').onclick = paso2;
+    const cl = clave('delegar', st.tel);
+    go.onclick = async () => {
+      if (!st.modo) return; const gerr = box.querySelector('#nc-gerr'); gerr.textContent = '';
+      const entrada = { modo: st.modo };
+      if (st.modo === 'cotizar') { const n = Number((extra.querySelector('#nc-eng').value || '').replace(/\D/g, '')) || 0; if (!n) { extra.querySelector('#nc-eerr').textContent = 'Escribe el enganche.'; return; } entrada.enganche = n; }
+      if (st.modo === 'cita') { if (!ciSt || !ciSt.valida()) return; entrada.fecha_iso = ciSt.fecha; entrada.hora = ciSt.hora; }
+      if (st.modo === 'texto') { const t = (extra.querySelector('#nc-tx').value || '').trim(); if (!t) { extra.querySelector('#nc-txerr').textContent = 'Escribe el mensaje.'; return; } entrada.texto = t; }
+      bloquear(go, true);
+      const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, nombre: st.nombre || undefined, auto_id: st.auto.id, entrada, clave: cl }));
+      bloquear(go, false);
+      if (!r.ok) { gerr.textContent = r.error || 'No se pudo delegar'; return; }
+      s.cerrar();
+      const id = r.chat_id; if (!id) { avisoError('Delegado, pero el servidor no devolvió chat_id'); cargarInbox({ reset: true }); return; }
+      let c = INBOX.rows.get(id); if (!c) c = await filaDesdeServidor(id);
+      if (c) { c.delegado = true; c.nombre = r.nombre || c.nombre || st.nombre; c.auto = c.auto || { id: st.auto.id, nombre: st.auto.nombre, precio: st.auto.precio, portada: st.auto.portada }; pintarFila(c, { arriba: true }); pintarBell(); }
+      irTab('inicio'); abrirChat(id);
+      const nota = (r.ya_delegado ? '↩ Ya estaba delegado · ' : '✅ Delegado · ') + ({ silencio: 'entró callado', texto: 'con tu texto', bot: 'se presentó a tu nombre', info: 'mandó la ficha', fotos: 'mandó las fotos', ubicacion: 'mandó la ubicación', cotizar: 'mandó la cotización', cita: 'agendó la cita' }[st.modo] || st.modo) + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : '');
+      notaLocal(id, nota);
+      if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r);
+    };
+  };
+  paso1();
+}
+async function autosParaDelegar(){
+  // catálogo del universo: autos_mios (con portada) si ya está en caché o responde rápido; si no, tenant_info.autos
+  try { if (!AUTOS) await cargarAutos({ silencioso: true }); } catch(e){}
+  const mios = (AUTOS || []).filter(a => a.estado !== 'vendido').map(a => ({ id: a.id, nombre: a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio, portada: a.portada }));
+  if (mios.length) return mios;
+  return ((TENANT && TENANT.autos) || []).map(a => ({ id: a.id, nombre: a.nombre, precio: a.precio, portada: a.portada || null }));
+}
+
+// ══════════ AUTOS (autos_mios) + SUBIR AUTO ══════════
+let AUTOS = null;
+async function cargarAutos({ silencioso } = {}){
+  const c = $('autos-lista');
+  if (!AUTOS && !silencioso) c.innerHTML = Array.from({ length: 5 }, () => '<div class="auto-c"><div class="ph" style="background:rgba(120,160,255,.14);border:0"></div><div style="flex:1"><div style="height:14px;width:60%;border-radius:7px;background:rgba(120,160,255,.16)"></div><div style="height:12px;width:35%;border-radius:6px;background:rgba(120,160,255,.10);margin-top:9px"></div></div></div>').join('');
+  return correr('autos_mios', async () => {
+    const r = await apiGet('autos_mios', {});
+    if (!r.ok) { if (!silencioso) c.innerHTML = '<div class="vacio"><b>No pude cargar tus autos</b>' + esc(r.error || '') + '<br><button class="masbtn" onclick="cargarAutos()">Reintentar</button></div>'; return; }
+    AUTOS = r.autos || []; pintarAutos();
+  });
+}
+function pintarAutos(){
+  const c = $('autos-lista'); if (!AUTOS) return;
+  if (!AUTOS.length) { c.innerHTML = '<div class="vacio"><b>Aún no tienes autos</b>Toca (+) para subir el primero.</div>'; return; }
+  c.innerHTML = AUTOS.map(a => '<div class="auto-c" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : '🚗') + '</div><div style="flex:1;min-width:0"><div class="nm">' + esc(a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' ')) + '</div><div class="pr">' + esc(precioFmt(a.precio)) + '</div><div class="km">' + (a.km ? esc(Number(a.km).toLocaleString('es-MX')) + ' km' : '') + (a.fotos ? (a.km ? ' · ' : '') + esc(a.fotos) + ' fotos' : '') + '</div></div><span class="est ' + esc(a.estado || 'activo') + '">' + ({ activo: 'Activo', revision: 'En revisión', vendido: 'Vendido' }[a.estado] || esc(a.estado || '')) + '</span></div>').join('');
+}
+async function leerFoto(file){
+  // reduce a máx 1600 px JPEG (≤ 6 MB del contrato) y devuelve {nombre, base64, preview}
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const max = 1600, esc_ = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement('canvas'); cv.width = Math.round(img.naturalWidth * esc_); cv.height = Math.round(img.naturalHeight * esc_);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    let q = 0.86, data = cv.toDataURL('image/jpeg', q);
+    while (data.length > 5.5 * 1024 * 1024 * 1.37 && q > 0.5) { q -= 0.1; data = cv.toDataURL('image/jpeg', q); }
+    return { nombre: (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', base64: data.split(',')[1], preview: data, url: null };
+  } finally { URL.revokeObjectURL(url); }
+}
+function abrirSubirAuto(){
+  const st = { fotos: [], subiendo: false };
+  const s = sheet({ titulo: 'Subir auto', full: true, html:
+    '<p class="hint">Mínimo 4 fotos. La primera es la portada. El auto nace <b>en revisión</b>.</p>' +
+    '<input type="file" id="su-file" accept="image/*" multiple hidden>' +
+    '<div class="fotos-g" id="su-g"></div><div class="f-err" id="su-ferr"></div>' +
+    '<div class="grid2"><div><label class="lbl" for="su-marca">Marca</label><input class="inp" id="su-marca" data-c="marca" placeholder="Mazda" autocomplete="off"></div><div><label class="lbl" for="su-modelo">Modelo</label><input class="inp" id="su-modelo" data-c="modelo" placeholder="CX-5" autocomplete="off"></div></div>' +
+    '<div class="grid2"><div><label class="lbl" for="su-anio">Año</label><input class="inp" id="su-anio" data-c="anio" inputmode="numeric" maxlength="4" placeholder="2021"></div><div><label class="lbl" for="su-precio">Precio</label><input class="inp" id="su-precio" data-c="precio" inputmode="numeric" placeholder="$ 0"></div></div>' +
+    '<div class="grid2"><div><label class="lbl" for="su-km">Kilometraje</label><input class="inp" id="su-km" data-c="km" inputmode="numeric" placeholder="km"></div><div><label class="lbl" for="su-version">Versión (opcional)</label><input class="inp" id="su-version" data-c="version" placeholder="i Grand Touring"></div></div>' +
+    '<div class="grid2"><div><label class="lbl" for="su-color">Color (opcional)</label><input class="inp" id="su-color" data-c="color" placeholder="Blanco"></div><div><label class="lbl" for="su-trans">Transmisión (opcional)</label><select class="inp" id="su-trans" data-c="transmision"><option value="">—</option><option>Automática</option><option>Manual</option></select></div></div>' +
+    '<label class="lbl" for="su-comb">Combustible (opcional)</label><select class="inp" id="su-comb" data-c="combustible"><option value="">—</option><option>Gasolina</option><option>Diésel</option><option>Híbrido</option><option>Eléctrico</option></select>' +
+    '<label class="lbl" for="su-desc">Descripción (opcional)</label><textarea class="inp" id="su-desc" data-c="descripcion" placeholder="Único dueño, servicios de agencia…"></textarea>' +
+    '<div class="prog" id="su-prog" hidden><i></i></div><div class="prog-t" id="su-progt"></div>' +
+    '<button class="cta" id="su-go">Publicar auto</button><div class="g-err" id="su-gerr"></div>' });
+  const g = s.body.querySelector('#su-g'), file = s.body.querySelector('#su-file');
+  const pintarFotos = () => {
+    g.innerHTML = st.fotos.map((f, i) => '<div class="foto' + (f.url ? ' subida' : '') + '"><img src="' + f.preview + '" alt=""><span class="n' + (i === 0 ? ' p' : '') + '">' + (i === 0 ? 'Portada' : i + 1) + '</span><div class="ctl"><button type="button" data-i="' + i + '" data-op="izq" aria-label="Mover antes">‹</button><button type="button" data-i="' + i + '" data-op="der" aria-label="Mover después">›</button><button type="button" data-i="' + i + '" data-op="x" aria-label="Quitar">✕</button></div><div class="ok">✓</div></div>').join('') +
+      '<button type="button" class="add-f" id="su-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>' + (st.fotos.length ? 'Agregar' : 'Fotos') + '</button>';
+    s.body.querySelector('#su-add').onclick = () => file.click();
+    s.body.querySelector('#su-ferr').textContent = st.fotos.length && st.fotos.length < 4 ? 'Faltan ' + (4 - st.fotos.length) + ' fotos (mínimo 4).' : '';
+  };
+  g.onclick = (e) => { const b = e.target.closest('button[data-op]'); if (!b || st.subiendo) return; const i = Number(b.dataset.i), op = b.dataset.op; if (op === 'x') st.fotos.splice(i, 1); if (op === 'izq' && i > 0) { [st.fotos[i - 1], st.fotos[i]] = [st.fotos[i], st.fotos[i - 1]]; } if (op === 'der' && i < st.fotos.length - 1) { [st.fotos[i + 1], st.fotos[i]] = [st.fotos[i], st.fotos[i + 1]]; } pintarFotos(); };
+  file.onchange = async () => { const fs = [...file.files]; file.value = ''; for (const f of fs) { try { st.fotos.push(await leerFoto(f)); pintarFotos(); } catch(e){ avisoError('No pude leer una foto: ' + (f.name || '')); } } };
+  pintarFotos();
+  const pr = s.body.querySelector('#su-precio'); pr.oninput = () => { const n = pr.value.replace(/\D/g, ''); pr.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; };
+  const km = s.body.querySelector('#su-km'); km.oninput = () => { const n = km.value.replace(/\D/g, ''); km.value = n ? Number(n).toLocaleString('es-MX') : ''; };
+  const go = s.body.querySelector('#su-go'), prog = s.body.querySelector('#su-prog'), progt = s.body.querySelector('#su-progt'), gerr = s.body.querySelector('#su-gerr');
+  const cl = clave('auto_subir', TENANT ? TENANT.id : 0);
+  const v = (id) => s.body.querySelector('#' + id).value.trim();
+  const marcarCampo = (campo, msg) => { const el = s.body.querySelector('[data-c="' + campo + '"]'); if (el) { el.classList.add('err'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } gerr.textContent = msg; };
+  go.onclick = async () => {
+    gerr.textContent = ''; s.body.querySelectorAll('.inp.err').forEach(x => x.classList.remove('err'));
+    const datos = { marca: v('su-marca'), modelo: v('su-modelo'), anio: Number(v('su-anio')) || 0, precio: Number(v('su-precio').replace(/\D/g, '')) || 0, km: Number(v('su-km').replace(/\D/g, '')) || 0, version: v('su-version') || undefined, color: v('su-color') || undefined, transmision: v('su-trans') || undefined, combustible: v('su-comb') || undefined, descripcion: v('su-desc') || undefined };
+    if (st.fotos.length < 4) { s.body.querySelector('#su-ferr').textContent = 'Mínimo 4 fotos.'; g.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    if (!datos.marca) return marcarCampo('marca', 'Falta la marca.'); if (!datos.modelo) return marcarCampo('modelo', 'Falta el modelo.');
+    const y = new Date().getFullYear(); if (!datos.anio || datos.anio < 1980 || datos.anio > y + 1) return marcarCampo('anio', 'Año inválido.');
+    if (!datos.precio) return marcarCampo('precio', 'Falta el precio.'); if (!datos.km && datos.km !== 0) return marcarCampo('km', 'Falta el kilometraje.');
+    st.subiendo = true; bloquear(go, true); prog.hidden = false;
+    try {
+      // 1) fotos por foto_subir (una a la vez, con progreso; las ya subidas no se repiten)
+      for (let i = 0; i < st.fotos.length; i++) {
+        const f = st.fotos[i]; if (f.url) continue;
+        progt.textContent = 'Subiendo foto ' + (i + 1) + ' de ' + st.fotos.length + '…'; prog.querySelector('i').style.width = Math.round((i / (st.fotos.length + 1)) * 100) + '%';
+        const r = await apiPost('foto_subir', { nombre: f.nombre, base64: f.base64 });
+        if (!r.ok || !r.url) throw new Error('Foto ' + (i + 1) + ': ' + (r.error || 'no se pudo subir'));
+        f.url = r.url; pintarFotos();
+      }
+      // 2) auto_subir con clave (idempotente)
+      progt.textContent = 'Publicando…'; prog.querySelector('i').style.width = '92%';
+      const r = await apiPost('auto_subir', Object.assign({}, datos, { fotos: st.fotos.map(f => f.url), clave: cl }));
+      if (!r.ok) { if (r.campo) marcarCampo(r.campo, r.error || 'Revisa este campo'); else gerr.textContent = r.error || 'No se pudo publicar'; throw null; }
+      prog.querySelector('i').style.width = '100%'; progt.textContent = 'Listo';
+      const nuevo = { id: r.auto_id, nombre: [datos.marca, datos.modelo, datos.anio].join(' '), marca: datos.marca, modelo: datos.modelo, anio: datos.anio, precio: datos.precio, km: datos.km, portada: st.fotos[0].url, estado: r.estado || 'revision', fotos: st.fotos.length };
+      AUTOS = [nuevo].concat(AUTOS || []); pintarAutos();
+      if (TENANT) TENANT.autos = [{ id: nuevo.id, nombre: nuevo.nombre, precio: nuevo.precio }].concat(TENANT.autos || []);
+      s.cerrar(); irTab('autos');
+    } catch (e) { if (e) gerr.textContent = e.message || 'No se pudo'; }
+    finally { st.subiendo = false; bloquear(go, false); if (gerr.textContent) { prog.hidden = true; progt.textContent = ''; } }
+  };
+}
+
+// ══════════ TIMBRE (WebSocket del puente) — filtra por tenant, actualiza SOLO la fila/hilo del chat_id ══════════
+let TIMBRE = 'wss://movers-diabetes-were-greetings.trycloudflare.com', WS = null, WS_T = null;
+async function connectTimbre(){
+  if (SES_CAIDA) return;
+  try { const tu = await apiGet('timbre_url', {}); if (tu && tu.url) { TIMBRE = tu.url; try { localStorage.setItem('timbre_url', TIMBRE); } catch(e){} } else { TIMBRE = localStorage.getItem('timbre_url') || TIMBRE; } } catch(e){ try { TIMBRE = localStorage.getItem('timbre_url') || TIMBRE; } catch(e2){} }
+  try { WS = new WebSocket(TIMBRE); } catch(e){ return (WS_T = setTimeout(connectTimbre, 5000)); }
+  WS.onopen = () => { if (CHAT_ID) { const id = CHAT_ID; cargarHilo(id).then(r => { if (r.ok && r.nuevos && CHAT_ID === id) r.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); } };   // al (re)conectar, ponerse al día
+  WS.onmessage = (ev) => { let d; try { d = JSON.parse(ev.data); } catch(e){ return; } onTimbre(d); };
+  WS.onclose = () => { if (!SES_CAIDA) WS_T = setTimeout(connectTimbre, 4000); };
+  WS.onerror = () => { try { WS.close(); } catch(e){} };
+}
+function onTimbre(d){
+  if (!d || !TENANT) return;
+  if (Number(d.tenant_id) !== Number(TENANT.id)) return;      // ignora TODO lo que no sea de este universo
+  if (!d.chat_id) return;                                     // sin chat_id no hay fila que tocar (nunca por teléfono)
+  if (d.tipo === 'mensaje' && d.mensaje) onMensajeTimbre(d);
+  else if (d.tipo === 'cambio') onCambioTimbre(d);
+}
+let LEIDO_T = null;
+async function onMensajeTimbre(d){
+  const id = d.chat_id, m = d.mensaje; const h = hiloDe(id);
+  // 1) hilo en caché / abierto
+  const yaLo = h.keys.has(keyDe(m));
+  if (h.cargado || CHAT_ID === id) {
+    const nuevos = mezclar(h, [m]);
+    if (CHAT_ID === id) nuevos.forEach(x => x._eco ? actualizarBurbuja(x) : insertarBurbuja(x, { auto: true }));
+  }
+  // 2) SOLO la fila de ese chat_id (diff), sin repintar la lista
+  let c = INBOX.rows.get(id);
+  if (!c) { c = await filaDesdeServidor(id); if (!c) return; }
+  if (!yaLo) {
+    c.ult_texto = textoDe(m); c.ult_dir = m.dir; c.ult_emisor = m.emisor; c.ult_ts = m.ts || Date.now();
+    if (m.dir === 'in' && m.emisor !== 'sistema') { if (CHAT_ID === id) { c.no_leidos = 0; clearTimeout(LEIDO_T); LEIDO_T = setTimeout(() => marcarLeidoAbierto(id), 1200); } else c.no_leidos = (Number(c.no_leidos) || 0) + 1; }
+    else if (m.dir === 'out') c.no_leidos = 0;
+  }
+  pintarFila(c, { arriba: true }); pintarBell();
+}
+async function onCambioTimbre(d){
+  const id = d.chat_id; const h = hiloDe(id);
+  const r = await apiGet('hilo', { chat_id: id, antes: Date.now() + 1000, limit: 1 });   // cabecera fresca sin marcar leído
+  if (!r.ok || !r.chat) return;
+  h.chat = Object.assign({}, h.chat || {}, r.chat);
+  sincronizarFilaConChat(r.chat);
+  if (CHAT_ID === id) pintarCabecera(h.chat);
+  if (d.que === 'delegacion' && !INBOX.rows.get(id)) { const c = await filaDesdeServidor(id); if (c) { pintarFila(c, { arriba: true }); pintarBell(); } }
+}
+
+// ══════════ PRIMERA VEZ: "Agrégalo a tu inicio" ══════════
+function tutoPlataforma(pl){
+  document.querySelectorAll('#tuto .pl .c').forEach(b => b.classList.toggle('on', b.dataset.pl === pl));
+  const P = { ios: ['Abre este link en <b>Safari</b>.', 'Toca <b>Compartir</b> (el cuadrito con la flecha, abajo).', 'Elige <b>“Añadir a pantalla de inicio”</b> y confirma.'], android: ['Abre este link en <b>Chrome</b>.', 'Toca el menú <b>⋮</b> (arriba a la derecha).', 'Elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar app”</b>.'], pc: ['Abre este link en <b>Chrome</b> o <b>Edge</b>.', 'En la barra de dirección toca el ícono de <b>instalar</b> (o menú ⋮ → “Instalar FyraChat”).', 'Queda como una app en tu escritorio.'] };
+  $('tuto-pasos').innerHTML = (P[pl] || P.pc).map((t, i) => '<div class="paso-i"><span class="n">' + (i + 1) + '</span><div>' + t + '</div></div>').join('');
+}
+function tutoMostrar(){
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
+  tutoPlataforma(ios ? 'ios' : android ? 'android' : 'pc'); $('tuto').classList.add('on');
+}
+function tutoListo(){ try { localStorage.setItem('fyra_tuto2_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} $('tuto').classList.remove('on'); }
+function tutoSiPrimeraVez(){
+  if (!TENANT) return; let visto = false; try { visto = !!localStorage.getItem('fyra_tuto2_' + TENANT.id); } catch(e){}
+  if (visto) return;
+  const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (standalone) { tutoListo(); return; }   // ya corre instalado: no hay nada que enseñar
+  tutoMostrar();
+}
+
+// ══════════ ARRANQUE: acceso_yo → (tenant_info ‖ inbox ‖ timbre) ══════════
+(async function arranque(){
+  skeleton();
+  const ok = await cargarTenant();
+  if (ok === false) return;
+  await Promise.all([cargarTenantInfo(), cargarInbox({ reset: true })]);
+  connectTimbre();
+  tutoSiPrimeraVez();
+})();
+</script>
+</body>
+</html>
