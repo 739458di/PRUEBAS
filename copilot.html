@@ -1355,10 +1355,29 @@ function tutoElegible(){
   // vendedor con sesión en SU universo (no maestra, no staff, no tenant 0); el universo demo siempre
   try { return !!(TENANT && VEND && !T0 && SESION && (TENANT.demo || (!SESION.maestra && !SESION.staff))); } catch(e){ return false; }
 }
-function tutoHecho(){ try { return !!localStorage.getItem(TUTO_KEY()); } catch(e){ return true; } }
+// REGLA (owner 2026-09-10): en el universo de PRUEBA cada entrada es "primera vez" (siempre tutorial y universo en cero);
+// en usuarios reales solo la primera vez de ese número (primera sesión de su vida + nada en este dispositivo).
+let TUTO_PRIMERA_SESION = null;   // se llena con acceso_sesiones al cargar (null = desconocido → se respeta localStorage)
+function tutoHecho(){
+  if (TENANT && TENANT.demo) return false;
+  try { if (localStorage.getItem(TUTO_KEY())) return true; } catch(e){ return true; }
+  return TUTO_PRIMERA_SESION === false;   // ya tuvo sesiones antes (otro dispositivo) → no es nuevo
+}
 function tutoMarcar(){ try { localStorage.setItem(TUTO_KEY(), '1'); } catch(e){} }
 const tutoStandalone = () => { try { return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch(e){ return false; } };
-function tutoAutoArranque(){ if (!tutoElegible() || tutoHecho()) return; tutoArrancar(); }
+async function tutoAutoArranque(){
+  if (!tutoElegible()) return;
+  if (TENANT && TENANT.demo) {
+    // entrada nueva al simulador (bienvenida=1) → universo en cero y tutorial completo, como usuario nuevo
+    const nueva = new URLSearchParams(location.search).get('bienvenida') === '1' || sessionStorage.getItem('demo_entrada') !== '1';
+    if (nueva) { try { await fetch(API+'?action=demo_reset',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); } catch(e){} sessionStorage.setItem('demo_entrada','1'); try { localStorage.removeItem(TUTO_KEY()); localStorage.removeItem('fyra_tip_inicio'); } catch(e){} }
+    else return;   // recarga dentro de la misma entrada: no repetir
+  } else if (TUTO_PRIMERA_SESION === null) {
+    try { const d = await fetch(API+'?action=acceso_sesiones').then(x=>x.json()); if (d && d.ok && Array.isArray(d.sesiones)) TUTO_PRIMERA_SESION = d.sesiones.length <= 1; } catch(e){}
+  }
+  if (tutoHecho()) return;
+  tutoArrancar();
+}
 function verTutorial(){
   try { cerrarDispositivos(); } catch(e){}
   if (!tutoElegible()) return;
