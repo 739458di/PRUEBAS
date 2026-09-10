@@ -1325,6 +1325,11 @@ async function registrarManualIlegible(m) {
         if (U.estado === 'conectado' && U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered) return { ok: false, error: 'ya está vinculado' };   // solo si la línea está VIVA
         const tel = String(tenant.telefono || '').replace(/\D/g, '').replace(/^521(\d{10})$/, '52$1');   // WhatsApp MX: 52 + 10 dígitos
         if (!tel) return { ok: false, error: 'tenant sin teléfono' };
+        // UN código por vez (2026-09-10, "códigos diferentes en la web y en WhatsApp"): si el último sigue vivo (<100 s, misma
+        // conexión, aún esperando), se devuelve EL MISMO en vez de pedir otro (pedir otro invalida el anterior).
+        if (U.ultimoCodigo && U.codigoTs && (Date.now() - U.codigoTs) < 100000 && U.estado === 'esperando_codigo') {
+            const c = U.ultimoCodigo; return { ok: true, codigo: c.length === 8 ? c.slice(0, 4) + '-' + c.slice(4) : c, repetido: true };
+        }
         // Conexión FRESCA: WhatsApp corta a los ~60-100 s de espera; el código debe nacer recién conectado
         const fresca = U.sockDesde && (Date.now() - U.sockDesde) < 25000 && U.ultimoQR;
         if (!fresca) {
@@ -1338,7 +1343,7 @@ async function registrarManualIlegible(m) {
         try {
             const raw = await U.sock.requestPairingCode(tel);
             const code = String(raw || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-            U.ultimoCodigo = code; U.estado = 'esperando_codigo';
+            U.ultimoCodigo = code; U.codigoTs = Date.now(); U.estado = 'esperando_codigo';
             reportarSesion(tenant.id, 'esperando_codigo', 'código pedido');
             return { ok: true, codigo: code.length === 8 ? code.slice(0, 4) + '-' + code.slice(4) : code };
         } catch (e) { return { ok: false, error: e.message }; }
