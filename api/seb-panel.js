@@ -149,7 +149,7 @@ async function guardarOferta(telO, segs) {
 // Las de K_PUENTE y K_PANEL también las abre la sesión MAESTRA (el owner desde su navegador). Todo lo no listado = SESIÓN.
 const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url']);
 const ACC_PUENTE = new Set(['opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
-const ACC_PANEL = new Set(['acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
+const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
     'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
     'flags_msgs', 'flags_msgs_done', 'citas_backfill', 'universo_backfill']);
 // prog_crear/prog_machote también los usa copilot.html (el vendedor programa "te aviso" desde su FyraChat) → K_PANEL **o** SESIÓN
@@ -293,8 +293,15 @@ module.exports = async function handler(req, res) {
             if (!r.ok) { res.setHeader('Location', '/copilot.html?vendedor=entrar&aviso=' + encodeURIComponent(r.error)); return res.status(302).end(); }
             ACC.ponerCookie(res, r.token);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_canjear', ip: IP });
-            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
-            res.setHeader('Location', '/copilot.html?bienvenida=1'); return res.status(302).end();
+            if (r.origen !== 'sb') await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);   // el pase del Sales Brain no avisa (es el owner)
+            res.setHeader('Location', r.destino && r.maestra ? '/copilot.html?vendedor=' + encodeURIComponent(r.destino) : '/copilot.html?bienvenida=1'); return res.status(302).end();
+        }
+        if (action === 'acceso_ticket_maestra' && req.method === 'POST') {
+            // Solo el Sales Brain (K_PANEL, tras su PIN): pase de un solo uso con la sesión MAESTRA que abre el FyraChat del universo pedido
+            if (!conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
+            const r = await ACC.crearTicketMaestra(Number(req.body.tenant_id));
+            if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
+            return res.status(200).json({ ok: true, url: 'https://fyrachat.vercel.app/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(r.token), expira: r.expira, destino: r.destino });
         }
         // ══ TUS DISPOSITIVOS (bloque 5): sesiones vivas del universo de la cookie + cerrar todas
         if (action === 'acceso_sesiones') {
