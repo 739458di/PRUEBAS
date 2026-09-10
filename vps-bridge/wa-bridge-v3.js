@@ -640,6 +640,9 @@ async function conectar() {
             const vinculacionFallida = code === DisconnectReason.loggedOut && !registrado;   // 401 sin haberse vinculado nunca
             const reconectar = code !== DisconnectReason.loggedOut || vinculacionFallida;
             if (vinculacionFallida) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }
+            // 401 estando vinculado = el vendedor quitó el dispositivo desde su WhatsApp: las llaves viejas ya no sirven.
+            // Se limpian aquí para que pueda volver a vincular (antes quedaba creds.registered=true → "ya está vinculado" eterno). 2026-09-10
+            if (code === DisconnectReason.loggedOut && registrado && tenant.id !== 0) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }
             // CUOTA: un universo SIN vincular que agota su set de QR cierra y reabre cada ~1 min; ese 'reconectando'
             // dura segundos y volvía a escribir wa_sessions en cada ciclo → se omite (sigue 'esperando_qr', que es la verdad útil).
             const cicloQR = reconectar && !vinculacionFallida && !registrado && U.estado === 'esperando_qr';
@@ -1319,7 +1322,7 @@ async function registrarManualIlegible(m) {
     // de teléfono. El vendedor teclea el código en SU teléfono. Solo mientras no esté registrado.
     U.codigoVinculacion = async () => {
         if (!U.sock) return { ok: false, error: 'universo sin socket' };
-        if (U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered) return { ok: false, error: 'ya está vinculado' };
+        if (U.estado === 'conectado' && U.sock.authState && U.sock.authState.creds && U.sock.authState.creds.registered) return { ok: false, error: 'ya está vinculado' };   // solo si la línea está VIVA
         const tel = String(tenant.telefono || '').replace(/\D/g, '').replace(/^521(\d{10})$/, '52$1');   // WhatsApp MX: 52 + 10 dígitos
         if (!tel) return { ok: false, error: 'tenant sin teléfono' };
         // Conexión FRESCA: WhatsApp corta a los ~60-100 s de espera; el código debe nacer recién conectado

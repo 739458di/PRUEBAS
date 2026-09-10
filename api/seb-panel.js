@@ -156,13 +156,15 @@ module.exports = async function handler(req, res) {
         // ?vendedor= suelto solo lo aceptan la sesión MAESTRA (owner) o quien trae la key (puente / Sales Brain).
         const KEY_PANEL = process.env.SELLER_BRIDGE_KEY || 'fyra-bridge-v2-2026';
         const tokenSes = ACC.leerCookie(req);
-        const SES = tokenSes ? await ACC.sesionDe(tokenSes).catch(() => null) : null;
+        const SES0 = tokenSes ? await ACC.sesionDe(tokenSes).catch(() => null) : null;
+        const SES = SES0 && !SES0.desvinculado ? SES0 : null;
+        const DESV = SES0 && SES0.desvinculado ? SES0.tenant : null;   // tenía sesión pero su WhatsApp ya no está vinculado
         const conKey = String((req.body && req.body.key) || (req.query && req.query.key) || '') === KEY_PANEL || (!!process.env.BRIDGE_API_KEY && String(req.headers['x-api-key'] || '') === process.env.BRIDGE_API_KEY);
         let VEND_PARAM = String((req.query && req.query.vendedor) || (req.body && req.body.vendedor) || '').trim();
         if (SES && !SES.maestra) VEND_PARAM = String(SES.tenant_id);
         else if (VEND_PARAM && !SES && !conKey) return res.status(401).json({ ok: false, error: 'Entra con el código que te llega a tu WhatsApp', login: true });
 
-        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra } : null });
+        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra } : null, desvinculado: DESV ? { tenant: DESV } : null });
         if (action === 'acceso_pedir' && req.method === 'POST') {
             const tel = ACC.tel521(req.body.telefono);
             if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
@@ -178,6 +180,7 @@ module.exports = async function handler(req, res) {
             if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
             const r = await ACC.entrarConCodigo(tel, String(req.body.codigo || ''), req.headers['user-agent']);
             if (!r.ok) return res.status(401).json({ ok: false, error: r.error });
+            if (r.tenant && r.tenant.id !== 0 && !r.maestra && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.', desvinculado: true }); }
             ACC.ponerCookie(res, r.token);
             return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra });
         }

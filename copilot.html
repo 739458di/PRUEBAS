@@ -607,7 +607,8 @@ function abrirGuia(){ $a('guia').classList.add('on'); }
 function cerrarGuia(){ $a('guia').classList.remove('on'); try { localStorage.setItem('fyra_guia_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
 async function cargarTenant(){
   const qs = new URLSearchParams(location.search);
-  try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; } catch(e){ SESION = null; }
+  try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); SESION = (yo && yo.sesion) || null; window.__desv = !!(yo && yo.desvinculado); } catch(e){ SESION = null; }
+  if (!SESION && window.__desv) { mostrarAcceso('Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.'); return false; }
   if (SESION && !SESION.maestra) VEND = String(SESION.tenant.id);            // su universo, siempre
   else if (!SESION && VEND) { mostrarAcceso(qs.get('aviso') || ''); return false; }   // sin sesión: código
   if (!VEND) return;
