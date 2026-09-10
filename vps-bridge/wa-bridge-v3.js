@@ -975,7 +975,11 @@ U.autoOpenerEnVuelo = new Set();  // tel → procesando ahora (anti-concurrencia
 U.autoOpenerPendiente = new Set();// tel → llegó mensaje MIENTRAS respondíamos → reprocesar al terminar
 
 // Envía UN texto saliente del bot y lo registra/emite a FyraChat (igual que /api/send).
-async function autoEnviarTexto(p, text) {
+// opts.manual = true (2026-09-10): el texto lo escribió el VENDEDOR (forma de entrada "con mi texto") → se firma como suyo
+// (emisor 'dueno', ai_generated 0), no como asistente.
+async function autoEnviarTexto(p, text, opts) {
+    const manual = !!(opts && opts.manual);
+    const aiFlag = manual ? 0 : 1;
     const destino = U.phoneALid.has(p) ? (U.phoneALid.get(p) + '@lid') : (p + '@s.whatsapp.net');
     const r = await U.sock.sendMessage(destino, { text });
     if (r?.key?.id) {
@@ -984,9 +988,10 @@ async function autoEnviarTexto(p, text) {
         setTimeout(() => { U.enviadosPorPanel.delete(r.key.id); U.sentStore.delete(r.key.id); }, 60 * 60000);
     }
     const ts = Date.now();
-    if (!tenant.id) await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: 1 }).catch(() => {});
-    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: tenant.id ? 'asistente' : 'SRS010904', texto: text, tipo: 'text', nombre: null, ai_generated: 1, tenantId: tenant.id }).catch(() => {});
-    emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: 1 });
+    const emisor = tenant.id ? (manual ? 'dueno' : 'asistente') : 'SRS010904';
+    if (!tenant.id) await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
+    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor, texto: text, tipo: 'text', nombre: null, ai_generated: aiFlag, tenantId: tenant.id }).catch(() => {});
+    emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag, emisor });
     if (!tenant.id) encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
     return r;
 }
@@ -1297,18 +1302,22 @@ async function registrarManualIlegible(m) {
     // ETAPA 2 (base por universo): la delegación es universo → chat (conversaciones) → auto, en `delegaciones` con
     // historial (cambiar de auto = cerrar la activa y abrir otra). DUAL-WRITE: `chats_activos` se sigue escribiendo
     // igual que antes hasta la Etapa 3. La fila en memoria lleva `id` (delegación) y `ca_id` (chats_activos).
-    U.delegar = async ({ tel, car_id, car_nombre, comprador_nombre, opener_texto, activado_por }) => {
+    // FORMA DE ENTRADA (orden owner 2026-09-10): el opener sale SOLO si viene en ESTA petición (modo texto/bot elegido por el
+    // vendedor), aunque el chat ya estuviera delegado (re-delegar con texto SÍ lo manda, una vez). opener_manual = texto del
+    // vendedor → firmado como suyo. opener_pendiente es letra muerta: siempre 0, jamás se lee ni dispara nada después.
+    U.delegar = async ({ tel, car_id, car_nombre, comprador_nombre, opener_texto, opener_manual, activado_por }) => {
         let p = String(tel || '').replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
         if (!/^521\d{10}$/.test(p)) return { ok: false, error: 'teléfono inválido' };
         const now = Date.now();
         let fila = U.chatsActivos.get(p);
         const esNueva = !fila;
-        if (!fila) fila = { id: null, ca_id: null, tel: p, car_id: car_id || null, car_nombre: car_nombre || null, comprador_nombre: comprador_nombre || null, opener_pendiente: opener_texto ? 1 : 0, ultimo_from_me: 0, ultimo_entrante: 0 };
+        if (!fila) fila = { id: null, ca_id: null, tel: p, car_id: car_id || null, car_nombre: car_nombre || null, comprador_nombre: comprador_nombre || null, opener_pendiente: 0, ultimo_from_me: 0, ultimo_entrante: 0 };
+        fila.opener_pendiente = 0;
         // ── espejo viejo: chats_activos (igual que antes)
         try {
             if (!fila.ca_id) {
                 const ins = await db.execute({ sql: 'INSERT INTO chats_activos (tenant_id, tel, car_id, car_nombre, comprador_nombre, activado_por, desde, opener_pendiente, opener_texto, created) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                    args: [tenant.id, p, car_id || null, car_nombre || null, comprador_nombre || null, activado_por || 'fyrachat', now, opener_texto ? 1 : 0, opener_texto || null, now] });
+                    args: [tenant.id, p, car_id || null, car_nombre || null, comprador_nombre || null, activado_por || 'fyrachat', now, 0, opener_texto || null, now] });
                 fila.ca_id = Number(ins.lastInsertRowid);
             } else {
                 await db.execute({ sql: 'UPDATE chats_activos SET car_id=COALESCE(?,car_id), car_nombre=COALESCE(?,car_nombre), comprador_nombre=COALESCE(?,comprador_nombre) WHERE id=?', args: [car_id || null, car_nombre || null, comprador_nombre || null, fila.ca_id] }).catch(() => {});
@@ -1316,7 +1325,8 @@ async function registrarManualIlegible(m) {
         } catch (e) { console.error('[t' + tenant.id + '] chats_activos:', e.message); }
         if (!esNueva) Object.assign(fila, { car_id: car_id || fila.car_id, car_nombre: car_nombre || fila.car_nombre, comprador_nombre: comprador_nombre || fila.comprador_nombre });
         U.chatsActivos.set(p, fila);
-        // ── el chat existe en su universo (conversación visible en el FyraChat del vendedor aunque nadie haya escrito)
+        // ── el chat existe en su universo (conversación visible en el FyraChat del vendedor aunque nadie haya escrito).
+        // emisor 'sistema' = NOTA INTERNA: jamás sale a WhatsApp; FyraChat la pinta como nota gris ("solo tú lo ves").
         await guardarMensajeNuevo({ tel: p, msgId: 'deleg_' + (fila.ca_id || now), ts: now, direccion: 'out', emisor: 'sistema', texto: '🤝 Chat delegado' + (car_nombre ? ' · ' + car_nombre : ''), tipo: 'text', nombre: comprador_nombre || null, ai_generated: 1, tenantId: tenant.id }).catch(() => {});
         // ── la DELEGACIÓN (verdad nueva): por chat_id, idempotente; otro auto → historial
         try {
@@ -1327,33 +1337,30 @@ async function registrarManualIlegible(m) {
                 const act = (await db.execute({ sql: 'SELECT id, auto_id FROM delegaciones WHERE chat_id=? AND hasta IS NULL ORDER BY id DESC LIMIT 1', args: [chatId] })).rows[0];
                 if (act && (!car_id || Number(act.auto_id) === Number(car_id))) {
                     fila.id = Number(act.id);
-                    await db.execute({ sql: 'UPDATE delegaciones SET auto_nombre=COALESCE(?,auto_nombre), opener_texto=COALESCE(?,opener_texto) WHERE id=?', args: [car_nombre || null, opener_texto || null, fila.id] }).catch(() => {});
+                    await db.execute({ sql: 'UPDATE delegaciones SET auto_nombre=COALESCE(?,auto_nombre), opener_texto=COALESCE(?,opener_texto), opener_pendiente=0 WHERE id=?', args: [car_nombre || null, opener_texto || null, fila.id] }).catch(() => {});
                 } else {
                     if (act) await db.execute({ sql: 'UPDATE delegaciones SET hasta=?, motivo=? WHERE id=?', args: [now, 'delegar', act.id] }).catch(() => {});
                     const insD = await db.execute({ sql: 'INSERT INTO delegaciones (chat_id, tenant_id, auto_id, auto_nombre, activado_por, desde, hasta, opener_pendiente, opener_texto, motivo, created) VALUES (?,?,?,?,?,?,NULL,?,?,NULL,?)',
-                        args: [chatId, tenant.id, car_id || null, car_nombre || null, activado_por || 'fyrachat', now, fila.opener_pendiente ? 1 : 0, opener_texto || null, now] });
+                        args: [chatId, tenant.id, car_id || null, car_nombre || null, activado_por || 'fyrachat', now, 0, opener_texto || null, now] });
                     fila.id = Number(insD.lastInsertRowid);
                 }
                 if (car_id) await db.execute({ sql: 'UPDATE conversaciones SET auto_id_activo=? WHERE id=?', args: [Number(car_id), chatId] }).catch(() => {});   // el foco como columna del chat
             }
         } catch (e) { console.error('[t' + tenant.id + '] delegaciones:', e.message); }
         let enviado = false, error = null;
-        if (opener_texto && fila.opener_pendiente) {
-            if (U.estado !== 'conectado') error = 'sesión no conectada — el opener queda pendiente';
+        const texto = String(opener_texto || '').trim();
+        if (texto) {   // SOLO lo pedido en ESTA petición; nada queda pendiente para después
+            if (U.estado !== 'conectado') error = 'sesión no conectada — el mensaje no salió';
             else {
                 try {
-                    const r = await autoEnviarTexto(p, String(opener_texto));
+                    const r = await autoEnviarTexto(p, texto, { manual: !!opener_manual });
                     enviado = !!(r && r.key && r.key.id);
-                    if (enviado) {
-                        fila.opener_pendiente = 0;
-                        if (fila.ca_id) await db.execute({ sql: 'UPDATE chats_activos SET opener_pendiente=0 WHERE id=?', args: [fila.ca_id] }).catch(() => {});
-                        if (fila.id) await db.execute({ sql: 'UPDATE delegaciones SET opener_pendiente=0 WHERE id=?', args: [fila.id] }).catch(() => {});
-                    }
+                    if (!enviado) error = 'WhatsApp no confirmó el envío';
                 } catch (e) { error = e.message; }
             }
         }
-        console.log('[t' + tenant.id + '] delegado chat ' + jidHash(p) + (enviado ? ' · opener enviado' : ''));
-        return { ok: true, chat_id: fila.ca_id || fila.id, delegacion_id: fila.id, opener_enviado: enviado, error };
+        console.log('[t' + tenant.id + '] delegado chat ' + jidHash(p) + (esNueva ? '' : ' · ya estaba') + (enviado ? ' · opener enviado' + (opener_manual ? ' (manual)' : '') : ''));
+        return { ok: true, chat_id: fila.ca_id || fila.id, delegacion_id: fila.id, ya_delegado: !esNueva, opener_enviado: enviado, error };
     };
     U.soltar = async ({ tel }) => {
         let p = String(tel || '').replace(/\D/g, ''); if (p.length === 10) p = '521' + p;
@@ -1428,14 +1435,15 @@ async function cargarChatsActivos(U) {
     try {
         const filas = new Map();   // tel → fila en memoria
         let rD = { rows: [] };
-        try { rD = await db.execute({ sql: 'SELECT d.id, d.auto_id, d.auto_nombre, d.opener_pendiente, c.telefono AS tel, c.nombre AS comprador_nombre FROM delegaciones d JOIN conversaciones c ON c.id=d.chat_id WHERE d.tenant_id=? AND d.hasta IS NULL', args: [U.tenant.id] }); }
+        try { rD = await db.execute({ sql: 'SELECT d.id, d.auto_id, d.auto_nombre, c.telefono AS tel, c.nombre AS comprador_nombre FROM delegaciones d JOIN conversaciones c ON c.id=d.chat_id WHERE d.tenant_id=? AND d.hasta IS NULL', args: [U.tenant.id] }); }
         catch (e) { if (!/no such table/i.test(String(e.message))) throw e; }
-        for (const row of rD.rows) filas.set(String(row.tel), { id: Number(row.id), ca_id: null, tel: String(row.tel), car_id: row.auto_id, car_nombre: row.auto_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: 0, ultimo_entrante: 0 });
+        // opener_pendiente = 0 SIEMPRE (2026-09-10): la reconexión jamás dispara un opener viejo; el opener solo sale en la petición de delegar que lo pide
+        for (const row of rD.rows) filas.set(String(row.tel), { id: Number(row.id), ca_id: null, tel: String(row.tel), car_id: row.auto_id, car_nombre: row.auto_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: 0, ultimo_from_me: 0, ultimo_entrante: 0 });
         const r = await db.execute({ sql: 'SELECT * FROM chats_activos WHERE tenant_id=? AND hasta IS NULL', args: [U.tenant.id] });
         for (const row of r.rows) {
             const f = filas.get(String(row.tel));
             if (f) { f.ca_id = Number(row.id); f.ultimo_from_me = Number(row.ultimo_from_me) || 0; f.ultimo_entrante = Number(row.ultimo_entrante) || 0; if (!f.car_id) f.car_id = row.car_id; if (!f.car_nombre) f.car_nombre = row.car_nombre; if (!f.comprador_nombre) f.comprador_nombre = row.comprador_nombre; }
-            else filas.set(String(row.tel), { id: null, ca_id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: Number(row.opener_pendiente) || 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
+            else filas.set(String(row.tel), { id: null, ca_id: Number(row.id), tel: String(row.tel), car_id: row.car_id, car_nombre: row.car_nombre, comprador_nombre: row.comprador_nombre, opener_pendiente: 0, ultimo_from_me: Number(row.ultimo_from_me) || 0, ultimo_entrante: Number(row.ultimo_entrante) || 0 });
         }
         cacheEscribir('chats.' + U.tenant.id + '.json', [...filas.values()]);
         U.chatsActivos.clear();

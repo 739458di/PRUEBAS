@@ -91,6 +91,9 @@
   .bub .flagb.on{opacity:1;background:#fff3d6;border-color:#e8b93f;cursor:default}
   .bub .src{font-size:9.5px;color:rgba(40,60,95,.4);margin-right:6px}
   .daysep{align-self:center;background:rgba(255,255,255,.9);color:#9aa3b5;font-size:11.5px;font-weight:600;padding:4px 13px;border-radius:10px;margin:14px 0 6px;letter-spacing:.4px;box-shadow:0 1px 3px rgba(120,150,200,.12)}
+  /* 👁 NOTA DEL SISTEMA (2026-09-10): renglones emisor 'sistema' ("🤝 Chat delegado…") — JAMÁS salieron a WhatsApp; se pintan como nota gris centrada, sin palomitas ni etiqueta BOT */
+  .sysnote{align-self:center;max-width:86%;background:rgba(255,255,255,.75);color:#7b8698;font-size:12px;font-weight:500;padding:5px 12px;border-radius:10px;margin:10px 0 4px;text-align:center;line-height:1.35;white-space:pre-wrap;word-break:break-word;border:1px dashed #d5dce8}
+  .sysnote b{color:#5b6b82;font-weight:700}
   .tick{display:inline-block;vertical-align:-1px}
   .tick svg{width:16px;height:11px}
   .tick.read svg path{stroke:var(--acc)}
@@ -287,7 +290,7 @@
     <div id="guia-inicio" style="display:none;background:#eef3fb;border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:13.5px;line-height:1.45"><b>Agrégalo a tu inicio.</b> <span id="guia-inicio-txt"></span></div>
     <ol>
       <li><b>Nuevo comprador.</b> Cuando alguien te pregunte por un auto, tócalo arriba, elige el auto y pon su número. Ese chat queda a cargo del asistente.</li>
-      <li><b>Tú decides cómo entra.</b> En silencio (solo se registra), con tu propio texto, o presentándose como tu asistente.</li>
+      <li><b>Tú decides cómo entra.</b> Tú ya te presentaste: el bot puede ejecutar de entrada UNA acción sin presentarse (cotizar, agendar cita, fotos, ubicación o información), mandar solo un primer mensaje (a tu nombre o escrito por ti), o entrar callado.</li>
       <li><b>Botones dentro del chat.</b> Fotos, ubicación, tarjeta de precio y agendar cita, todo con un toque y desde tu número.</li>
       <li><b>Lo demás sigue igual.</b> Tus otros chats no se tocan; el asistente solo ve los que tú le delegas. Puedes quitarlo cuando quieras desde Dispositivos vinculados en tu WhatsApp.</li>
     </ol>
@@ -379,11 +382,22 @@
     <div class="cmgrab"></div>
     <div class="cmbody">
       <div class="cmtitle">🤖 ¿Cómo entra el bot?</div>
-      <div class="cmhint" id="entrada-hint">Elige la forma de entrada para este chat.</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0">
-        <button type="button" onclick="cerrarEntradaM('silencio')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;cursor:pointer">🤫 <b>Sin decir nada</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Solo entra al chat. No manda mensaje.</div></button>
-        <button type="button" onclick="entradaTexto()" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;cursor:pointer">✍️ <b>Con mi texto</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Tú escribes o editas el primer mensaje.</div></button>
-        <button type="button" onclick="cerrarEntradaM('bot')" style="text-align:left;border:1.5px solid #cfe3ff;background:#eef5ff;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;cursor:pointer">🤖 <b>Se presenta como asistente</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px" id="entrada-machote">—</div></button>
+      <div class="cmhint" id="entrada-hint">Tú ya te presentaste. Elige qué hace el bot al entrar: ejecuta UNA acción (sin saludar ni presentarse), manda solo el primer mensaje, o entra callado.</div>
+      <div style="font-size:11.5px;font-weight:700;color:#8a95a8;letter-spacing:.4px;text-transform:uppercase;margin:12px 0 4px">Ejecuta una acción · sin presentarse</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button type="button" onclick="cerrarEntradaM('cotizar')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">💰 <b>Cotizar</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Te pide el enganche y le manda solo la tarjeta de precio.</div></button>
+        <button type="button" onclick="cerrarEntradaM('cita')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">📅 <b>Agendar cita</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Eliges día y hora; le confirma la cita y programa los recordatorios.</div></button>
+        <button type="button" onclick="cerrarEntradaM('fotos')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">📸 <b>Fotos del vehículo</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Le manda solo las fotos del auto, sin texto.</div></button>
+        <button type="button" onclick="cerrarEntradaM('ubicacion')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">📍 <b>Ubicación</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Le manda dónde está el auto: texto + captura + pin de Maps.</div></button>
+        <button type="button" onclick="cerrarEntradaM('info')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">📄 <b>Información</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Le manda la ficha completa del auto.</div></button>
+      </div>
+      <div style="font-size:11.5px;font-weight:700;color:#8a95a8;letter-spacing:.4px;text-transform:uppercase;margin:12px 0 4px">Solo un primer mensaje</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button type="button" onclick="cerrarEntradaM('bot')" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">🤖 <b>Se presenta a tu nombre</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px" id="entrada-machote">—</div></button>
+        <button type="button" onclick="entradaTexto()" style="text-align:left;border:1.5px solid #dde4ee;background:#fff;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">✍️ <b>Escribo yo el mensaje</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Tu texto, literal, firmado como tuyo.</div></button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+        <button type="button" onclick="cerrarEntradaM('silencio')" style="text-align:left;border:1.5px solid #dde4ee;background:#f7f9fc;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;cursor:pointer">🤫 <b>Sin decir nada</b><div style="font-size:12.5px;color:#5b6b82;margin-top:2px">Solo entra al chat. No manda mensaje.</div></button>
       </div>
       <div id="entrada-editor" style="display:none">
         <textarea id="entrada-texto" rows="4" style="width:100%;box-sizing:border-box;background:#f2f5fa;border:1.5px solid #dde4ee;border-radius:12px;padding:11px 12px;font-size:16px;font-family:inherit"></textarea>
@@ -493,7 +507,10 @@ async function flagMsg(e, btn){
   } catch(err){ alert('red: ' + err.message); }
 }
 const CHECK = '<span class="tick read"><svg viewBox="0 0 18 12"><path d="M1 6.2l3 3.1L8.6 3" fill="none" stroke="#2f6df0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.3L12.6 3" fill="none" stroke="#2f6df0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+const esSistema = m => m && m.emisor === 'sistema';
 function burbujaHTML(m, prevDir){
+  // 👁 NOTA DEL SISTEMA: nunca salió a WhatsApp → nota gris centrada, sin palomitas ni BOT, sin selección ni banderita
+  if (esSistema(m)) return '<div class="sysnote" data-k="'+claveMsg(m)+'" data-d="sys">👁 <b>Solo tú lo ves</b> · '+esc(m.mensaje||'')+'</div>';
   const lado = m.direccion==='in'?'in':'out';
   const cls = 'bub '+lado+(prevDir===m.direccion ? ' grouped' : ' first-of-group');
   const src = m.origen_envio ? '<span class="src">'+m.origen_envio+'</span>' : '';
@@ -536,7 +553,7 @@ function renderTodo(msgs){
     const day = new Date(normTs(m.timestamp)*1000).toDateString();
     if (day!==prevDay){ html += '<div class="daysep">'+diaLabel(m.timestamp)+'</div>'; prevDir=null; }
     html += burbujaHTML(m, prevDir);
-    prevDir = m.direccion; prevDay = day;
+    prevDir = esSistema(m) ? null : m.direccion; prevDay = day;   // una nota del sistema no cuenta para agrupar burbujas
   }
   return html;
 }
@@ -809,8 +826,12 @@ async function cargarTenant(){
 const vendQS = () => VPARAM() != null ? '&vendedor='+encodeURIComponent(VPARAM()) : '';
 // ➕ NUEVO COMPRADOR (única puerta de delegación, orden owner 2026-09-07): nombre del auto +
 // teléfono → el chat nace delegado en el universo del vendedor y el asistente escribe UNA vez.
-// ══ FORMA DE ENTRADA del bot al delegar (orden owner 2026-09-08): silencio / mi texto / como asistente ══
+// ══ FORMA DE ENTRADA del bot al delegar (orden owner 2026-09-10) ══
+//   ACCIÓN (sin presentarse): cotizar · cita · fotos · ubicacion · info  → delega en silencio y ejecuta SOLO eso (mismo machote seco de los botones)
+//   PRIMER MENSAJE: bot (pura presentación a tu nombre) · texto (lo escribes tú, firmado como tuyo)
+//   silencio: entra callado. Al comprador NO le llega nada más que lo elegido.
 let ENTRADA_M = { resolve: null };
+const ENTRADA_LBL = { cotizar:'💰 Cotizar', cita:'📅 Agendar cita', fotos:'📸 Fotos del vehículo', ubicacion:'📍 Ubicación', info:'📄 Información', bot:'🤖 Se presenta a tu nombre', texto:'✍️ Tu mensaje', silencio:'🤫 Sin decir nada' };
 function elegirEntrada(machote){
   return new Promise(resolve => {
     ENTRADA_M = { resolve };
@@ -836,17 +857,31 @@ async function nuevoComprador(){
   const t = TENANT.demo ? await pedirTelDemo() : prompt('📱 Teléfono del comprador (10 dígitos):'); if (!t) return;   // MODO PRUEBA: número de prueba fijo (bloqueado)
   const tel = t.replace(/\D/g,''); if (tel.length !== 10 && !(tel.length === 13 && tel.startsWith('521'))) return alert('Teléfono inválido — 10 dígitos');
   const nombre = (prompt('👤 Nombre del comprador (opcional):') || '').trim();
-  // la forma de entrada la elige el vendedor: primero pedimos el machote para mostrarlo/editarlo
+  // la forma de entrada la elige el vendedor: el machote solo se pide para MOSTRARLO/editarlo (bot/texto); nada sale con solo_preview
   let machote = '';
   try { const pv = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), auto_id: auto.id, telefono: tel, nombre, modo_entrada:'bot', solo_preview:1})}).then(x=>x.json()); machote = (pv && pv.opener) || ''; } catch(e){}
   const entrada = await elegirEntrada(machote); if (!entrada) return;
   if (entrada.modo === 'texto' && !entrada.texto) return alert('El texto quedó vacío — elige "Sin decir nada" si no quieres mensaje');
+  const body = { vendedor: VPARAM(), auto_id: auto.id, telefono: tel, nombre, modo_entrada: entrada.modo, opener_texto: entrada.texto };
+  // datos que la acción necesita ANTES de delegar (igual que los botones del chat)
+  if (entrada.modo === 'cotizar') {
+    const e = prompt('💵 Enganche en pesos (ej. 80000):'); if (e === null) return;
+    body.enganche = Number(String(e).replace(/[^0-9]/g,'')); if (!(body.enganche > 0)) return alert('Enganche inválido');
+  }
+  if (entrada.modo === 'cita') {
+    const fh = await elegirFechaHora(auto.nombre); if (!fh) return;   // el selector real de fecha/hora del chat
+    body.fecha_iso = fh.fecha; body.hora = fh.hora;
+  }
   try {
-    const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vendedor: VPARAM(), auto_id: auto.id, telefono: tel, nombre, modo_entrada: entrada.modo, opener_texto: entrada.texto})}).then(x=>x.json());
+    const r = await fetch(API+'?action=delegar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(x=>x.json());
     if (!r.ok) return alert('No se pudo: '+(r.error||'error'));
     const simTag = r.simulado ? ' (simulado — nada salió a WhatsApp)' : '';
-    alert(entrada.modo === 'silencio' ? '🤫 Chat delegado en silencio (sin mensaje)' + simTag + '. Ya puedes escribirle o usar los botones.'
-        : (r.opener_enviado ? '✅ Chat delegado y primer mensaje enviado' + simTag + ':\n\n«'+r.opener+'»' : '🟡 Chat delegado. El primer mensaje quedó pendiente: '+(r.error||'sin conexión')) );
+    let msg;
+    if (r.accion_ejecutada) msg = r.accion_ok ? ('✅ Chat delegado · ' + (ENTRADA_LBL[r.accion_ejecutada] || r.accion_ejecutada) + simTag + '\n' + (r.enviado || 'ejecutado')) : ('⚠️ Chat delegado, pero la acción no salió: ' + (r.error || 'no se pudo'));
+    else if (entrada.modo === 'silencio') msg = '🤫 Chat delegado en silencio (sin mensaje)' + simTag + '. Ya puedes escribirle o usar los botones.';
+    else if (r.opener_enviado) msg = '✅ Chat delegado y primer mensaje enviado' + simTag + ':\n\n«'+(r.opener||entrada.texto)+'»';
+    else msg = '⚠️ Chat delegado, pero el mensaje no salió: ' + (r.error || 'WhatsApp no confirmó el envío');
+    alert(msg);
     await cargarLista();
     abrirChat(r.telefono, nombre || null);
   } catch(e){ alert('Error de red: '+e.message); }
@@ -1244,11 +1279,21 @@ function abrirCitaM(){
   document.getElementById('cita-rapidas').innerHTML = chips.join('');
   document.getElementById('citamodal').classList.add('show');
 }
-function cerrarCitaM(){ document.getElementById('citamodal').classList.remove('show'); }
+// El MISMO selector, como pregunta (forma de entrada "📅 Agendar cita" al delegar): resuelve {fecha,hora} o null si se cierra
+let CITA_M = { resolve: null };
+function elegirFechaHora(autoNombre){
+  return new Promise(resolve => {
+    CITA_M = { resolve };
+    abrirCitaM();
+    if (autoNombre) document.getElementById('cita-hint').textContent = 'Cita para el ' + autoNombre + '. Elige día y hora — se le confirma al entrar.';
+  });
+}
+function cerrarCitaM(){ document.getElementById('citamodal').classList.remove('show'); const r = CITA_M.resolve; CITA_M.resolve = null; if (r) r(null); }
 async function confirmarCitaM(btn){
   if (TUTO) return tutoAccion('cita_ok');             // 🎓 tutorial: confirmación de cita de ejemplo
   const f = document.getElementById('cita-fecha').value, h = document.getElementById('cita-hora').value;
   if (!f || !h) { alert('Elige día y hora'); return; }
+  if (CITA_M.resolve) { const r = CITA_M.resolve; CITA_M.resolve = null; document.getElementById('citamodal').classList.remove('show'); return r({ fecha: f, hora: h }); }   // modo pregunta (delegar)
   btn.disabled = true;
   const body = { action:'accion_boton', telefono: TEL, accion: 'cita', vendedor: VPARAM(), comprador_nombre: (document.getElementById('c-nombre').textContent || '').trim(), fecha_iso: f, hora: h };
   const d = await postAccion(body);
@@ -1328,7 +1373,7 @@ function tutoArrancar(){
   } catch(e){ try { tutoTerminar(false, true); } catch(e2){} }
 }
 function tutoDomOk(){
-  const sels = ['#scr-lista .top .nuevo', '#lista', '#automodal', '#auto-lista', '#demotelmodal .cm-add', '#demo-tel', "#entradamodal button[onclick=\"cerrarEntradaM('bot')\"]", '#entrada-machote',
+  const sels = ['#scr-lista .top .nuevo', '#lista', '#automodal', '#auto-lista', '#demotelmodal .cm-add', '#demo-tel', "#entradamodal button[onclick=\"cerrarEntradaM('fotos')\"]", "#entradamodal button[onclick=\"cerrarEntradaM('bot')\"]", '#entrada-machote',
     '#scr-chat', '#msgs', '#c-nombre', '#c-tel', '#c-ava', '#obj-banner', '#fab', '#copilot .cb.send', '#draft', '#c-int', '#gen', '#seqbox', '#manual',
     "#acciones button[onclick=\"accionBoton('fotos')\"]", "#acciones button[onclick=\"accionBoton('ubicacion')\"]", "#acciones button[onclick=\"accionBoton('cotizar')\"]", "#acciones button[onclick=\"accionBoton('cita')\"]", '#citamodal .cm-add'];
   const fns = [elegirAuto, pedirTelDemo, elegirEntrada, abrirCitaM, cerrarCitaM, insertarBurbuja, pintarLista, pintarFoco, cerrarChat, cargarLista, colorDe];
@@ -1394,14 +1439,14 @@ const TUTO_PASOS = [
       if (!TUTO_ORIG) TUTO_ORIG = { tel: inp.value, hint: hint ? hint.textContent : '', eti: eti ? eti.textContent : '' };
       inp.value = '81 000 000 00'; if (hint) hint.textContent = 'Ejemplo — aquí va el WhatsApp del comprador.'; if (eti) eti.textContent = '🎓 número de ejemplo (bloqueado)';
       pedirTelDemo().then(() => { if (!TUTO || TUTO_PASO !== i) return; tutoIr(i + 1); }); } },
-  { modo:'tap', espera:340, target:"#entradamodal button[onclick=\"cerrarEntradaM('bot')\"]", titulo:'Tú decides cómo entra', texto:'En silencio (solo se registra), con tu propio texto, o presentándose como tu asistente. Toca la tercera opción.',
+  { modo:'tap', espera:340, target:"#entradamodal button[onclick=\"cerrarEntradaM('fotos')\"]", titulo:'Tú decides cómo entra', texto:'Tú ya te presentaste con el comprador. El bot puede entrar ejecutando UNA acción sin presentarse (cotizar, cita, fotos, ubicación o info), mandar solo un primer mensaje, o entrar callado. Toca “📸 Fotos del vehículo”.',
     prep(i){ elegirEntrada(TUTO_OPENER()).then(() => { if (!TUTO || TUTO_PASO !== i) return; tutoIr(i + 1); }); } },
-  { acc:'abrir', modo:'tap', espera:300, target:'#lista .chatrow', titulo:'Ya está en tu lista', texto:'“Comprador de ejemplo” apareció arriba con el primer mensaje enviado. Tócalo para abrir el chat.',
+  { acc:'abrir', modo:'tap', espera:300, target:'#lista .chatrow', titulo:'Ya está en tu lista', texto:'“Comprador de ejemplo” apareció arriba: ya le salieron las fotos del BMW, sin saludo ni presentación. Tócalo para abrir el chat.',
     prep(){ SOLO_PEND = false; try { $a('pill-pend').classList.remove('on'); $a('buscar').value = ''; } catch(e){}
       CHATS = CHATS.filter(c => c.telefono !== TUTO_TEL);
-      CHATS.unshift({ telefono: TUTO_TEL, nombre: 'Comprador de ejemplo', ult_msg: TUTO_OPENER().slice(0, 90), ult_dir: 'out', ult_ts: Date.now(), pendientes: 0, tuto: true });
+      CHATS.unshift({ telefono: TUTO_TEL, nombre: 'Comprador de ejemplo', ult_msg: '📷 imagen', ult_dir: 'out', ult_ts: Date.now(), pendientes: 0, tuto: true });
       unread[TUTO_TEL] = 0; pintarLista(); } },
-  { modo:'next', espera:420, target:'#msgs', titulo:'El asistente se presentó', texto:'Ese primer mensaje salió desde tu WhatsApp. Aquí ves todo lo que sale y lo que contesta el comprador. Abajo tienes tus botones.' },
+  { modo:'next', espera:420, target:'#msgs', titulo:'Entró solo con las fotos', texto:'El bot no se presentó: mandó únicamente las fotos del BMW desde tu WhatsApp. La nota gris “Solo tú lo ves” es interna — al comprador no le llega. Aquí ves todo lo que sale y lo que contesta. Abajo tienes tus botones.' },
   { acc:'fotos', modo:'tap', target:"#acciones button[onclick=\"accionBoton('fotos')\"]", titulo:'Fotos con un toque', texto:'Manda las fotos del auto en foco (el BMW). Tócalo.' },
   { acc:'ubicacion', modo:'tap', target:"#acciones button[onclick=\"accionBoton('ubicacion')\"]", titulo:'Ubicación', texto:'Manda la ubicación de tu lote o punto de entrega: texto + pin de Maps.' },
   { acc:'cotizar', modo:'tap', target:"#acciones button[onclick=\"accionBoton('cotizar')\"]", titulo:'Tarjeta de precio', texto:'Calcula enganche y mensualidad del auto y se la manda como tarjeta.' },
@@ -1497,7 +1542,8 @@ function tutoFoto(n){
     + '<text x="240" y="298" text-anchor="middle" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="17" fill="#b8c4dc">BMW 330i 2021 · foto de ejemplo ' + n + '</text></svg>';
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
 }
-// El chat de ejemplo se abre SIN fetch (espejo de abrirChat) y nace con el opener del asistente
+// El chat de ejemplo se abre SIN fetch (espejo de abrirChat) y nace como en la vida real con la entrada "📸 Fotos del vehículo":
+// nota interna del sistema (solo tú la ves) + las fotos del auto, sin presentación
 function tutoAbrirChat(){
   TEL = TUTO_TEL; QID = null; EDITANDO = false; OBJETIVO = null; SEQ = null; SEQ_CONSUMED = false;
   $a('obj-banner').classList.remove('show');
@@ -1507,7 +1553,9 @@ function tutoAbrirChat(){
   $a('draft').value = ''; $a('seqbox').classList.remove('show');
   $a('scr-chat').classList.add('open');
   pintarFoco(TUTO_AUTO);
-  setTimeout(() => { if (TUTO) tutoBurbuja({ direccion:'out', ai:1, mensaje: TUTO_OPENER() }); }, 280);
+  setTimeout(() => { if (TUTO) tutoBurbuja({ direccion:'out', emisor:'sistema', ai:1, mensaje: '🤝 Chat delegado · ' + TUTO_AUTO.nombre }); }, 200);
+  setTimeout(() => { if (TUTO) tutoBurbuja({ direccion:'out', ai:1, tipo:'image', mensaje: tutoFoto(1) }); }, 380);
+  setTimeout(() => { if (TUTO) tutoBurbuja({ direccion:'out', ai:1, tipo:'image', mensaje: tutoFoto(2) }); }, 620);
 }
 // Cada puerta real interceptada llega aquí con su `acc`; solo cuenta si es el paso en curso.
 function tutoAccion(acc){

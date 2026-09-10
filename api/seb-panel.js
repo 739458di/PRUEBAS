@@ -439,10 +439,11 @@ module.exports = async function handler(req, res) {
                 // segunda; el front deduplica por msg_id). Sin desde = conversación completa (primera carga).
                 const desdeQ = Number(req.query.desde) || 0;
                 const rows = await query(
-                    "SELECT direccion, texto, ts, msg_id, tipo, ai_generated FROM mensajes WHERE conversacion_id = ? AND ts >= ? ORDER BY ts ASC, id ASC",
+                    "SELECT direccion, texto, ts, msg_id, tipo, ai_generated, emisor FROM mensajes WHERE conversacion_id = ? AND ts >= ? ORDER BY ts ASC, id ASC",
                     [conv[0].id, desdeQ * 1000]);
                 // ai: 0 = lo escribió el owner (teléfono o FyraChat), 1 = lo escribió el bot — FyraChat lo etiqueta
-                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id, tipo: m.tipo || 'text', ai: Number(m.ai_generated) || 0 }));
+                // emisor (2026-09-10): 'sistema' = nota interna ("🤝 Chat delegado…") que JAMÁS salió a WhatsApp → FyraChat la pinta como nota gris, no como burbuja enviada
+                mensajes = rows.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, timestamp: Math.floor(Number(m.ts) / 1000), msg_id: m.msg_id, tipo: m.tipo || 'text', ai: Number(m.ai_generated) || 0, emisor: m.emisor || null }));
                 // MODO PRUEBA: solo mensajes posteriores al reinicio
                 if (resetTs) mensajes = mensajes.filter(m => (m.timestamp * 1000) >= resetTs);
             }
@@ -799,17 +800,31 @@ module.exports = async function handler(req, res) {
             const autoNombre = [auto.marca, auto.modelo, auto.anio].filter(Boolean).join(' ');
             const nomC = String(req.body.nombre || '').trim();
             const primerNombre = (t.nombre || 'el vendedor').split(/\s+/)[0];
-            // MACHOTE del opener (propuesto; el owner lo ajusta en config_json.opener_texto si quiere)
-            const plantilla = (t.config && t.config.opener_texto) || 'Hola{nombre}, soy el asistente de {vendedor} para el {auto}. ¿En qué te puedo ayudar?';
-            // FORMA DE ENTRADA (orden owner 2026-09-08): al delegar, el vendedor ELIGE cómo entra el bot:
-            //   modo 'silencio'  → entra sin decir nada (solo se registra el chat)
-            //   modo 'texto'     → el texto que él escribió/editó (literal)
-            //   modo 'bot'       → se presenta como asistente (machote)
-            // SIN modo explícito → SILENCIO. Jamás se manda un machote que el vendedor no eligió (una UI vieja/cacheada no puede disparar nada).
-            const modoE = ['silencio', 'texto', 'bot'].includes(String(req.body.modo_entrada)) ? String(req.body.modo_entrada) : 'silencio';
-            const openerBase = modoE === 'silencio' ? '' : (modoE === 'texto' ? String(req.body.opener_texto || '') : plantilla);
-            const opener = openerBase.replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').replace('{vendedor}', primerNombre).replace('{auto}', autoNombre);
-            if (req.body.solo_preview) return res.status(200).json({ ok: true, opener, modo: modoE });   // la UI pide el machote para dejarlo editar
+            // MACHOTE de la presentación (modo 'bot'): PURA presentación a nombre del vendedor, sin pregunta ni venta
+            // (el owner lo ajusta en config_json.opener_texto si quiere)
+            const plantilla = (t.config && t.config.opener_texto) || 'Hola{nombre}, soy el asistente de {vendedor} para el {auto}.';
+            // ══ FORMA DE ENTRADA (orden owner 2026-09-10): al delegar, el vendedor ELIGE cómo entra el bot ══
+            //   'silencio'  → entra sin decir nada (solo se registra el chat)                       — SIN modo explícito = silencio
+            //   'texto'     → el texto que él escribió/editó (literal), firmado como SUYO (emisor 'dueno', ai 0)
+            //   'bot'       → SOLO la presentación a nombre del vendedor (machote), explícita, nunca por defecto
+            //   'info' | 'fotos' | 'ubicacion' | 'cotizar' | 'cita' → delega EN SILENCIO y ejecuta SOLO esa acción con el mismo
+            //                machote seco de los botones del chat (ejecutarAccion = una sola puerta): sin saludo, sin "soy el asistente".
+            // Al comprador NO le llega NADA más que lo elegido: nada de "chat delegado", nada de "el bot…". Jamás se manda un
+            // machote que el vendedor no eligió (una UI vieja/cacheada no puede disparar nada).
+            const MODOS_MSJ = ['silencio', 'texto', 'bot'], MODOS_ACC = ['info', 'fotos', 'ubicacion', 'cotizar', 'cita'];
+            const modoRaw = String(req.body.modo_entrada || '');
+            const modoE = MODOS_MSJ.concat(MODOS_ACC).includes(modoRaw) ? modoRaw : 'silencio';
+            const esAccion = MODOS_ACC.includes(modoE);
+            const openerBase = modoE === 'texto' ? String(req.body.opener_texto || '') : (modoE === 'bot' ? plantilla : '');
+            const opener = openerBase.replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').replace('{vendedor}', primerNombre).replace('{auto}', autoNombre).trim();
+            if (req.body.solo_preview) return res.status(200).json({ ok: true, opener, modo: modoE, modos: MODOS_MSJ.concat(MODOS_ACC) });   // la UI pide el machote para dejarlo editar
+            if (modoE === 'texto' && !opener) return res.status(400).json({ ok: false, error: 'el texto quedó vacío — elige "sin decir nada" si no quieres mensaje' });
+            // datos que la acción exige ANTES de delegar (no se delega para luego fallar): cotizar → enganche; cita → fecha y hora
+            const engD = req.body.enganche != null && String(req.body.enganche).trim() !== '' ? Number(String(req.body.enganche).replace(/[^0-9.]/g, '')) : null;
+            if (modoE === 'cotizar' && !(engD > 0)) return res.status(400).json({ ok: false, necesita: 'datos', error: 'para cotizar hace falta el enganche' });
+            if (modoE === 'cita' && !(/^\d{4}-\d{2}-\d{2}$/.test(String(req.body.fecha_iso || '')) && /^\d{1,2}:\d{2}$/.test(String(req.body.hora || '')))) return res.status(400).json({ ok: false, necesita: 'fecha_hora', error: 'para agendar hace falta día y hora' });
+            const cuerpoAcc = { auto_id: auto.id, enganche: engD || undefined, plazo_meses: req.body.plazo_meses || undefined, fecha_iso: req.body.fecha_iso || undefined, hora: req.body.hora || undefined, comprador_nombre: nomC, via: 'entrada' };
+            const registrarDeleg = async (extra) => { try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: Object.assign({ auto: autoNombre, modo: modoE }, extra || {}), actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { } };
             // tenant 0: chat delegado = chat del owner de siempre (nuevo_chat) — sin universo aparte
             if (!t.id) {
                 // ETAPA 2: el chat nace en su universo (0) y la delegación (chat → auto) queda con historial; espejo a wa_conversations
@@ -820,25 +835,38 @@ module.exports = async function handler(req, res) {
             let r = null;
             if (t.demo) {
                 // MODO PRUEBA: NO se llama al puente. Se crea en local lo que el puente crearía (chat #t<id>, delegación + chats_activos,
-                // renglón 'sistema' y el opener como 'asistente' con prefijo [prueba]).
-                r = await DEMO.delegar({ tenant: t, tel: telD, auto_id: auto.fyradrive_web_id || auto.id, auto_nombre: autoNombre, nombre: nomC || null, opener: (modoE === 'silencio' ? '' : opener) });
-                try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: { auto: autoNombre, modo: modoE, opener_enviado: !!(r && r.opener_enviado), simulado: true }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
-                return res.status(r.ok ? 200 : 400).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener, simulado: true }, r || {}));
+                // renglón 'sistema'); el opener (solo texto/bot) queda en el hilo con prefijo [prueba]; la acción de entrada se pinta igual que los botones.
+                r = await DEMO.delegar({ tenant: t, tel: telD, auto_id: auto.fyradrive_web_id || auto.id, auto_nombre: autoNombre, nombre: nomC || null, opener, opener_emisor: modoE === 'texto' ? 'dueno' : 'asistente' });
+                let acc = null;
+                if (r && r.ok && esAccion) { const rA = await ejecutarAccion(t, telD, modoE, cuerpoAcc); acc = rA.out || {}; }
+                await registrarDeleg({ opener_enviado: !!(r && r.opener_enviado), accion_ejecutada: esAccion ? modoE : null, accion_ok: acc ? !!acc.ok : null, simulado: true });
+                return res.status(r.ok ? 200 : 400).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, modo: modoE, opener, simulado: true }, r || {},
+                    esAccion ? { accion_ejecutada: modoE, enviado: acc && acc.ok ? (acc.enviado || 'ejecutado') : null, accion_ok: !!(acc && acc.ok), error: acc && !acc.ok ? (acc.error || 'la acción no se pudo ejecutar') : undefined, necesita: acc && acc.necesita || undefined } : {}));
             }
             try {
-                const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/delegar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD, car_id: auto.fyradrive_web_id || auto.id, car_nombre: autoNombre, comprador_nombre: nomC || null, opener_texto: t.id ? opener : null, activado_por: 'fyrachat' }) });
+                // el puente delega (idempotente: si ya estaba delegado responde ok igual) y manda el opener SOLO si viene en ESTA petición
+                // (texto/bot); opener_manual = texto del vendedor → lo firma como suyo. Jamás manda nada "pendiente" de antes.
+                const fr = await fetch(BRIDGE_BASE + '/tenant/' + t.id + '/delegar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ tel: telD, car_id: auto.fyradrive_web_id || auto.id, car_nombre: autoNombre, comprador_nombre: nomC || null, opener_texto: (t.id && opener) ? opener : null, opener_manual: modoE === 'texto', activado_por: 'fyrachat' }) });
                 r = await fr.json().catch(() => ({ ok: false, error: 'puente ilegible' }));
             } catch (e) { r = { ok: false, error: 'puente: ' + e.message }; }
-            // tenant 0: el opener sale por la puerta manual de siempre (firmado como bot)
+            // tenant 0: el opener (solo texto/bot) sale por la puerta manual de siempre; en silencio/acción NO se manda nada (ni un POST vacío)
             if (!t.id) {
-                try {
-                    const fr2 = await fetch(BRIDGE_BASE + '/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ phone: telD, text: opener }) });
-                    const d2 = await fr2.json().catch(() => ({})); r = Object.assign({ ok: true }, r || {}, { opener_enviado: fr2.ok && d2.ok !== false });
-                } catch (e) { r = Object.assign({ ok: true }, r || {}, { opener_enviado: false, error: e.message }); }
+                if (opener) {
+                    try {
+                        const fr2 = await fetch(BRIDGE_BASE + '/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BRIDGE_KEY_T }, body: JSON.stringify({ phone: telD, text: opener, manual: modoE === 'texto' }) });
+                        const d2 = await fr2.json().catch(() => ({})); r = Object.assign({ ok: true }, r || {}, { opener_enviado: fr2.ok && d2.ok !== false, error: (fr2.ok && d2.ok !== false) ? undefined : (d2.error || ('bridge ' + fr2.status)) });
+                    } catch (e) { r = Object.assign({ ok: true }, r || {}, { opener_enviado: false, error: e.message }); }
+                } else r = Object.assign({ ok: true }, r || {}, { opener_enviado: false });
             }
+            // ACCIÓN DE ENTRADA: la delegación ya existe (puente) → se ejecuta SOLO esa acción por la misma puerta que los botones.
+            // Si el puente dijo que ya estaba delegado, se ejecuta igual (es lo que el vendedor pidió).
+            let acc = null;
+            if (esAccion && r && r.ok !== false) { const rA = await ejecutarAccion(t, telD, modoE, cuerpoAcc); acc = rA.out || {}; }
             // ACCIÓN POR CHAT: la delegación queda como acción (con la delegación activa que acaba de nacer)
-            try { const dD = await citasVivas.direccionDe(t.id, telD); await require('../lib/seb/acciones.js').registrar({ tenant_id: t.id, chat_id: dD.chat_id, delegacion_id: dD.delegacion_id, tipo: 'delegacion', ref_id: auto.id, meta: { auto: autoNombre, modo: modoE, opener_enviado: !!(r && r.opener_enviado) }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
-            return res.status(200).json(Object.assign({ ok: true, telefono: telD, auto: autoNombre, opener }, r || {}));
+            await registrarDeleg({ opener_enviado: !!(r && r.opener_enviado), accion_ejecutada: esAccion ? modoE : null, accion_ok: acc ? !!acc.ok : null });
+            const salida = Object.assign({ ok: true, telefono: telD, auto: autoNombre, modo: modoE, opener }, r || {});
+            if (esAccion) Object.assign(salida, { accion_ejecutada: modoE, enviado: acc && acc.ok ? (acc.enviado || 'ejecutado') : null, accion_ok: !!(acc && acc.ok), error: acc ? (acc.ok ? undefined : (acc.error || 'la acción no se pudo ejecutar')) : (salida.error || 'no se pudo delegar'), necesita: acc && acc.necesita || undefined });
+            return res.status(200).json(salida);
         }
         if (action === 'soltar' && req.method === 'POST') {
             const t = await tenantDeParam(VEND_PARAM);
@@ -1963,19 +1991,13 @@ module.exports = async function handler(req, res) {
             } catch (e) { }
             return res.status(200).json({ ok: true, folios: out, programados, ahora: Date.now() });
         }
-        // ══ BOTONERA DE EMERGENCIA (owner 2026-08-06): (ubicación)(cotizar)(fotos)(cita)
-        // en FyraChat. DETERMINISTA: ejecuta literal las herramientas de la lista blanca
-        // con el auto EN FOCO de la conversación; sin foco → el front pide el auto y
-        // aquí se amarra contra el inventario (match único o nada). Cero IA.
-        if (action === 'accion_boton' && req.method === 'POST') {
-            const telB = String(req.body.telefono || '').replace(/\D/g, '');
-            const accB = String(req.body.accion || '');
-            if (!telB || !accB) return res.status(400).json({ ok: false, error: 'telefono y accion requeridos' });
-            let telFullB = telB.length === 10 ? '521' + telB : telB;
-            // TENANT (orden owner 2026-09-08): los botones funcionan en cada universo, con el AUTO EN FOCO del contacto
-            // (nace al delegar), restringidos a su catálogo, y TODO sale por el número de ESE tenant (jamás por el de Fyradrive).
-            const tAcc = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
-            if (!tAcc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+        // ══ EJECUTAR UNA ACCIÓN DE LA LISTA BLANCA (una sola puerta, 2026-09-10): la usan el botón del chat (accion_boton)
+        // y la FORMA DE ENTRADA al delegar (delegar con modo info/fotos/ubicacion/cotizar/cita). DETERMINISTA: ejecuta literal
+        // la herramienta con el auto EN FOCO (o el auto_id que venga), restringida al catálogo del universo. Cero IA.
+        // Devuelve { status, out } — quien llama responde. B = cuerpo (auto_id, auto_texto, enganche, plazo_meses, fecha_iso, hora, comprador_nombre).
+        async function ejecutarAccion(tAcc, telFullB, accB, B) {
+            B = B || {};
+            const R = (status, out) => ({ status, out });
             const TID = tAcc.id;
             const esDemoB = !!tAcc.demo;   // MODO PRUEBA: el comprador es de prueba y cada salida se REGISTRA en el hilo (nada al puente)
             if (esDemoB) telFullB = DEMO.telComprador(telFullB);
@@ -1989,19 +2011,19 @@ module.exports = async function handler(req, res) {
                 const r = await query("SELECT id, fyradrive_web_id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo' AND (" + cond + ")", args);
                 return r;
             };
-            if (req.body.auto_id) {
-                const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [Number(req.body.auto_id), Number(req.body.auto_id)]);
+            if (B.auto_id) {
+                const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [Number(B.auto_id), Number(B.auto_id)]);
                 inv = r[0] || null;
-                if (inv && !enCatalogo(inv)) return res.status(403).json({ ok: false, error: 'ese auto no está habilitado para este usuario' });
+                if (inv && !enCatalogo(inv)) return R(403, { ok: false, error: 'ese auto no está habilitado para este usuario' });
             } else if (TID) {
                 // universo de vendedor: el foco del contacto manda; sin foco NO se adivina (cambia el auto en la barrita)
                 const f = await focoDe(tAcc, telFullB);
                 if (f && f.id) { const r = await buscarInv('id = ?', [Number(f.id)]); inv = r[0] || null; }
-                if (!inv || !enCatalogo(inv)) return res.status(200).json({ ok: false, necesita: 'foco', error: 'este contacto no tiene auto en foco (o ya no está activo) — cámbialo en la barrita del chat' });
-            } else if (String(req.body.auto_texto || '').trim()) {
+                if (!inv || !enCatalogo(inv)) return R(200, { ok: false, necesita: 'foco', error: 'este contacto no tiene auto en foco (o ya no está activo) — cámbialo en la barrita del chat' });
+            } else if (String(B.auto_texto || '').trim()) {
                 // match por nombre contra TODO el inventario activo: todos los tokens
                 // del texto deben vivir en [marca modelo version año]; único o nada.
-                const t = normB(req.body.auto_texto);
+                const t = normB(B.auto_texto);
                 const toks = t.split(' ').filter(x => x.length >= 2 || /^\d$/.test(x));
                 const todos = await buscarInv('1=1', []);
                 const hits = todos.filter(a => {
@@ -2009,12 +2031,12 @@ module.exports = async function handler(req, res) {
                     return toks.every(tk => nom.includes(tk));
                 });
                 if (hits.length === 1) inv = hits[0];
-                else return res.status(200).json({ ok: false, necesita: 'auto', error: hits.length ? ('ambiguo: ' + hits.map(h => [h.marca, h.modelo, h.anio].join(' ')).join(' | ')) : 'no encontré ese auto en el inventario' });
+                else return R(200, { ok: false, necesita: 'auto', error: hits.length ? ('ambiguo: ' + hits.map(h => [h.marca, h.modelo, h.anio].join(' ')).join(' | ')) : 'no encontré ese auto en el inventario' });
             } else {
                 // el AUTO EN FOCO de la conversación
                 const foco = await U.autoActivoDe(0, telFullB);
                 if (foco) { const r = await buscarInv('id = ? OR fyradrive_web_id = ?', [foco, foco]); inv = r[0] || null; }
-                if (!inv) return res.status(200).json({ ok: false, necesita: 'auto' });
+                if (!inv) return R(200, { ok: false, necesita: 'auto' });
             }
             const nombreAuto = [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
             // el foco queda amarrado a lo que se ejecutó (seguimiento coherente) — upsert
@@ -2036,25 +2058,25 @@ module.exports = async function handler(req, res) {
                     // copy-paste literal (mismo generador del "más información" del bot)
                     const { machoteDe } = require('../lib/seb/machote.js');
                     const mch = await machoteDe(inv.id);
-                    if (!mch) return res.status(200).json({ ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
+                    if (!mch) return R(200, { ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
                     await regAcc('boton_info', { simulado: esPrueba });
-                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, mch, 'asistente'); return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: (esDemoB ? 'SIMULADO (prueba): machote de info' : 'SIMULADO (carril pruebas): machote de info'), machote: String(mch).slice(0, 150) }); }
+                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, mch, 'asistente'); return R(200, { ok: true, simulado: true, auto: nombreAuto, enviado: (esDemoB ? 'SIMULADO (prueba): machote de info' : 'SIMULADO (carril pruebas): machote de info'), machote: String(mch).slice(0, 150) }); }
                     await enviarWA(telFullB, mch);
-                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'machote completo de ' + nombreAuto });
+                    return R(200, { ok: true, auto: nombreAuto, enviado: 'machote completo de ' + nombreAuto });
                 }
                 if (accB === 'fotos') {
                     const urls = await H.fotosDeAuto(inv.id, 8);
-                    if (!urls || !urls.length) return res.status(200).json({ ok: false, error: 'ese auto no tiene fotos en el sistema' });
+                    if (!urls || !urls.length) return R(200, { ok: false, error: 'ese auto no tiene fotos en el sistema' });
                     await regAcc('boton_fotos', { n: urls.length, simulado: esPrueba });
-                    if (esPrueba) { if (esDemoB) { const t0 = Date.now(); for (let i = 0; i < urls.length; i++) await DEMO.salidaMedia(tAcc, telFullB, 'image', urls[i], t0 + i); } return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ' + (TID ? 'solo ' : 'texto + ') + urls.length + ' fotos' }); }
+                    if (esPrueba) { if (esDemoB) { const t0 = Date.now(); for (let i = 0; i < urls.length; i++) await DEMO.salidaMedia(tAcc, telFullB, 'image', urls[i], t0 + i); } return R(200, { ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ' + (TID ? 'solo ' : 'texto + ') + urls.length + ' fotos' }); }
                     if (!TID) await enviarWA(telFullB, 'Van, ahí te las mando 📸');     // en universos de vendedor: SOLO las fotos, sin redactar
                     const rf = await fetch(BURL.replace('/api/send', '/api/send-fotos'), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(conTenant({ phone: telFullB, urls })) });
                     const df = await rf.json().catch(() => ({}));
-                    return res.status(200).json({ ok: !!df.ok, auto: nombreAuto, enviado: (TID ? '' : 'texto + ') + urls.length + ' fotos', error: df.ok ? undefined : (df.error || 'el puente no pudo mandar las fotos') });
+                    return R(200, { ok: !!df.ok, auto: nombreAuto, enviado: (TID ? '' : 'texto + ') + urls.length + ' fotos', error: df.ok ? undefined : (df.error || 'el puente no pudo mandar las fotos') });
                 }
                 if (accB === 'ubicacion') {
                     const u = await H.ubicacion({ auto_id: inv.id });
-                    if (!u.ok) return res.status(200).json({ ok: false, error: u.error === 'sin_punto_asignado' ? ('el ' + nombreAuto + ' NO tiene punto de venta asignado (configúralo en puntos.html)') : u.error });
+                    if (!u.ok) return R(200, { ok: false, error: u.error === 'sin_punto_asignado' ? ('el ' + nombreAuto + ' NO tiene punto de venta asignado (configúralo en puntos.html)') : u.error });
                     const punto = (u.placeholders && u.placeholders.punto_nombre) || 'nuestro punto Fyradrive';
                     const pe = await query('SELECT image_b64, lat, lng, name FROM punto_envio WHERE auto_id = ?', [inv.id]);
                     const cap = pe.length ? pe[0] : {};
@@ -2067,57 +2089,74 @@ module.exports = async function handler(req, res) {
                             if (cap.image_b64) await DEMO.salidaMedia(tAcc, telFullB, 'image', 'ubic-img:' + inv.id, t0 + 1);
                             if (cap.lat != null && cap.lng != null) await DEMO.salidaMedia(tAcc, telFullB, 'location', [cap.name || punto, cap.lat, cap.lng, ''].join('|||'), t0 + 2);
                         }
-                        return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): paquete de ubicación de ' + punto + (TID ? ' (sin pregunta de cita)' : '') });
+                        return R(200, { ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): paquete de ubicación de ' + punto + (TID ? ' (sin pregunta de cita)' : '') });
                     }
                     const body = conTenant({ phone: telFullB, text: texto });
                     if (cap.image_b64) body.image = cap.image_b64;
                     if (cap.lat != null && cap.lng != null) body.location = { lat: cap.lat, lng: cap.lng, name: cap.name || punto };
                     const ru = await fetch(BURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': BKEY }, body: JSON.stringify(body) });
                     const du = await ru.json().catch(() => ({}));
-                    if (!du.ok) return res.status(200).json({ ok: false, error: du.error || 'el puente no pudo mandar la ubicación' });
+                    if (!du.ok) return R(200, { ok: false, error: du.error || 'el puente no pudo mandar la ubicación' });
                     if (!TID) await enviarWA(telFullB, '¿Qué día te queda bien para venir a verlo y manejarlo? Te agendo de una vez');   // vendedores: solo el paquete
-                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'paquete de ubicación (' + [cap.image_b64 ? 'captura' : null, 'texto', (cap.lat != null ? 'pin' : null), TID ? null : 'cita'].filter(Boolean).join(' + ') + ')' });
+                    return R(200, { ok: true, auto: nombreAuto, enviado: 'paquete de ubicación (' + [cap.image_b64 ? 'captura' : null, 'texto', (cap.lat != null ? 'pin' : null), TID ? null : 'cita'].filter(Boolean).join(' + ') + ')' });
                 }
                 if (accB === 'cotizar') {
-                    const c = await H.cotizar({ auto_id: inv.id, enganche: req.body.enganche ? Number(req.body.enganche) : undefined, plazo_meses: req.body.plazo_meses ? Number(req.body.plazo_meses) : undefined });
-                    if (!c.ok) return res.status(200).json({ ok: false, necesita: c.error === 'falta_enganche' ? 'datos' : undefined, error: c.error });
-                    await regAcc('boton_cotizar', { enganche: req.body.enganche || null, plazo: req.body.plazo_meses || null, simulado: esPrueba });
-                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, c.placeholders.cotizacion, 'asistente'); return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): cotización lista' + (TID ? ' (solo la tarjeta)' : ''), tarjeta: String(c.placeholders.cotizacion).slice(0, 200) }); }
+                    const c = await H.cotizar({ auto_id: inv.id, enganche: B.enganche ? Number(B.enganche) : undefined, plazo_meses: B.plazo_meses ? Number(B.plazo_meses) : undefined });
+                    if (!c.ok) return R(200, { ok: false, necesita: c.error === 'falta_enganche' ? 'datos' : undefined, error: c.error });
+                    await regAcc('boton_cotizar', { enganche: B.enganche || null, plazo: B.plazo_meses || null, simulado: esPrueba });
+                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, c.placeholders.cotizacion, 'asistente'); return R(200, { ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): cotización lista' + (TID ? ' (solo la tarjeta)' : ''), tarjeta: String(c.placeholders.cotizacion).slice(0, 200) }); }
                     if (!TID) await enviarWA(telFullB, 'Va, mira cómo quedaría:');
                     await enviarWA(telFullB, c.placeholders.cotizacion);                 // vendedores: SOLO la tarjeta
                     if (!TID) await enviarWA(telFullB, '¿Cómo la ves?');
-                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'cotización de ' + nombreAuto });
+                    return R(200, { ok: true, auto: nombreAuto, enviado: 'cotización de ' + nombreAuto });
                 }
                 if (accB === 'cita') {
-                    const fI = String(req.body.fecha_iso || ''), hI = String(req.body.hora || '');
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return res.status(200).json({ ok: false, necesita: 'fecha_hora' });
-                    await regAcc('cita_agendada', { fecha_iso: fI, hora: hI, simulado: esPrueba, via: 'boton' });
-                    // MISMO machote dictado por el owner (2026-08-24) — solo cambia quién se presenta: el asistente del vendedor
+                    const fI = String(B.fecha_iso || ''), hI = String(B.hora || '');
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return R(200, { ok: false, necesita: 'fecha_hora' });
+                    await regAcc('cita_agendada', { fecha_iso: fI, hora: hI, simulado: esPrueba, via: B.via || 'boton' });
+                    // MISMO machote dictado por el owner (2026-08-24). UNIVERSOS DE VENDEDOR (orden owner 2026-09-10): SIN presentación
+                    // ("soy el asistente de… 🤖" jamás) — el vendedor ya se presentó a mano; el bot solo ejecuta: "Ya quedó tu cita ✅ …".
                     const msjCitaVend = (() => {
-                        const nomC = String(req.body.comprador_nombre || '').trim().split(/\s+/)[0] || '';
+                        const nomC = String(B.comprador_nombre || '').trim().split(/\s+/)[0] || '';
                         const [y, mo, d] = fI.split('-').map(Number); const [hh, mi] = hI.split(':').map(Number);
                         const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'], meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
                         const dt = new Date(Date.UTC(y, mo - 1, d, 12));
                         const horaTxt = (hh % 12 === 0 ? 12 : hh % 12) + (mi ? ':' + String(mi).padStart(2, '0') : '') + (hh < 12 ? 'am' : 'pm');
+                        const cuando = dias[dt.getUTCDay()] + ' ' + d + ' de ' + meses[mo - 1] + ' a las ' + horaTxt + ' para ver el ' + nombreAuto + '.';
+                        if (TID) return (nomC ? nomC + ', ya' : 'Ya') + ' quedó tu cita ✅ ' + cuando + '\n' +
+                            'Por aquí te estaré enviando las notificaciones previas a tu cita 👍';
                         const vend = String(tAcc.nombre || '').split(/\s+/)[0] || 'tu vendedor';
                         return 'Hola' + (nomC ? ' ' + nomC : '') + ', soy el asistente de ' + vend + ' 🤖\n' +
-                            'Ya quedó tu cita ✅ ' + dias[dt.getUTCDay()] + ' ' + d + ' de ' + meses[mo - 1] + ' a las ' + horaTxt + ' para ver el ' + nombreAuto + '.\n' +
+                            'Ya quedó tu cita ✅ ' + cuando + '\n' +
                             'Por aquí te estaré enviando las notificaciones previas a tu cita para comprar tu auto 👍';
                     })();
                     // MODO PRUEBA / carril: NO se crea cita en CRM ni en Calendar; en demo el machote de confirmación queda en el hilo
-                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, msjCitaVend, 'asistente'); return res.status(200).json({ ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): cita ' + fI + ' ' + hI + ' (sin CRM ni Calendar)' }); }
-                    const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'cita_manual', phone: telB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }, TID ? {
+                    if (esPrueba) { if (esDemoB) await DEMO.salida(tAcc, telFullB, msjCitaVend, 'asistente'); return R(200, { ok: true, simulado: true, auto: nombreAuto, enviado: 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): cita ' + fI + ' ' + hI + ' (sin CRM ni Calendar)' }); }
+                    const rc = await fetch('https://sales-brain-theta.vercel.app/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'cita_manual', phone: telFullB.slice(-10), fecha_iso: fI, hora: hI, inv_auto_id: inv.id }, TID ? {
                         // TENANT = DUEÑO (orden owner 2026-09-08): no se le pide confirmación a nadie — el vendedor la agenda él mismo;
                         // el bot Fyradrive le habla A ÉL (víspera/día D) y el comprador recibe el machote + recordatorios por el número del vendedor.
                         dueno_confirmado: 1, tenant_id: TID, dueno_tel: tAcc.telefono, dueno_nombre: tAcc.nombre,
                         msj_confirmacion: msjCitaVend
                     } : {})) });
                     const dc = await rc.json().catch(() => ({}));
-                    if (!dc.ok) return res.status(200).json({ ok: false, error: dc.error || 'no se pudo crear la cita' });
-                    return res.status(200).json({ ok: true, auto: nombreAuto, enviado: 'cita ' + fI + ' ' + hI + ' — CRM ✓ Calendar ' + (dc.gcal_ok ? '✓' : '⚠️') + ' Solicitud ' + (dc.solicitud_ok ? '✓' : (dc.solicitud_na ? '(sin tel dueño)' : '⚠️')), cita_id: dc.cita_id });
+                    if (!dc.ok) return R(200, { ok: false, error: dc.error || 'no se pudo crear la cita' });
+                    return R(200, { ok: true, auto: nombreAuto, enviado: 'cita ' + fI + ' ' + hI + ' — CRM ✓ Calendar ' + (dc.gcal_ok ? '✓' : '⚠️') + ' Solicitud ' + (dc.solicitud_ok ? '✓' : (dc.solicitud_na ? '(sin tel dueño)' : '⚠️')), cita_id: dc.cita_id });
                 }
-                return res.status(400).json({ ok: false, error: 'accion desconocida' });
-            } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
+                return R(400, { ok: false, error: 'accion desconocida' });
+            } catch (e) { return R(200, { ok: false, error: e.message }); }
+        }
+        // ══ BOTONERA DE EMERGENCIA (owner 2026-08-06): (ubicación)(cotizar)(fotos)(cita) en FyraChat.
+        // Los botones funcionan en cada universo, con el AUTO EN FOCO del contacto, restringidos a su catálogo, y TODO sale
+        // por el número de ESE tenant. La ejecución vive en ejecutarAccion (misma puerta que la forma de entrada al delegar).
+        if (action === 'accion_boton' && req.method === 'POST') {
+            const telB = String(req.body.telefono || '').replace(/\D/g, '');
+            const accB = String(req.body.accion || '');
+            if (!telB || !accB) return res.status(400).json({ ok: false, error: 'telefono y accion requeridos' });
+            const telFullB = telB.length === 10 ? '521' + telB : telB;
+            const tAcc = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0, telefono: '5215659423834', nombre: 'Sebastián Romero' };
+            if (!tAcc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
+            const rA = await ejecutarAccion(tAcc, telFullB, accB, req.body);
+            return res.status(rA.status).json(rA.out);
         }
         // ══ MENSAJES PROGRAMADOS (owner 2026-08-03): el Calendar agenda a mano ══
         if (action === 'prog_crear' && req.method === 'POST') {
