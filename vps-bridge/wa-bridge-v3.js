@@ -162,6 +162,34 @@ function emitir(obj) {
     const data = JSON.stringify(obj);
     for (const client of wss.clients) { if (client.readyState === 1) { try { client.send(data); } catch (e) {} } }
 }
+// ══ EVENTO `mensaje` DEL CONTRATO FyraChat v2 (2026-09-10): TODO evento lleva `tenant_id` y `chat_id` (conversaciones.id, el
+// que devuelve guardarMensajeNuevo) y el objeto `mensaje` con la MISMA forma que el hilo ({ msg_id, dir, emisor, texto, ts, media,
+// estado }). El cliente ignora lo que no sea de su universo y repinta SOLO ese chat_id.
+// Campos legacy conservados en el mismo evento: telefono, texto (string), direccion, timestamp (s), msg_id, nombre, ai_generated.
+// ⚠️ ROMPE compat con copilot.html v1, que leía `d.mensaje` como STRING: ahora el string va en `d.texto` (el front v2 lo sabe).
+// Orígenes válidos de un envío en universos ≠0 (regla SOLO POR BOTÓN, auditoría H 2026-09-12)
+const ORIGENES_OK = new Set(['manual', 'boton', 'casilla', 'maquina_cita', 'programado', 'delegar', 'sb']);
+function emisorNorm(direccion, emisor, ai) {
+    if (direccion === 'in') return 'comprador';
+    if (emisor === 'sistema') return 'sistema';
+    return Number(ai) ? 'bot' : 'dueno';
+}
+function mediaDeEvento(tipo, texto) {
+    const tx = String(texto || ''), url = (tx.match(/https?:\/\/\S+/) || [])[0] || null;
+    if (tipo === 'image') return { tipo: 'imagen', url };
+    if (tipo === 'location') return { tipo: 'ubicacion', url };
+    if (tipo === 'audio') return { tipo: 'audio', url };
+    if (tipo === 'video' || tipo === 'document' || tipo === 'sticker' || tipo === 'contact') return { tipo, url };
+    return null;
+}
+function evMensaje({ tenantId, chatId, tel, msgId, ts, direccion, emisor, texto, tipo, ai, nombre }) {
+    const dir = direccion === 'out' ? 'out' : 'in';
+    return {
+        tipo: 'mensaje', tenant_id: Number(tenantId) || 0, chat_id: chatId == null ? null : Number(chatId),
+        telefono: tel, texto: String(texto || ''), direccion: dir, timestamp: Math.floor(Number(ts) / 1000), msg_id: msgId || null, nombre: nombre || null, ai_generated: Number(ai) ? 1 : 0,
+        mensaje: { id: null, msg_id: msgId || null, dir, emisor: emisorNorm(dir, emisor, ai), texto: String(texto || ''), ts: Number(ts), media: mediaDeEvento(tipo || 'text', texto), estado: 'enviado' }
+    };
+}
 // Logger silencioso (Baileys lo pide; pino-like mínimo).
 const logger = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return logger; } };
 
@@ -348,6 +376,7 @@ async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, t
             sql: 'INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
             args: [convId, msgId, ts, direccion, emisor || null, texto || '', tipo || 'text', ai_generated ? 1 : 0, Date.now()]
         });
+        return convId;   // el chat_id del evento `mensaje` (contrato v2)
     } catch (e) {
         console.error('[mensajes-nuevo]', e.message);
         // CARRETE DE EMERGENCIA (2026-09-08, Turso bloqueado por cuota): el papelito se guarda en disco y
@@ -357,6 +386,7 @@ async function guardarMensajeNuevo({ tel, msgId, ts, direccion, emisor, texto, t
             catch (e2) { console.error('[carrete] no pude escribir:', e2.message); }
         }
         if (_desdeCarrete) throw e;   // solo el reintento necesita saber que falló; a los demás no se les revienta (sin rechazos sueltos)
+        return null;
     }
 }
 const CARRETE_PATH = require('path').join(__dirname, 'carrete.jsonl');   // require inline: fs/path se declaran más abajo
@@ -804,8 +834,10 @@ async function conectar() {
                 const tsD = (() => { const t = m.messageTimestamp; const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t); return (isFinite(n) && n > 1e9) ? n * 1000 : Date.now(); })();
                 if (fromMeD) chatD.ultimo_from_me = tsD; else chatD.ultimo_entrante = tsD;
                 if (chatD.ca_id) db.execute({ sql: 'UPDATE chats_activos SET ' + (fromMeD ? 'ultimo_from_me' : 'ultimo_entrante') + '=? WHERE id=?', args: [tsD, chatD.ca_id] }).catch(() => {});   // dual-write (Etapa 2); conversaciones.ult_msg_ts/ult_dir ya lo llevan
-                guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id }).catch(() => {});
-                emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: telD, mensaje: textoD, direccion: fromMeD ? 'out' : 'in', timestamp: Math.floor(tsD / 1000), msg_id: m.key.id, ai_generated: 0 });
+                // TIMBRE con dirección (contrato v2): el chat_id sale del MISMO upsert que persiste el renglón (cero lecturas extra)
+                guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id })
+                    .then(cid => emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), ai: 0, nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null) })))
+                    .catch(() => {});
                 console.log('[t' + tenant.id + '] ' + (fromMeD ? 'salida dueño' : 'entrada') + ' · chat ' + jidHash(telD) + ' · ' + tipoDeMsg(m.message));
                 // ══ CITAS POR UNIVERSO (orden owner 2026-09-08): un ENTRANTE de un chat delegado toca la MISMA máquina
                 // de citas que el tenant 0 (cita_entrante → procesarEntrante): "voy en camino", cancelación, desvío.
@@ -902,14 +934,14 @@ async function conectar() {
                 ai_generated: 0
             });
             // FASE 2 — LIBRETA NUEVA: renglón con FOLIO + hora real (dedup por folio → JAMÁS duplica)
-            guardarMensajeNuevo({
+            const pGuardado = guardarMensajeNuevo({
                 tel, msgId: m.key.id, ts: msgTs,
                 direccion: esSaliente ? 'out' : 'in',
                 emisor: esSaliente ? 'SRS010904' : (m.pushName || null),
                 texto, tipo: tipoMsg,
                 nombre: esSaliente ? null : (m.pushName || null),
                 ai_generated: 0
-            }).catch(() => {});
+            }).catch(() => null);
             // 🛟 MANUAL TUYO (máquina de rescate): tu texto escrito a mano re-arma el
             // reloj del silencio (jamás toca una promesa del comprador).
             if (esSaliente) {
@@ -933,8 +965,8 @@ async function conectar() {
                 direction: esSaliente ? 'outbound' : 'inbound',
                 ad_context: adContext
             }));
-            // 🔔 TIMBRE: empuja el mensaje a FyraChat al instante (con FOLIO + hora real)
-            emitir({ tipo: 'mensaje', telefono: tel, mensaje: texto, direccion: esSaliente ? 'out' : 'in', timestamp: Math.floor(msgTs / 1000), nombre: esSaliente ? null : (m.pushName || null), msg_id: m.key.id });
+            // 🔔 TIMBRE: empuja el mensaje a FyraChat al instante (con FOLIO + hora real + dirección tenant_id/chat_id — contrato v2)
+            pGuardado.then(cid => emitir(evMensaje({ tenantId: 0, chatId: cid, tel, msgId: m.key.id, ts: msgTs, direccion: esSaliente ? 'out' : 'in', emisor: esSaliente ? 'SRS010904' : (m.pushName || null), texto, tipo: tipoMsg, ai: 0, nombre: esSaliente ? null : (m.pushName || null) }))).catch(() => {});
             console.log('[t0] ' + (esSaliente ? 'salida' : 'entrada') + ' · chat ' + jidHash(tel) + ' · ' + tipoMsg + (adContext ? ' · anuncio' : ''));
             // AUTOPILOT: primer mensaje de un COMPRADOR → el bot contesta solo (ráfaga).
             // El cerebro (/opener_auto, reset-aware) decide si aplica; aquí solo debounce.
@@ -990,8 +1022,9 @@ async function autoEnviarTexto(p, text, opts) {
     const ts = Date.now();
     const emisor = tenant.id ? (manual ? 'dueno' : 'asistente') : 'SRS010904';
     if (!tenant.id) await guardar({ telefono: p, mensaje: text, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
-    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor, texto: text, tipo: 'text', nombre: null, ai_generated: aiFlag, tenantId: tenant.id }).catch(() => {});
-    emitir({ tipo: 'mensaje', tenant_id: tenant.id, telefono: p, mensaje: text, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag, emisor });
+    const emitirAuto = cid => emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel: p, msgId: r?.key?.id, ts, direccion: 'out', emisor, texto: text, tipo: 'text', ai: aiFlag, nombre: null }));
+    if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor, texto: text, tipo: 'text', nombre: null, ai_generated: aiFlag, tenantId: tenant.id }).then(emitirAuto).catch(() => emitirAuto(null));
+    else emitirAuto(null);
     if (!tenant.id) encolar(p, () => mandarASalesBrain({ external_id: p, text, direction: 'outbound' }));
     return r;
 }
@@ -1143,8 +1176,8 @@ async function manejarMensajeIlegible(m) {
     U.ilegibleAvisado.set(tel, ahora);
     const placeholder = '⚠️ [mensaje no descifrado]';
     await guardar({ telefono: tel, nombre: m.pushName || null, mensaje: placeholder, direccion: 'in', tipo: 'text', mensaje_id: m.key.id, ai_generated: 0 }).catch(() => {});
-    guardarMensajeNuevo({ tel, msgId: m.key.id, ts: ahora, direccion: 'in', emisor: m.pushName || null, texto: placeholder, tipo: 'text', nombre: m.pushName || null, ai_generated: 0 }).catch(() => {});
-    emitir({ tipo: 'mensaje', telefono: tel, mensaje: placeholder, direccion: 'in', timestamp: Math.floor(ahora / 1000), nombre: m.pushName || null, msg_id: m.key.id });
+    const emitirIl = cid => emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel, msgId: m.key.id, ts: ahora, direccion: 'in', emisor: m.pushName || null, texto: placeholder, tipo: 'text', ai: 0, nombre: m.pushName || null }));
+    guardarMensajeNuevo({ tel, msgId: m.key.id, ts: ahora, direccion: 'in', emisor: m.pushName || null, texto: placeholder, tipo: 'text', nombre: m.pushName || null, ai_generated: 0, tenantId: tenant.id }).then(emitirIl).catch(() => emitirIl(null));
     if (!yaLog) console.log('[ilegible] Bad MAC de ' + tel.slice(-4) + ' (registro silencioso)');
 }
 
@@ -1209,7 +1242,10 @@ async function registrarManualIlegible(m) {
         const tenantId = tenant.id;
         {
             try {
-                const { phone, text, image, location, manual } = JSON.parse(body || '{}');
+                const { phone, text, image, location, manual, origen } = JSON.parse(body || '{}');
+                // ══ SOLO POR BOTÓN (auditoría H, 2026-09-12): en universos de vendedor NADA sale sin declarar su origen —
+                //    fyrachat (mensajeria.js / citas-vivas.js) lo manda siempre; un cliente viejo o un envío suelto recibe 403.
+                if (tenantId && !ORIGENES_OK.has(String(origen || ''))) { res.statusCode = 403; return res.end(JSON.stringify({ ok: false, error: 'origen requerido en universos de vendedor (' + [...ORIGENES_OK].join('|') + ')' })); }
                 // FIRMA MANUAL (caso Gerardo 2026-09-05): manual:true = lo tecleó el owner en FyraChat → copia firmada como SUYA (ai_generated=0)
                 const aiFlag = manual === true ? 0 : 1;
                 // Ahora se acepta texto Y/O imagen Y/O pin de ubicación (paquete de ubicación).
@@ -1253,8 +1289,10 @@ async function registrarManualIlegible(m) {
                     if (persistir) {
                         const ts = Date.now();
                         if (!tenantId) await guardar({ telefono: p, mensaje: repTexto, direccion: 'out', mensaje_id: r?.key?.id, ai_generated: aiFlag }).catch(() => {});
-                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: tenantId ? 'dueno' : 'SRS010904', texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: aiFlag, tenantId }).catch(() => {});
-                        emitir({ tipo: 'mensaje', tenant_id: tenantId, telefono: p, mensaje: repTexto, direccion: 'out', timestamp: Math.floor(ts / 1000), msg_id: r?.key?.id, ai_generated: aiFlag });
+                        const emisorS = tenantId ? 'dueno' : 'SRS010904';
+                        const emitirS = cid => emitir(evMensaje({ tenantId, chatId: cid, tel: p, msgId: r?.key?.id, ts, direccion: 'out', emisor: emisorS, texto: repTexto, tipo: tipo || 'text', ai: aiFlag, nombre: null }));
+                        if (r?.key?.id) guardarMensajeNuevo({ tel: p, msgId: r.key.id, ts, direccion: 'out', emisor: emisorS, texto: repTexto, tipo: tipo || 'text', nombre: null, ai_generated: aiFlag, tenantId }).then(emitirS).catch(() => emitirS(null));
+                        else emitirS(null);
                     }
                     return r;
                 };
@@ -1287,7 +1325,8 @@ async function registrarManualIlegible(m) {
     U.apiSendFotos = async (res, body) => {
         {
             try {
-                const { phone, urls } = JSON.parse(body || '{}');
+                const { phone, urls, origen } = JSON.parse(body || '{}');
+                if (tenant.id && !ORIGENES_OK.has(String(origen || ''))) { res.statusCode = 403; return res.end(JSON.stringify({ ok: false, error: 'origen requerido en universos de vendedor (' + [...ORIGENES_OK].join('|') + ')' })); }
                 if (!phone || !Array.isArray(urls) || !urls.length) { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'phone y urls[] requeridos' })); }
                 if (U.estado !== 'conectado') { res.statusCode = 503; return res.end(JSON.stringify({ ok: false, error: 'whatsapp no conectado' })); }
                 let p = String(phone).replace(/\D/g, '');
@@ -1628,10 +1667,21 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/emit' && req.method === 'POST') {
         if (!conKey) { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, error: 'unauthorized' })); }
         let ev = {}; try { ev = JSON.parse((await leerBody(req)) || '{}'); } catch (e) {}
-        if (!ev || typeof ev !== 'object' || ev.tipo === 'mensaje') { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'evento inválido' })); }
-        const out = Object.assign({ tipo: 'cambio' }, ev, { ts: Date.now() });
+        if (!ev || typeof ev !== 'object') { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'evento inválido' })); }
+        // `mensaje` desde el servidor (contrato v2): SOLO renglones que fyrachat persistió él mismo (envíos SIMULADOS del carril de
+        // pruebas / universo demo) — exige chat_id + objeto mensaje. Lo real lo emite el puente al mandar/recibir.
+        if (ev.tipo === 'mensaje') {
+            if (ev.chat_id == null || !ev.mensaje || typeof ev.mensaje !== 'object') { res.statusCode = 400; return res.end(JSON.stringify({ ok: false, error: 'mensaje inválido (chat_id + mensaje requeridos)' })); }
+            const mm = ev.mensaje;
+            const outM = Object.assign({}, ev, { tipo: 'mensaje', tenant_id: Number(ev.tenant_id) || 0, chat_id: Number(ev.chat_id), texto: String(mm.texto || ''), direccion: mm.dir === 'in' ? 'in' : 'out', timestamp: Math.floor(Number(mm.ts || Date.now()) / 1000), msg_id: mm.msg_id || null, ts: Date.now() });
+            emitir(outM);
+            console.log('[timbre] mensaje (servidor) · t' + outM.tenant_id + ' · chat ' + outM.chat_id + (ev.simulado ? ' · simulado' : '') + ' → ' + (wss ? [...wss.clients].filter(c => c.readyState === 1).length : 0) + ' pantallas');
+            return res.end(JSON.stringify({ ok: true }));
+        }
+        // `cambio`: TODO evento lleva tenant_id (default 0), chat_id (o null) y `que` (contrato v2) — fyrachat ya los manda; aquí se garantizan
+        const out = Object.assign({ tipo: 'cambio' }, ev, { tenant_id: Number(ev.tenant_id) || 0, chat_id: ev.chat_id == null ? null : Number(ev.chat_id), que: ev.que || 'otro', ts: Date.now() });
         emitir(out);
-        console.log('[timbre] cambio · ' + (out.entidad || '?') + (out.accion ? ' · ' + out.accion : '') + ' → ' + (wss ? [...wss.clients].filter(c => c.readyState === 1).length : 0) + ' pantallas');
+        console.log('[timbre] cambio · ' + (out.entidad || '?') + (out.accion ? ' · ' + out.accion : '') + ' · ' + out.que + ' · t' + out.tenant_id + (out.chat_id != null ? ' · chat ' + out.chat_id : '') + ' → ' + (wss ? [...wss.clients].filter(c => c.readyState === 1).length : 0) + ' pantallas');
         return res.end(JSON.stringify({ ok: true }));
     }
     // EL TIMBRE DE LAS CITAS: fyrachat programa/cancela temporizadores de casillas (con key).

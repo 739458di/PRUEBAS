@@ -104,7 +104,7 @@ a{color:var(--azul2)}
 .plus:active{transform:scale(.95)}
 .plus svg{width:28px;height:28px;stroke:#fff;stroke-width:2.6;stroke-linecap:round;fill:none}
 
-/* ═══════════ pantallas simples (autos / ventas / más) ═══════════ */
+/* ═══════════ pantallas simples (autos / citas / más) ═══════════ */
 .sub-h{flex:0 0 auto;padding:calc(14px + env(safe-area-inset-top)) 18px 12px;display:flex;align-items:flex-end;justify-content:space-between}
 .sub-h h2{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
 .sub-h .logo{margin-bottom:8px}
@@ -128,6 +128,49 @@ a{color:var(--azul2)}
 .opc small{display:block;font-size:12.5px;font-weight:500;color:var(--txt2);margin-top:2px}
 .opc.rojo{color:var(--rojo)}
 .opc .chev{margin-left:auto;color:var(--txt3)}
+
+/* ═══════════ CITAS (citas_mias) ═══════════ */
+.citas-pills{flex:0 0 auto;padding:0 14px}
+.citas-pills .pills{margin:0 0 10px}
+.cita{display:block;width:100%;text-align:left;color:inherit;padding:14px 14px 12px;border-radius:24px;background:linear-gradient(180deg,rgba(18,42,104,.92) 0%,rgba(10,26,74,.96) 100%);border:1px solid var(--borde);margin-bottom:12px;cursor:pointer;transition:transform .08s,border-color .12s;box-shadow:0 10px 26px rgba(0,0,0,.22)}
+.cita:active{transform:scale(.99)}
+.cita:focus-visible{outline:none;border-color:var(--azul2)}
+.cita .top{display:flex;gap:14px;align-items:center}
+.cita .dia-b{flex:0 0 64px;width:64px;height:66px;border-radius:18px;background:rgba(31,111,255,.18);border:1px solid rgba(31,111,255,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.cita .dia-b small{font-size:11px;font-weight:800;letter-spacing:.12em;color:#cfe0ff;margin-bottom:4px}
+.cita .dia-b b{font-size:26px;font-weight:800;letter-spacing:-.02em;color:#fff}
+.cita .dia-b i{font-style:normal;font-size:10px;font-weight:700;color:var(--txt2);margin-top:4px;text-transform:capitalize}
+.cita .info{flex:1;min-width:0}
+.cita .hora{font-size:14px;font-weight:800;color:#9fe3ff;letter-spacing:.01em}
+.cita .nom{font-size:17px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.cita .auto-ch{display:inline-flex;align-items:center;gap:6px;margin-top:7px;max-width:100%;height:26px;padding:0 10px 0 3px;border-radius:999px;background:var(--navy-tr);border:1px solid var(--borde);font-size:12.5px;font-weight:700;color:#dbe6ff}
+.cita .auto-ch .ph{width:20px;height:20px;border-radius:50%;overflow:hidden;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 20px}
+.cita .auto-ch img{width:100%;height:100%;object-fit:cover}
+.cita .auto-ch span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cita .est{align-self:flex-start;flex:0 0 auto}
+.est.confirmada,.est.match{color:var(--menta);border-color:rgba(53,224,176,.45);background:rgba(53,224,176,.1)}
+.est.pasada,.est.realizada{color:var(--txt2);border-color:var(--borde);background:var(--navy-tr)}
+.est.cancelada{color:var(--rojo);border-color:rgba(255,107,122,.45);background:rgba(255,107,122,.1)}
+.cita.cancelada .dia-b,.cita.cancelada .nom,.cita.cancelada .hora{opacity:.55}
+.cita.cancelada .nom{text-decoration:line-through}
+.cita.pasada .dia-b{opacity:.7}
+.tl{display:flex;flex-direction:column;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid var(--sep)}
+.tl .r{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--txt2);line-height:1.3;min-width:0}
+.tl .r .ic{flex:0 0 20px;width:20px;text-align:center;font-size:12px;color:var(--txt3)}
+.tl .r .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl .r .t b{color:#dbe6ff;font-weight:700}
+.tl .r .e{flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.03em}
+.tl .r.enviada .ic,.tl .r.enviada .e{color:#9fe3ff}
+.tl .r.pendiente .e{color:var(--txt2)}
+.tl .r.pausada .ic,.tl .r.pausada .e{color:#ffe3a3}
+.tl .r.cancelada,.tl .r.saltada{color:var(--txt3)}
+.tl .r.cancelada .t,.tl .r.saltada .t{text-decoration:line-through}
+.tl .r.cancelada .t b,.tl .r.saltada .t b{color:var(--txt3)}
+.cita .pie{display:flex;justify-content:flex-end;margin-top:10px}
+.cita.sk{pointer-events:none}
+.cita.sk .dia-b{background:rgba(120,160,255,.14);border:0}
+.cita.sk .l1{height:14px;width:55%;border-radius:7px;background:rgba(120,160,255,.16)}
+.cita.sk .l2{height:12px;width:80%;border-radius:6px;background:rgba(120,160,255,.10);margin-top:9px}
 
 /* ═══════════ CHAT ═══════════ */
 #scr-chat{z-index:30;background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%);transform:translateX(100%);transition:transform .22s cubic-bezier(.2,.8,.2,1);display:flex;visibility:hidden}
@@ -364,10 +407,14 @@ textarea.inp{height:auto;min-height:96px;padding:12px 14px;resize:vertical;line-
     <div class="cuerpo" id="autos-lista"></div>
   </div>
 
-  <!-- ═══════ VENTAS ═══════ -->
-  <div class="scr" id="scr-ventas">
-    <div class="sub-h"><div><div class="logo">FYRADRIVE</div><div class="logo-bar"></div><h2 style="margin-top:14px">Ventas</h2></div></div>
-    <div class="cuerpo"><div class="pronto"><div class="ico">📈</div><b>Pronto</b>Aquí verás tus ventas y citas cerradas.</div></div>
+  <!-- ═══════ CITAS ═══════ -->
+  <div class="scr" id="scr-citas">
+    <div class="sub-h"><div><div class="logo">FYRADRIVE</div><div class="logo-bar"></div><h2 style="margin-top:14px">Citas</h2></div></div>
+    <div class="citas-pills"><div class="pills" id="ci-pills">
+      <button class="pill on" data-e="proximas" onclick="setCitasEstado('proximas')">Próximas</button>
+      <button class="pill" data-e="pasadas" onclick="setCitasEstado('pasadas')">Pasadas</button>
+    </div></div>
+    <div class="cuerpo" id="citas-lista"></div>
   </div>
 
   <!-- ═══════ MÁS ═══════ -->
@@ -406,7 +453,7 @@ textarea.inp{height:auto;min-height:96px;padding:12px 14px;resize:vertical;line-
     <button class="tab on" data-t="inicio" onclick="irTab('inicio')"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>Inicio</button>
     <button class="tab" data-t="autos" onclick="irTab('autos')"><svg viewBox="0 0 24 24"><path d="M5 16l1.5-5.5a2 2 0 0 1 1.9-1.5h7.2a2 2 0 0 1 1.9 1.5L19 16"/><path d="M4 16h16v3H4z"/><circle cx="7.5" cy="19.5" r="1.5"/><circle cx="16.5" cy="19.5" r="1.5"/></svg>Autos</button>
     <button class="tab-plus" onclick="abrirSubirAuto()" aria-label="Subir auto"><span class="plus"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Subir</button>
-    <button class="tab" data-t="ventas" onclick="irTab('ventas')"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 16l4-5 3 3 5-7"/></svg>Ventas</button>
+    <button class="tab" data-t="citas" onclick="irTab('citas')"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/><path d="M8 15h3"/></svg>Citas</button>
     <button class="tab" data-t="mas" onclick="irTab('mas')"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Más</button>
   </nav>
 
@@ -436,6 +483,7 @@ let T0 = false;      // la maestra / STAFF pidió el FyraChat de Fyradrive (tena
 const VPARAM = () => VEND || (T0 ? '0' : undefined);
 const vendQS = () => VPARAM() != null ? '&vendedor=' + encodeURIComponent(VPARAM()) : '';
 let TENANT = null;   // { id, nombre, telefono, demo, autos[] }
+let BIENVENIDA = false;   // ?bienvenida=1 (recién entró con código); se captura en cargarTenant antes de limpiar la URL
 const $a = $;
 async function accPedir(){
   const tel = ($a('acc-tel').value || '').replace(/\D/g,''); $a('acc-err1').textContent = '';
@@ -493,6 +541,7 @@ async function cargarTenant(){
   TENANT = Object.assign({ id: 0, nombre: '', telefono: '', demo: false, autos: [] }, SESION.tenant || {});
   if (T0) TENANT = { id: 0, nombre: 'Fyradrive', telefono: '', demo: false, autos: [] };
   pintarUniverso();
+  BIENVENIDA = qs.get('bienvenida') === '1';   // se captura ANTES de limpiar la URL (regla de primera vez)
   if (qs.get('bienvenida')) history.replaceState(null, '', location.pathname + (qs.get('demo') === '1' ? '?demo=1' : ''));
   return true;
 }
@@ -533,6 +582,8 @@ let AVISO_T = null;
 function avisoError(txt){ const a = $('aviso'); $('aviso-t').textContent = txt; a.classList.add('on'); clearTimeout(AVISO_T); AVISO_T = setTimeout(ocultarAviso, 6000); }
 function ocultarAviso(){ $('aviso').classList.remove('on'); }
 const textoEnviado = (r, porDefecto) => (r && typeof r.enviado === 'string' && r.enviado.trim()) ? r.enviado : porDefecto;
+// ¿el servidor NO conoce esa action? (seb-panel contesta `{error:'action inválida'}` HTTP 400 en el fallthrough y `accion desconocida` en algunos bloques)
+const accionDesconocida = (r) => !!(r && !r.ok && /action inv[aá]lida|acci[oó]n (desconocida|inv[aá]lida|no (soportada|v[aá]lida))|unknown action|no existe/i.test(String(r.error || '')));
 
 // ══════════ HOJAS (sheets) ══════════
 const SHEETS = [];
@@ -561,8 +612,8 @@ function bloquear(btn, on){ if (!btn) return; btn.disabled = !!on; btn.classList
 let TAB = 'inicio';
 function irTab(t){
   TAB = t; document.querySelectorAll('#tabbar .tab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
-  ['inicio', 'autos', 'ventas', 'mas'].forEach(x => $('scr-' + x).classList.toggle('on', x === t));
-  if (t === 'autos') cargarAutos(); if (t === 'mas') pintarMas();
+  ['inicio', 'autos', 'citas', 'mas'].forEach(x => $('scr-' + x).classList.toggle('on', x === t));
+  if (t === 'autos') cargarAutos(); if (t === 'citas') cargarCitas(); if (t === 'mas') pintarMas();
 }
 function pintarMas(){
   const c = $('mas-cuerpo'); if (!TENANT) return;
@@ -570,8 +621,8 @@ function pintarMas(){
   h += '<div class="opc" style="cursor:default"><div class="i">👤</div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(TENANT.nombre || 'Mi universo') + '</div><small>Universo ' + esc(TENANT.id) + (TENANT.telefono ? ' · +' + esc(String(TENANT.telefono).replace(/\D/g, '')) : '') + (TENANT.demo ? ' · MODO PRUEBA' : '') + '</small></div></div>';
   h += '<button class="opc" onclick="abrirDispositivos()"><div class="i">📱</div><div>Tus dispositivos<small>Dónde está abierto tu FyraChat</small></div><span class="chev">›</span></button>';
   if (TENANT.demo) h += '<button class="opc" onclick="reiniciarPrueba()"><div class="i">↺</div><div>Reiniciar prueba<small>Borra todo el universo de prueba (nada real se toca)</small></div><span class="chev">›</span></button>';
+  h += '<button class="opc" onclick="tutoArrancar({ forzar: true })"><div class="i">🎓</div><div>Ver tutorial<small>Agrégalo a tu inicio y cómo se usa</small></div><span class="chev">›</span></button>';
   h += '<button class="opc" style="opacity:.55;cursor:default"><div class="i">⚙️</div><div>Ajustes<small>Pronto</small></div></button>';
-  h += '<button class="opc" style="opacity:.55;cursor:default"><div class="i">🎓</div><div>Tutorial<small>Pronto</small></div></button>';
   h += '<button class="opc rojo" onclick="accSalir()"><div class="i">🚪</div><div>Salir</div></button>';
   c.innerHTML = h;
 }
@@ -580,7 +631,7 @@ async function reiniciarPrueba(){
   if (!ok) return;
   const r = await apiPost('demo_reset', {});
   if (!r.ok) return avisoError('No se pudo: ' + (r.error || ''));
-  HILOS.clear(); cerrarChat(); AUTOS = null; await cargarInbox({ reset: true }); irTab('inicio');
+  HILOS.clear(); cerrarChat(); AUTOS = null; citasInvalidar(); await cargarInbox({ reset: true }); irTab('inicio');
 }
 
 // ══════════ INBOX (lista) — cache en memoria, diff por chat_id, cursor, búsqueda en servidor ══════════
@@ -933,6 +984,7 @@ function abrirCita(){
     s.cerrar();
     const c = r.cita || {}; burbujaSalida(id, textoEnviado(r, '📅 Cita agendada · ' + (c.fecha || st.fecha) + ' ' + (c.hora || st.hora) + (c.auto ? ' · ' + c.auto : '')), r);
     const row = INBOX.rows.get(id); if (row) { pintarFila(row); }
+    citasInvalidar();   // la pestaña Citas se vuelve a pedir al abrirla (el timbre `cambio:cita` también lo hace)
   };
 }
 function abrirMasAcciones(){
@@ -965,7 +1017,7 @@ async function accionSimple(id, accion){
   const cl = clave(accion, id);
   return correr('acc:' + id + ':' + accion, async () => {
     let r = await apiPost('accion_v2', { chat_id: id, accion, clave: cl });
-    if (!r.ok && /acci[oó]n (desconocida|no (soportada|válida))|unknown|no existe/i.test(String(r.error || ''))) {
+    if (accionDesconocida(r)) {
       const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
       r = await apiPost('accion_boton', { telefono: tel, accion, comprador_nombre: (h.chat && h.chat.nombre) || '' });
     }
@@ -988,7 +1040,7 @@ function abrirRecordatorio(){
     bloquear(go, true);
     // SUPUESTO: `recordatorio_v2 {chat_id, fecha_iso, hora, texto, clave}`; si no existe → `prog_crear` actual (telefono)
     let r = await apiPost('recordatorio_v2', { chat_id: id, fecha_iso: f, hora: hh, texto: t, cuando_ts: cuando, clave: cl });
-    if (!r.ok && /acci[oó]n (desconocida|no (soportada|válida))|unknown|no existe/i.test(String(r.error || ''))) { const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, ''); r = await apiPost('prog_crear', { telefono: tel.slice(-10), texto: t, cuando_ts: cuando, con_foto: true }); }
+    if (accionDesconocida(r)) { const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, ''); r = await apiPost('prog_crear', { telefono: tel.slice(-10), texto: t, cuando_ts: cuando, con_foto: true }); }
     bloquear(go, false);
     if (!r.ok) { err.textContent = r.error || 'No se pudo programar'; return; }
     try { const l = recPendientes(id); l.push(cuando); localStorage.setItem(recKey(id), JSON.stringify(l)); } catch(e){}
@@ -1094,6 +1146,7 @@ function abrirNuevoComprador(){
       const nota = (r.ya_delegado ? '↩ Ya estaba delegado · ' : '✅ Delegado · ') + ({ silencio: 'entró callado', texto: 'con tu texto', bot: 'se presentó a tu nombre', info: 'mandó la ficha', fotos: 'mandó las fotos', ubicacion: 'mandó la ubicación', cotizar: 'mandó la cotización', cita: 'agendó la cita' }[st.modo] || st.modo) + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : '');
       notaLocal(id, nota);
       if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r);
+      if (st.modo === 'cita') citasInvalidar();
     };
   };
   paso1();
@@ -1122,6 +1175,75 @@ function pintarAutos(){
   if (!AUTOS.length) { c.innerHTML = '<div class="vacio"><b>Aún no tienes autos</b>Toca (+) para subir el primero.</div>'; return; }
   c.innerHTML = AUTOS.map(a => '<div class="auto-c" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : '🚗') + '</div><div style="flex:1;min-width:0"><div class="nm">' + esc(a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' ')) + '</div><div class="pr">' + esc(precioFmt(a.precio)) + '</div><div class="km">' + (a.km ? esc(Number(a.km).toLocaleString('es-MX')) + ' km' : '') + (a.fotos ? (a.km ? ' · ' : '') + esc(a.fotos) + ' fotos' : '') + '</div></div><span class="est ' + esc(a.estado || 'activo') + '">' + ({ activo: 'Activo', revision: 'En revisión', vendido: 'Vendido' }[a.estado] || esc(a.estado || '')) + '</span></div>').join('');
 }
+// ══════════ CITAS (citas_mias) — cache por pestaña, refetch al abrir, refresco por timbre `cambio:cita` ══════════
+const CITAS = { estado: 'proximas', cache: { proximas: null, pasadas: null } };
+const REC_TIPO = { vispera: 'Víspera', dia: 'Día de la cita', dia_cita: 'Día de la cita', dia_de_la_cita: 'Día de la cita', hora_antes: '1 h antes', '1h': '1 h antes', '1h_antes': '1 h antes', una_hora: '1 h antes', en_camino: 'En camino', camino: 'En camino' };
+const REC_ESTADO = { enviada: 'Enviado', pendiente: 'Pendiente', cancelada: 'Cancelado', saltada: 'Saltado', pausada: 'Pausado' };
+const REC_ICONO = { enviada: '✓✓', pendiente: '🕓', cancelada: '⊘', saltada: '⊘', pausada: '⏸' };
+const CITA_ESTADO = { match: 'Match', confirmada: 'Confirmada', realizada: 'Realizada', cancelada: 'Cancelada', pasada: 'Pasada' };
+function citasInvalidar(){ CITAS.cache.proximas = null; CITAS.cache.pasadas = null; if (TAB === 'citas') cargarCitas({ silencioso: true }); }
+function onCitaTimbre(){ citasInvalidar(); }
+function setCitasEstado(e){
+  document.querySelectorAll('#ci-pills .pill').forEach(p => p.classList.toggle('on', p.dataset.e === e));
+  if (e === CITAS.estado && CITAS.cache[e]) return;
+  CITAS.estado = e; cargarCitas();
+}
+function citasSkeleton(){ return Array.from({ length: 3 }, () => '<div class="cita sk"><div class="top"><div class="dia-b"></div><div class="info"><div class="l1"></div><div class="l2"></div></div></div></div>').join(''); }
+async function cargarCitas({ silencioso } = {}){
+  const e = CITAS.estado, c = $('citas-lista');
+  if (CITAS.cache[e]) pintarCitas();                       // lo que ya tenemos, al instante; abajo se refresca
+  else if (!silencioso) c.innerHTML = citasSkeleton();
+  return correr('citas_mias:' + e, async () => {
+    const r = await apiGet('citas_mias', { estado: e });
+    if (!r.ok) { if (e === CITAS.estado && !CITAS.cache[e]) c.innerHTML = '<div class="vacio"><b>No pude cargar tus citas</b>' + esc(r.error || '') + '<br><button class="masbtn" onclick="cargarCitas()">Reintentar</button></div>'; return; }
+    CITAS.cache[e] = Array.isArray(r.citas) ? r.citas : [];
+    if (e === CITAS.estado) pintarCitas();
+  });
+}
+// fecha de la cita: cita_ts (ms o s) manda; si no, fecha 'YYYY-MM-DD' + hora 'HH:MM' en hora local
+function citaFecha(ci){
+  const t = ms(ci.cita_ts); if (t) return new Date(t);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ci.fecha || '')); if (!m) return null;
+  const h = /^(\d{1,2}):(\d{2})/.exec(String(ci.hora || '')) || [0, 0, 0];
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(h[1]) || 0, Number(h[2]) || 0);
+}
+const mesCorto = (d) => d.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase();
+const diaSemana = (d) => d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '');
+function citaHora(ci, d){ if (ci.hora) return String(ci.hora).slice(0, 5); return d ? d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : ''; }
+function recFecha(r){
+  const t = ms(r.due_ts); if (!t) return ''; const d = new Date(t), hoy = new Date();
+  const dia = d.toDateString() === hoy.toDateString() ? 'hoy' : d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' }).replace('.', '');
+  return dia + ' ' + d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+}
+function recHTML(r){
+  const est = REC_ESTADO[r.estado] ? r.estado : 'pendiente';
+  const tipo = REC_TIPO[String(r.tipo || '').toLowerCase()] || String(r.tipo || 'Recordatorio').replace(/_/g, ' ').replace(/^\w/, ch => ch.toUpperCase());
+  const f = recFecha(r);
+  return '<div class="r ' + esc(est) + '" title="' + esc(r.texto || '') + '"><span class="ic">' + (REC_ICONO[est] || '') + '</span><span class="t"><b>' + esc(tipo) + '</b>' + (f ? ' · ' + esc(f) : '') + (r.para === 'vendedor' ? ' · para ti' : '') + '</span><span class="e">' + esc(REC_ESTADO[est]) + '</span></div>';
+}
+function citaHTML(ci){
+  const d = citaFecha(ci); const comp = ci.comprador || {}; const auto = ci.auto || null;
+  const est = CITA_ESTADO[ci.estado] ? ci.estado : 'match';
+  const nombre = comp.nombre || (comp.telefono ? '+' + String(comp.telefono).replace(/\D/g, '') : 'Comprador');
+  const recs = (Array.isArray(ci.recordatorios) ? ci.recordatorios.slice() : []).sort((a, b) => (ms(a.due_ts) || 0) - (ms(b.due_ts) || 0));
+  return '<button class="cita ' + esc(est) + '" data-id="' + esc(ci.id) + '" data-chat="' + esc(comp.chat_id || '') + '">' +
+    '<div class="top">' +
+      '<div class="dia-b">' + (d ? '<small>' + esc(mesCorto(d)) + '</small><b>' + d.getDate() + '</b><i>' + esc(diaSemana(d)) + '</i>' : '<small>—</small><b>?</b>') + '</div>' +
+      '<div class="info"><div class="hora">' + esc(citaHora(ci, d) || 'Sin hora') + '</div><div class="nom">' + esc(nombre) + '</div>' +
+        (auto ? '<span class="auto-ch"><span class="ph">' + (auto.portada ? '<img src="' + esc(auto.portada) + '" alt="" loading="lazy">' : '🚗') + '</span><span>' + esc(auto.nombre || '') + '</span></span>' : '') +
+      '</div>' +
+      '<span class="est ' + esc(est) + '">' + esc(CITA_ESTADO[est]) + '</span>' +
+    '</div>' +
+    (recs.length ? '<div class="tl">' + recs.map(recHTML).join('') + '</div>' : '') +
+  '</button>';
+}
+function pintarCitas(){
+  const c = $('citas-lista'); const l = CITAS.cache[CITAS.estado]; if (!l) return;
+  if (!l.length) { c.innerHTML = '<div class="vacio"><b>' + (CITAS.estado === 'pasadas' ? 'Sin citas pasadas' : 'Aún no tienes citas') + '</b>' + (CITAS.estado === 'pasadas' ? 'Aquí quedarán las que ya pasaron.' : 'Se agendan desde el chat con un toque.') + '</div>'; return; }
+  c.innerHTML = l.map(citaHTML).join('');
+}
+$('citas-lista').addEventListener('click', (e) => { const b = e.target.closest('.cita'); if (!b || b.classList.contains('sk')) return; const id = b.dataset.chat; if (id) abrirChat(id); else avisoError('Esta cita no tiene conversación ligada.'); });
+
 async function leerFoto(file){
   // reduce a máx 1600 px JPEG (≤ 6 MB del contrato) y devuelve {nombre, base64, preview}
   const url = URL.createObjectURL(file);
@@ -1210,6 +1332,7 @@ async function connectTimbre(){
 function onTimbre(d){
   if (!d || !TENANT) return;
   if (Number(d.tenant_id) !== Number(TENANT.id)) return;      // ignora TODO lo que no sea de este universo
+  if (d.tipo === 'cambio' && d.que === 'cita') onCitaTimbre(d);   // la lista de citas se refresca aunque el evento no traiga chat_id
   if (!d.chat_id) return;                                     // sin chat_id no hay fila que tocar (nunca por teléfono)
   if (d.tipo === 'mensaje' && d.mensaje) onMensajeTimbre(d);
   else if (d.tipo === 'cambio') onCambioTimbre(d);
@@ -1253,23 +1376,52 @@ function tutoMostrar(){
   const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
   tutoPlataforma(ios ? 'ios' : android ? 'android' : 'pc'); $('tuto').classList.add('on');
 }
-function tutoListo(){ try { localStorage.setItem('fyra_tuto2_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} $('tuto').classList.remove('on'); }
-function tutoSiPrimeraVez(){
-  if (!TENANT) return; let visto = false; try { visto = !!localStorage.getItem('fyra_tuto2_' + TENANT.id); } catch(e){}
-  if (visto) return;
+function tutoMarcarVisto(){ try { localStorage.setItem('fyra_tuto2_' + (TENANT ? TENANT.id : 0), '1'); } catch(e){} }
+function tutoListo(){ tutoMarcarVisto(); $('tuto').classList.remove('on'); }
+// PUNTO DE EXTENSIÓN de la experiencia de primera vez (hoy: "Agrégalo a tu inicio"). `forzar` = desde "Ver tutorial" en Más.
+function tutoArrancar({ forzar } = {}){
+  if (!TENANT) return;
   const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-  if (standalone) { tutoListo(); return; }   // ya corre instalado: no hay nada que enseñar
+  if (standalone && !forzar) { tutoMarcarVisto(); return; }   // ya corre instalado: no hay nada que enseñar
   tutoMostrar();
 }
+// marcas locales de "ya lo vi" (tutorial, tips, recordatorios locales de la prueba): se borran en cada entrada nueva al DEMO
+function borrarMarcasLocales(){
+  try { const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^fyra_(tuto2_|tip_|rec_)/.test(k)) ks.push(k); } ks.forEach(k => localStorage.removeItem(k)); } catch(e){}
+  try { localStorage.removeItem('fyra_tip_inicio'); } catch(e){}
+}
+// REGLA PRIMERA VEZ — DEMO: cada entrada nueva (?bienvenida=1 o sin sessionStorage.demo_entrada) = universo limpio + experiencia completa.
+// Se decide ANTES de cargar el inbox para que la lista ya salga reseteada.
+async function primeraVezDemo(){
+  let entrada = false; try { entrada = !!sessionStorage.getItem('demo_entrada'); } catch(e){}
+  if (!BIENVENIDA && entrada) return false;
+  try { sessionStorage.setItem('demo_entrada', '1'); } catch(e){}
+  borrarMarcasLocales();
+  const r = await apiPost('demo_reset', {});
+  if (!r.ok) avisoError('No pude reiniciar la prueba: ' + (r.error || ''));
+  HILOS.clear(); AUTOS = null; citasInvalidar();
+  return true;
+}
+// REGLA PRIMERA VEZ — REAL: solo la primera sesión de la vida del número. Marca local + acceso_sesiones (más de 1 sesión → no es nuevo).
+async function primeraVezReal(){
+  let visto = false; try { visto = !!localStorage.getItem('fyra_tuto2_' + TENANT.id); } catch(e){}
+  if (visto) return false;
+  const r = await apiGet('acceso_sesiones', {});
+  const n = r && r.ok ? (Number(r.total_historicas) || Number(r.total) || (Array.isArray(r.sesiones) ? r.sesiones.length : 0)) : 0;
+  if (n > 1) { tutoMarcarVisto(); return false; }   // ya entró antes en otro dispositivo/sesión
+  return true;
+}
 
-// ══════════ ARRANQUE: acceso_yo → (tenant_info ‖ inbox ‖ timbre) ══════════
+// ══════════ ARRANQUE: acceso_yo → [demo: reset] → (tenant_info ‖ inbox ‖ primera vez real) → timbre → tutorial ══════════
 (async function arranque(){
   skeleton();
   const ok = await cargarTenant();
   if (ok === false) return;
-  await Promise.all([cargarTenantInfo(), cargarInbox({ reset: true })]);
+  let primera = false;
+  if (TENANT.demo) primera = await primeraVezDemo();
+  await Promise.all([cargarTenantInfo(), cargarInbox({ reset: true }), (async () => { if (!TENANT.demo) primera = await primeraVezReal(); })()]);
   connectTimbre();
-  tutoSiPrimeraVez();
+  if (primera) tutoArrancar();
 })();
 </script>
 </body>

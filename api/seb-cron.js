@@ -25,6 +25,14 @@ module.exports = async function handler(req, res) {
         // UNA vez por hora (primer tick de la hora), no cada 10 min; los recordatorios de cita sí cada 10 min.
         const cadaHora = new Date().getUTCMinutes() < 10;
         r.barredores = cadaHora ? 'corren' : 'saltados (solo 1/h)';
+        // ══ PUERTA DE MENSAJES (FyraChat v2, 2026-09-10): programados y rescates salen por mensajeria.enviar — PRIMERO la
+        // puerta, LUEGO el estado. Si el puente falló, quedan pendientes (intentos+1) y ESTE cron los reintenta (máx. 3).
+        // Misma puerta idempotente que el ghost_scan del puente (clave 'prog:<id>' / 'rescate:<folio>:<etapa>'): sin dobles.
+        // 2 lecturas por índice por tick (pendientes vencidos), sin barridos.
+        try { r.programados = await require('../lib/seb/programados.js').despachar({ ahora: Date.now() }); } catch (e) { r.programados = { error: e.message }; }
+        try { r.rescates = await require('../lib/seb/rescate.js').despachar({ ahora: Date.now() }); } catch (e) { r.rescates = { error: e.message }; }
+        // ══ HUÉRFANAS @lid (causa 2 del mapa FyraChat): conversaciones t0 con identidad @lid cuyo teléfono ya se conoce → fusión (1/h)
+        if (cadaHora) try { r.lid_fusion = await require('../lib/seb/universo.js').fusionarLidHuerfanos({ limite: 30 }); } catch (e) { r.lid_fusion = { error: e.message }; }
         if (cadaHora) try { r.espejo = await tickEspejo(); } catch (e) { r.espejo = { error: e.message }; }
         // SESIONES (bloque 5): universos con WhatsApp desvinculado → todas sus sesiones de FyraChat se cierran (UPDATE único)
         if (cadaHora) try { r.sesiones_desvinculadas_cerradas = await ACC.barrerSesionesDesvinculadas(); } catch (e) { r.sesiones_desvinculadas_cerradas = { error: e.message }; }
