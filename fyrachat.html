@@ -451,6 +451,8 @@ select.inp option{background:#09183F;color:#fff}
 #acceso h2{font-size:28px;line-height:32px;font-weight:700;letter-spacing:-.01em;margin:32px 0 8px}
 #acceso p{font-size:15px;line-height:22px;color:var(--txt2);margin:0 0 20px}
 #acceso .inp{font-size:22px;letter-spacing:.08em;text-align:center}
+#acceso .inp.pw{font-size:18px;letter-spacing:.02em}
+#acceso .ver{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--txt2);margin:12px 0 4px}
 #acceso .cta{margin-top:16px}
 #acceso .liga{margin-top:12px}
 #acceso .err{color:var(--danger);font-size:13px;line-height:18px;margin-top:12px;min-height:18px}
@@ -475,11 +477,30 @@ select.inp option{background:#09183F;color:#fff}
     <div class="wm">Fyra<b>drive</b></div>
     <div id="acc-p1">
       <h2>Entra a tu FyraChat</h2>
-      <p>Escribe el WhatsApp que vinculaste. Te mandamos un código de 6 dígitos a ese mismo WhatsApp.</p>
-      <input id="acc-tel" class="inp" inputmode="numeric" maxlength="12" placeholder="10 dígitos" autocomplete="tel">
-      <button class="cta" onclick="accPedir()">Mandarme el código</button>
+      <p>Escribe el WhatsApp que vinculaste.</p>
+      <input id="acc-tel" class="inp" inputmode="numeric" maxlength="12" placeholder="10 dígitos" autocomplete="tel" enterkeyhint="next">
+      <button class="cta" onclick="accContinuar()">Continuar</button>
       <div id="acc-demo1">Modo prueba: usuario PRUEBAS# (8888888888). No llega ningún WhatsApp.</div>
       <div class="err" id="acc-err1"></div>
+    </div>
+    <div id="acc-p3" style="display:none">
+      <h2>Hola de nuevo</h2>
+      <p id="acc-sub3">Escribe tu contraseña.</p>
+      <input id="acc-pw" class="inp pw" type="password" placeholder="Contraseña" autocomplete="current-password" enterkeyhint="go">
+      <button class="cta" onclick="accEntrarContrasena()">Entrar</button>
+      <div class="err" id="acc-err3"></div>
+      <button class="liga" onclick="accPedir()">Olvidé mi contraseña · entrar con código de WhatsApp</button>
+      <button class="liga" onclick="accVolver()">Cambiar de número</button>
+    </div>
+    <div id="acc-p4" style="display:none">
+      <h2 id="acc-t4">Crea tu contraseña</h2>
+      <p id="acc-sub4">Con ella vas a volver a entrar sin código. Mínimo 8 caracteres.</p>
+      <input id="acc-pw1" class="inp pw" type="password" placeholder="Contraseña" autocomplete="new-password">
+      <input id="acc-pw2" class="inp pw" type="password" placeholder="Repítela" autocomplete="new-password" style="margin-top:10px" enterkeyhint="done">
+      <label class="ver"><input type="checkbox" onchange="accVer(this.checked)"> Mostrar contraseña</label>
+      <button class="cta" onclick="accCrearContrasena()">Guardar y entrar</button>
+      <div class="err" id="acc-err4"></div>
+      <button class="liga" id="acc-omitir" style="display:none" onclick="accOmitirCambio()">Ahora no</button>
     </div>
     <div id="acc-p2" style="display:none">
       <h2>Escribe el código</h2>
@@ -693,8 +714,42 @@ const vendQS = () => VPARAM() != null ? '&vendedor=' + encodeURIComponent(VPARAM
 let TENANT = null;   // { id, nombre, telefono, demo, autos[] }
 let BIENVENIDA = false;   // ?bienvenida=1 (recién entró con código); se captura en cargarTenant antes de limpiar la URL
 const $a = $;
-async function accPedir(){
+async function accContinuar(){
   const tel = ($a('acc-tel').value || '').replace(/\D/g,''); $a('acc-err1').textContent = '';
+  if (tel.length < 10) { $a('acc-err1').textContent = 'Son 10 dígitos.'; return; }
+  const r = await fetch(API+'?action=acceso_modo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err1').textContent = r.error || 'No se pudo.'; return; }
+  sessionStorage.setItem('acc_tel', tel);
+  if (r.modo === 'contrasena') { $a('acc-p1').style.display = 'none'; $a('acc-p3').style.display = ''; $a('acc-sub3').textContent = 'Escribe la contraseña de tu FyraChat (••• ••• ' + tel.slice(-4) + ').'; setTimeout(() => $a('acc-pw').focus(), 50); return; }
+  return accPedir();
+}
+async function accEntrarContrasena(){
+  const tel = sessionStorage.getItem('acc_tel') || ''; const pw = $a('acc-pw').value || ''; $a('acc-err3').textContent = '';
+  if (!pw) { $a('acc-err3').textContent = 'Escribe tu contraseña.'; return; }
+  const r = await fetch(API+'?action=acceso_entrar_contrasena',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel, contrasena: pw})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err3').textContent = r.error || 'No se pudo.'; return; }
+  location.replace('/fyrachat.html');
+}
+function accVer(on){ ['acc-pw1','acc-pw2'].forEach(i => { $a(i).type = on ? 'text' : 'password'; }); }
+// Crear contraseña: obligatoria en el alta (sesión por código/ticket sin contraseña) · opcional al entrar con código teniendo una ("olvidé")
+function mostrarCrearContrasena({ opcional } = {}){
+  $a('acceso').classList.add('on'); ['acc-p1','acc-p2','acc-p3'].forEach(i => { $a(i).style.display = 'none'; }); $a('acc-p4').style.display = '';
+  $a('acc-t4').textContent = opcional ? 'Nueva contraseña' : 'Crea tu contraseña';
+  $a('acc-sub4').textContent = opcional ? 'Entraste con código. Si quieres, pon una contraseña nueva. Mínimo 8 caracteres.' : 'Con ella vas a volver a entrar sin código. Mínimo 8 caracteres.';
+  $a('acc-omitir').style.display = opcional ? '' : 'none';
+  setTimeout(() => $a('acc-pw1').focus(), 50);
+}
+async function accCrearContrasena(){
+  const a = $a('acc-pw1').value || '', b = $a('acc-pw2').value || ''; $a('acc-err4').textContent = '';
+  if (a.length < 8) { $a('acc-err4').textContent = 'Mínimo 8 caracteres.'; return; }
+  if (a !== b) { $a('acc-err4').textContent = 'No coinciden.'; return; }
+  const r = await fetch(API+'?action=acceso_contrasena_crear',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({contrasena: a})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+  if (!r.ok) { $a('acc-err4').textContent = r.error || 'No se pudo.'; return; }
+  const dest = sessionStorage.getItem('acc_dest') || '/fyrachat.html'; sessionStorage.removeItem('acc_dest'); location.replace(dest);
+}
+function accOmitirCambio(){ const dest = sessionStorage.getItem('acc_dest') || '/fyrachat.html'; sessionStorage.removeItem('acc_dest'); location.replace(dest); }
+async function accPedir(){
+  const tel = (($a('acc-tel').value || '').replace(/\D/g,'') || sessionStorage.getItem('acc_tel') || ''); $a('acc-err1').textContent = ''; $a('acc-p3').style.display = 'none';
   if (tel.length < 10) { $a('acc-err1').textContent = 'Son 10 dígitos.'; return; }
   const r = await fetch(API+'?action=acceso_pedir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
   if (!r.ok) { $a('acc-err1').textContent = r.error || 'No se pudo.'; return; }
@@ -706,9 +761,12 @@ async function accEntrar(){
   if (cod.length !== 6) { $a('acc-err2').textContent = 'Son 6 dígitos.'; return; }
   const r = await fetch(API+'?action=acceso_entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel, codigo: cod})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
   if (!r.ok) { $a('acc-err2').textContent = r.error || 'No se pudo.'; return; }
+  sessionStorage.setItem('acc_dest', '/fyrachat.html?bienvenida=1');
+  if (r.contrasena_pendiente) return mostrarCrearContrasena({ opcional: false });
+  if (r.tiene_contrasena) return mostrarCrearContrasena({ opcional: true });
   location.replace('/fyrachat.html?bienvenida=1');
 }
-function accVolver(){ $a('acc-p2').style.display = 'none'; $a('acc-p1').style.display = ''; }
+function accVolver(){ ['acc-p2','acc-p3','acc-p4'].forEach(i => { $a(i).style.display = 'none'; }); $a('acc-p1').style.display = ''; }
 function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search);
   // MODO PRUEBA: ?demo=1 → teléfono del usuario PRUEBAS# prellenado + leyenda del código fijo (solo vale para ese tenant)
   if (q.get('demo') === '1') { $a('acc-tel').value = '8888888888'; $a('acc-demo1').style.display = 'block'; $a('acc-demo').style.display = 'block'; }
@@ -744,6 +802,7 @@ async function cargarTenant(){
     VEND = '';
   }
   if (!SESION) { mostrarAcceso(qs.get('aviso') || ''); return false; }          // SIN SESIÓN NO HAY UNIVERSO
+  if (SESION.contrasena_pendiente) { contrasenaPendiente(); return false; }   // ALTA: primero la contraseña (orden owner 2026-09-12)
   if (VEND === '0' && (SESION.maestra || SESION.staff)) { VEND = ''; T0 = true; }   // maestra / STAFF pidiendo el FyraChat de Fyradrive (clásico)
   else if (!SESION.maestra || !VEND) VEND = String(SESION.tenant.id);          // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
   // tenant provisional desde la sesión (pinta el header al instante); tenant_info lo completa con autos
@@ -775,12 +834,14 @@ const INFLIGHT = new Map();
 function correr(key, fn){ if (INFLIGHT.has(key)) return INFLIGHT.get(key); const p = Promise.resolve().then(fn).finally(() => INFLIGHT.delete(key)); INFLIGHT.set(key, p); return p; }
 async function apiGet(action, params){
   const u = API + '?action=' + action + (params ? '&' + new URLSearchParams(params).toString() : '') + vendQS();
-  try { const r = await fetch(u, { credentials: 'same-origin' }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); return j; }
+  try { const r = await fetch(u, { credentials: 'same-origin' }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); if (j && j.contrasena_pendiente) contrasenaPendiente(); return j; }
   catch (e) { return { ok: false, error: 'Sin conexión' }; }
 }
+let CP_MOSTRADA = false;
+function contrasenaPendiente(){ if (CP_MOSTRADA) return; CP_MOSTRADA = true; sessionStorage.setItem('acc_dest', '/fyrachat.html?bienvenida=1'); mostrarCrearContrasena({ opcional: false }); }
 async function apiPost(action, body){
   const b = Object.assign({}, body || {}, { action }); if (VPARAM() != null) b.vendedor = VPARAM();
-  try { const r = await fetch(API + '?action=' + action + vendQS(), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); return j; }
+  try { const r = await fetch(API + '?action=' + action + vendQS(), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); if (j && j.contrasena_pendiente) contrasenaPendiente(); return j; }
   catch (e) { return { ok: false, error: 'Sin conexión' }; }
 }
 let SES_CAIDA = false;
@@ -852,7 +913,23 @@ function abrirCuenta(){
     '</div>' +
     (TENANT.demo ? '<button type="button" class="cta sec" id="cu-reset" style="margin-top:16px">' + ico('refresh') + 'Reiniciar prueba</button><p class="hint" style="margin-top:8px;text-align:center">Borra todo el universo de prueba. Nada real se toca.</p>' : '') });
   const b = s.body.querySelector('#cu-reset'); if (b) b.onclick = () => { s.cerrar(); reiniciarPrueba(); };
+  if (!TENANT.demo) { const g = document.createElement('div'); g.className = 'grupo'; g.style.marginTop = '12px'; g.innerHTML = '<button type="button" class="row op" id="cu-pw"><div class="sq">' + ico('settings') + '</div><div class="tx"><div class="t">Cambiar contraseña</div><div class="s">Con ella vuelves a entrar sin código.</div></div>' + ico('chev') + '</button>'; s.body.appendChild(g); g.querySelector('#cu-pw').onclick = () => { s.cerrar(); abrirCambiarContrasena(); }; }
 }
+function abrirCambiarContrasena(){
+  const s = sheet({ titulo: 'Cambiar contraseña', html: '<label class="lbl" for="cp-a">Contraseña actual</label><input class="inp" id="cp-a" type="password" autocomplete="current-password">' +
+    '<label class="lbl" for="cp-n" style="margin-top:12px">Nueva contraseña</label><input class="inp" id="cp-n" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
+    '<label class="lbl" for="cp-r" style="margin-top:12px">Repítela</label><input class="inp" id="cp-r" type="password" autocomplete="new-password"><div class="f-err" id="cp-err"></div><p class="hint" style="margin-top:10px">¿La olvidaste? Cierra sesión y entra con el código de WhatsApp: ahí podrás poner una nueva.</p>',
+    pie: '<button class="cta" id="cp-go">Guardar</button>' });
+  const go = s.pie.querySelector('#cp-go'), err = s.body.querySelector('#cp-err');
+  go.onclick = async () => {
+    const a = s.body.querySelector('#cp-a').value || '', n = s.body.querySelector('#cp-n').value || '', r2 = s.body.querySelector('#cp-r').value || ''; err.textContent = '';
+    if (!a) { err.textContent = 'Escribe tu contraseña actual.'; return; } if (n.length < 8) { err.textContent = 'Mínimo 8 caracteres.'; return; } if (n !== r2) { err.textContent = 'No coinciden.'; return; }
+    bloquear(go, true); const r = await apiPost('acceso_contrasena_cambiar', { actual: a, nueva: n }); bloquear(go, false);
+    if (!r.ok) { err.textContent = r.error || 'No se pudo'; return; }
+    s.cerrar(); notaAviso && notaAviso('Contraseña actualizada');
+  };
+}
+const notaAviso = (t) => { try { avisoError(t); } catch (e) {} };
 function abrirPronto(titulo, texto){
   sheet({ titulo, html: '<div class="vacio"><div class="vic">' + ico('clock') + '</div><b>Pronto</b>' + esc(texto || '') + '</div>' });
 }

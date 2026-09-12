@@ -152,7 +152,9 @@ async function guardarOferta(telO, segs) {
 // ══════════ CLASIFICACIÓN DE ACCIONES (blindaje 2026-09-10, spec docs/seguridad-acceso-spec-2026-09-10.md) ══════════
 // PÚBLICA: sin nada. K_PUENTE: solo el puente (header x-api-key). K_PANEL: servidores propios (web, SB, Claude/scripts).
 // Las de K_PUENTE y K_PANEL también las abre la sesión MAESTRA (el owner desde su navegador). Todo lo no listado = SESIÓN.
-const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url']);
+const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
+// CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
+const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
 const ACC_PUENTE = new Set(['opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
 const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
     'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
@@ -233,6 +235,8 @@ module.exports = async function handler(req, res) {
             }
         }
         // ══ BITÁCORA (invariante 8): toda escritura con cookie deja sesion_id + ip (1 INSERT best-effort; GET no escribe)
+        // CANDADO CONTRASEÑA: universo real con sesión pero sin contraseña creada → solo lo mínimo hasta que la cree (la UI muestra "Crea tu contraseña")
+        if (SES && SES.contrasena_pendiente && !ACC_PUBLICAS.has(action) && !ACC_SIN_CONTRASENA.has(action) && !conPuente && !conPanel) return res.status(403).json({ ok: false, error: 'Crea tu contraseña para continuar.', contrasena_pendiente: true });
         if (req.method === 'POST' && SES && !ACC_PUBLICAS.has(action)) await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action, ip: IP });
 
         // ══════════ MODO PRUEBA (2026-09-10): la sesión del tenant demo opera SOLO su universo simulado ══════════
@@ -254,7 +258,43 @@ module.exports = async function handler(req, res) {
             return res.status(r.ok ? 200 : 400).json(r);
         }
 
-        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff } : null, desvinculado: DESV ? { tenant: DESV } : null });
+        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff, contrasena_pendiente: !!SES.contrasena_pendiente, tiene_contrasena: !!SES.tiene_contrasena, via: SES.via } : null, desvinculado: DESV ? { tenant: DESV } : null });
+        // ── CONTRASEÑA (orden owner 2026-09-12) ──
+        if (action === 'acceso_modo' && req.method === 'POST') {   // ¿este número entra con contraseña o con código? (no revela si el número existe)
+            const telM = String(req.body.telefono || '').replace(/\D/g, '');
+            if (telM.length < 10) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
+            if ((await ACC.contarLimite('modo:ip:' + IP, 60, 10 * 60 * 1000)).excedido) return res.status(429).json({ ok: false, error: 'Demasiados intentos. Espera unos minutos.' });
+            return res.status(200).json(await ACC.modoAcceso(telM));
+        }
+        if (action === 'acceso_entrar_contrasena' && req.method === 'POST') {
+            const r = await ACC.entrarConContrasena(req.body.telefono, req.body.contrasena, req.headers['user-agent'], IP);
+            if (!r.ok) return res.status(r.limite ? 429 : 401).json({ ok: false, error: r.error });
+            if (r.tenant && r.tenant.id !== 0 && !r.maestra && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb.' }); }
+            ACC.ponerCookie(res, r.token);
+            await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar_contrasena', ip: IP });
+            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
+            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra, contrasena_pendiente: false });
+        }
+        if (action === 'acceso_contrasena_crear' && req.method === 'POST') {
+            // crea (alta) o repone ("olvidé": la sesión nació por código/ticket hace < 15 min). Con contraseña vigente y sesión vieja → usar acceso_contrasena_cambiar.
+            if (!SES) return res.status(401).json({ ok: false, error: 'Sin sesión' });
+            if (SES.tenant && SES.tenant.demo) return res.status(400).json({ ok: false, error: 'El modo prueba no lleva contraseña.' });
+            const reciente = (SES.via === 'codigo' || SES.via === 'ticket') && (Date.now() - Number(SES.creada || 0)) < 15 * 60 * 1000;
+            if (SES.tiene_contrasena && !reciente) return res.status(403).json({ ok: false, error: 'Para cambiarla escribe tu contraseña actual.', usar: 'cambiar' });
+            const rC = await ACC.ponerContrasena(SES.tenant_id, req.body.contrasena);
+            if (!rC.ok) return res.status(400).json(rC);
+            await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action: SES.tiene_contrasena ? 'contrasena_repuesta' : 'contrasena_creada', ip: IP });
+            return res.status(200).json({ ok: true });
+        }
+        if (action === 'acceso_contrasena_cambiar' && req.method === 'POST') {
+            if (!SES) return res.status(401).json({ ok: false, error: 'Sin sesión' });
+            if ((await ACC.contarLimite('contra:tel:' + SES.tenant.telefono, 5, 10 * 60 * 1000)).excedido) return res.status(429).json({ ok: false, error: 'Demasiados intentos. Espera 10 minutos.' });
+            if (!(await ACC.verificarContrasena(SES.tenant_id, req.body.actual))) return res.status(401).json({ ok: false, error: 'La contraseña actual no es correcta.' });
+            const rC = await ACC.ponerContrasena(SES.tenant_id, req.body.nueva);
+            if (!rC.ok) return res.status(400).json(rC);
+            await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action: 'contrasena_cambiada', ip: IP });
+            return res.status(200).json({ ok: true });
+        }
         if (action === 'acceso_pedir' && req.method === 'POST') {
             // RESPUESTA UNIFORME (invariante 7): exista o no el número, la respuesta es la misma. 429 solo por tope de IP.
             const telIn = String(req.body.telefono || '').replace(/\D/g, '');
@@ -276,7 +316,7 @@ module.exports = async function handler(req, res) {
             ACC.ponerCookie(res, r.token);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar', ip: IP });
             await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
-            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra });
+            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra, contrasena_pendiente: !!r.contrasena_pendiente, tiene_contrasena: !!r.tiene_contrasena });
         }
         if (action === 'acceso_salir' && req.method === 'POST') { await ACC.cerrarSesion(tokenSes); ACC.borrarCookie(res); return res.status(200).json({ ok: true }); }
         if (action === 'acceso_ticket' && req.method === 'POST') {
