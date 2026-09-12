@@ -185,46 +185,64 @@ a{color:var(--pri2)}
 /* ═══════════ CHAT ABIERTO ═══════════ */
 #scr-chat{z-index:30;background:var(--bg);transform:translateX(100%);transition:transform .22s cubic-bezier(.2,.8,.2,1);display:flex;visibility:hidden}
 #scr-chat.on{transform:none;visibility:visible}
-.ch-h{flex:0 0 auto;padding:calc(6px + var(--safe-t)) 12px 0;background:var(--bg)}
-.ch-h .l1{display:flex;align-items:center;gap:8px;height:56px}
-.ch-h .back,.ch-h .ib{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 40px;transition:background .12s}
+/* header fijo: ← (44 táctil) · avatar 40 · nombre 16/600 + estado 12 · teléfono · ••• */
+.ch-h{flex:0 0 auto;background:var(--bg)}
+.ch-h .l1{display:flex;align-items:center;gap:8px;height:56px;padding:0 8px 0 4px;margin-top:calc(4px + var(--safe-t))}
+.ch-h .back,.ch-h .ib{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 44px;transition:background .12s;text-decoration:none}
 .ch-h .back:active,.ch-h .ib:active{background:rgba(255,255,255,.06)}
 .ch-h .back .ic{width:24px;height:24px}
 .ch-h .ib .ic{width:22px;height:22px}
 .ch-h .ava{flex:0 0 40px;width:40px;height:40px;font-size:16px}
 .ch-h .who{flex:1;min-width:0}
 .ch-h .who b{display:block;font-size:16px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ch-h .who small{display:flex;align-items:center;gap:5px;font-size:12px;line-height:16px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.ch-h .who small{display:flex;align-items:center;gap:5px;font-size:12px;line-height:16px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden}
 .ch-h .who small.ok{color:var(--pos)}
 .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 7px}
-.foco{display:flex;align-items:center;gap:12px;width:100%;height:56px;padding:0 8px;margin:0 0 4px;border-radius:16px;background:var(--s1);text-align:left;color:#fff;transition:background .12s}
+/* row compacto del auto en foco (banda sobre SURFACE1): foto 56×40 r10 · nombre 15/600 · precio verde 14/600 · chevron */
+.foco{display:flex;align-items:center;gap:12px;width:100%;height:56px;padding:0 16px;background:var(--s1);text-align:left;color:#fff;transition:background .12s;border-bottom:1px solid var(--sep)}
 .foco:active{background:var(--s2)}
 .foco .ph{flex:0 0 56px;width:56px;height:40px;border-radius:10px;overflow:hidden;background:var(--s2);display:flex;align-items:center;justify-content:center;color:var(--txt2)}
 .foco .ph img{width:100%;height:100%;object-fit:cover}
 .foco .tx{flex:1;min-width:0}
 .foco .t{font-size:15px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.foco .p{font-size:13px;line-height:18px;color:var(--pos);font-weight:600}
-.foco .p.none{color:var(--txt2);font-weight:400}
+.foco .p{font-size:14px;line-height:18px;color:var(--pos);font-weight:600}
+.foco .p.none{color:var(--txt2);font-weight:400;font-size:13px}
 .foco .chev{color:var(--muted)}
-.ghost{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;margin:4px 0 0;border-radius:12px;background:rgba(255,209,102,.10);color:var(--warn);font-size:12px;line-height:16px;font-weight:600}
-.ghost .ic{width:16px;height:16px}
-.ghost button{margin-left:auto;height:26px;padding:0 10px;border-radius:999px;background:var(--warn);color:#3a2a00;font-size:12px;font-weight:700}
+/* líneas finas bajo el auto: quién atiende (bot) y ghosting — texto 12 + botón de texto con icono lineal */
+.linea{display:flex;align-items:center;gap:8px;min-height:36px;padding:0 16px;font-size:12px;line-height:16px;color:var(--txt2);border-bottom:1px solid var(--sep)}
+.linea .ic{width:16px;height:16px;color:var(--muted)}
+.linea .dot{background:var(--muted)}
+.linea.ok{color:var(--pos)}
+.linea.ok .dot{background:var(--pos)}
+.linea.gh{color:var(--warn)}
+.linea.gh .ic{color:var(--warn)}
+.linea .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.linea button{display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 4px 0 8px;color:var(--pri2);font-size:12px;font-weight:600;flex:0 0 auto;transition:opacity .12s}
+.linea button:active{opacity:.7}
+.linea button .ic{width:14px;height:14px;color:currentColor}
 .msgs{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 16px 8px;display:flex;flex-direction:column;gap:6px;-webkit-overflow-scrolling:touch;position:relative}
 .msgs .cargando{align-self:center;color:var(--muted);font-size:12px;line-height:16px;padding:6px 0}
 .dia{align-self:center;font-size:12px;line-height:16px;font-weight:500;color:var(--muted);padding:6px 0;margin:8px 0 2px}
-.msg{max-width:80%;padding:10px 14px 8px;border-radius:18px;font-size:15px;line-height:21px;word-wrap:break-word;white-space:pre-wrap;position:relative;animation:pop .16s ease-out}
+/* burbujas: comprador #20345F izq (esquina inf. izq 6) · nuestras #1F6FFF der (esquina inf. der 6) · texto 15/22 · hora 11 dentro, opacidad .7 */
+.msg{max-width:80%;padding:10px 14px 8px;border-radius:18px;font-size:15px;line-height:22px;word-wrap:break-word;white-space:pre-wrap;position:relative;animation:pop .16s ease-out}
 @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
 .msg.in{align-self:flex-start;background:var(--in);border-bottom-left-radius:6px;color:#fff}
 .msg.out{align-self:flex-end;background:var(--out);border-bottom-right-radius:6px;color:#fff}
-.msg .meta{display:flex;justify-content:flex-end;align-items:center;gap:4px;font-size:11px;line-height:14px;color:rgba(255,255,255,.65);margin-top:4px;white-space:nowrap;user-select:none}
-.msg .meta .ic{width:14px;height:14px}
-.msg .meta .quien{margin-right:auto;font-weight:600;color:rgba(255,255,255,.7);padding-right:8px}
+.msg .meta{display:flex;justify-content:flex-end;align-items:center;gap:4px;font-size:11px;line-height:14px;color:rgba(255,255,255,.7);margin-top:4px;white-space:nowrap;user-select:none}
+.msg .meta .quien{margin-right:auto;font-weight:600;padding-right:8px}
 .msg .st{display:inline-flex;align-items:center;gap:3px}
-.msg .st.error{color:#ffd0d5;cursor:pointer;text-decoration:underline}
+.msg .st .ic{width:14px;height:14px;stroke-width:2}
 .msg .st.entregado{color:#dff5ff}
-.msg img.med{display:block;max-width:100%;border-radius:12px;margin:2px 0 6px}
-.msg a.med{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:600;text-decoration:none;background:rgba(0,0,0,.18);border-radius:10px;padding:8px 10px;margin-bottom:4px}
-.msg audio{width:220px;max-width:100%;margin-bottom:4px}
+.msg .st.error{color:#ffd0d5;cursor:pointer;font-weight:600}
+/* media dentro de la burbuja: imagen r14 · ubicación / archivo como mini card con icono · audio con icono */
+.msg .med-img{display:block;max-width:min(100%,260px);border-radius:14px;margin:2px 0 6px;overflow:hidden}
+.msg .med-img img{display:block;width:100%;max-height:320px;object-fit:cover}
+.msg .med{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;background:rgba(0,0,0,.18);border-radius:14px;padding:10px 12px;margin:2px 0 6px;min-width:180px}
+.msg .med .sq{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;flex:0 0 36px}
+.msg .med .sq .ic{width:20px;height:20px}
+.msg .med b{display:block;font-size:14px;line-height:18px;font-weight:600}
+.msg .med small{display:block;font-size:12px;line-height:16px;opacity:.75}
+.msg .med audio{width:200px;max-width:100%;height:32px}
 .sis{align-self:center;max-width:88%;text-align:center;font-size:12px;line-height:16px;color:var(--muted);padding:4px 12px;margin:4px 0;white-space:pre-wrap}
 .sis i{display:inline-flex;align-items:center;gap:4px;font-style:normal;font-size:11px;color:var(--muted);margin-top:2px;opacity:.8}
 .sis i .ic{width:12px;height:12px}
@@ -238,6 +256,7 @@ a{color:var(--pri2)}
 .acc.run{opacity:.6}
 .composer{flex:0 0 auto;display:flex;align-items:flex-end;gap:8px;padding:8px 12px calc(12px + var(--safe-b));background:var(--bg)}
 .composer .ib{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--txt2);flex:0 0 44px}
+.composer .ib:disabled{opacity:.35}
 .composer .ib .ic{width:22px;height:22px}
 .composer textarea{flex:1;min-height:44px;max-height:132px;resize:none;border-radius:22px;background:var(--s1);border:1px solid transparent;padding:11px 16px;font-size:15px;line-height:20px;color:#fff;outline:none;transition:border-color .14s}
 .composer textarea:focus{border-color:var(--pri)}
@@ -287,6 +306,7 @@ select.inp option{background:#09183F;color:#fff}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chips .c{height:40px;padding:0 16px;border-radius:12px;background:var(--inp-bg);border:1px solid var(--inp-bd);color:#fff;font-size:14px;font-weight:600;transition:background .12s}
 .chips .c.on{background:var(--pri);border-color:var(--pri)}
+.pillz .chips .c{border-radius:999px}   /* hojas del chat (Cotizar / Agendar cita): plazo, día y hora como pills */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid2 .lbl{margin-top:12px}
 .cta{width:100%;height:56px;border-radius:16px;background:var(--grad);color:#fff;font-size:16px;font-weight:700;margin-top:20px;box-shadow:var(--sh-btn);display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .14s,opacity .14s;text-align:center}
@@ -514,11 +534,11 @@ select.inp option{background:#09183F;color:#fff}
       <div class="l1">
         <button class="back" onclick="cerrarChat()" aria-label="Volver"><i data-ico="back"></i></button>
         <div class="ava" id="ch-ava">?</div>
-        <div class="who"><b id="ch-nombre">—</b><small id="ch-estado" onclick="toggleBotDesdeEstado()"></small></div>
+        <div class="who"><b id="ch-nombre">—</b><small id="ch-estado"></small></div>
         <a class="ib" id="ch-tel" href="#" aria-label="Llamar" hidden><i data-ico="phone"></i></a>
         <button class="ib" onclick="abrirMasAcciones()" aria-label="Más acciones"><i data-ico="more"></i></button>
       </div>
-      <button class="foco" id="ch-foco" onclick="abrirSelectorAuto()"><div class="ph"><i data-ico="car"></i></div><div class="tx"><div class="t">Elegir auto</div><div class="p none">Toca para elegir el auto en foco</div></div><i data-ico="chev" class="chev"></i></button>
+      <button class="foco" id="ch-foco" onclick="abrirSelectorAuto()"><div class="ph"><i data-ico="car"></i></div><div class="tx"><div class="t">Elegir auto en foco</div><div class="p none">Toca para elegirlo</div></div><i data-ico="chev" class="chev"></i></button>
       <div id="ch-l2"></div>
     </div>
     <div class="msgs" id="msgs"></div>
@@ -529,7 +549,8 @@ select.inp option{background:#09183F;color:#fff}
       <button class="acc" onclick="abrirMasAcciones()"><i data-ico="more"></i>Más</button>
     </div>
     <div class="composer">
-      <button class="ib" onclick="abrirAdjuntar()" aria-label="Adjuntar"><i data-ico="clip"></i></button>
+      <input type="file" id="adj-file" accept="image/*" multiple hidden>
+      <button class="ib" id="adj-btn" onclick="abrirAdjuntar()" aria-label="Adjuntar" disabled><i data-ico="clip"></i></button>
       <textarea id="tx" rows="1" placeholder="Escribe un mensaje..." enterkeyhint="send"></textarea>
       <button class="send" id="send" aria-label="Enviar" onmousedown="event.preventDefault()" ontouchend="event.preventDefault();enviarTexto()" onclick="enviarTexto()"><i data-ico="send"></i></button>
     </div>
@@ -599,6 +620,7 @@ const ICO = {
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   ghost: '<path d="M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12l3-3 2.5 3 2.5-3 2.5 3 2.5-3 3 3V10a8 8 0 0 0-8-8z"/>',
+  belloff: '<path d="M8.7 3A6 6 0 0 1 18 8c0 2 .3 3.6.7 5"/><path d="M17 17H3s3-2 3-9c0-.6.1-1.2.3-1.7"/><path d="m2 2 20 20"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   bot: '<rect x="3" y="8" width="18" height="12" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01M9 17h6"/>',
   pen: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
   mute: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
@@ -932,52 +954,68 @@ function pintarCabecera(ch){
   $('ch-ava').innerHTML = avaHTML({ ini: ch.ini || c.ini, nombre, foto: ch.foto || c.foto, ghost_dias: gd }).replace(/^<div[^>]*>|<\/div>$/g, ''); $('ch-ava').classList.toggle('gh', gd >= 1);
   $('ch-nombre').textContent = nombre;
   const tel = String(ch.telefono || c.telefono || '').replace(/\D/g, ''); const telA = $('ch-tel'); telA.hidden = !tel; telA.href = tel ? 'tel:+' + tel : '#';
-  // estado bajo el nombre: quién atiende (tocar = cambiar); si el bot no aplica, el teléfono
-  const bot = ch.bot !== undefined ? ch.bot : c.bot; const est = $('ch-estado'); est.classList.remove('ok'); est.dataset.bot = bot || '';
-  if (bot === 'seb') { est.classList.add('ok'); est.innerHTML = '<span class="dot"></span>Seb atiende'; }
-  else if (bot === 'humano') est.innerHTML = '<span class="dot"></span>Tú atiendes';
-  else if (bot && bot !== 'n/a') est.innerHTML = '<span class="dot"></span>Seb en pausa';
-  else est.textContent = telFmtDe(tel) + (ch.delegado || c.delegado ? ' · delegado' : '');
+  // estado bajo el nombre: "En línea" (verde) si hubo entrante < 10 min; si no, universo ≠ 0 → delegación, universo 0 → hora del último mensaje
+  const est = $('ch-estado'); est.classList.remove('ok');
+  const h = HILOS.get(ch.chat_id); const ultIn = ultimoEntranteTs(h, c); const ultTs = (h && h.ult_ts) || ms(c.ult_ts) || 0;
+  const delegado = ch.delegado !== undefined ? ch.delegado : c.delegado;
+  clearTimeout(PRES_T);
+  if (ultIn && Date.now() - ultIn < PRES_MS) { est.classList.add('ok'); est.innerHTML = '<span class="dot"></span>En línea'; PRES_T = setTimeout(() => { if (CHAT_ID === ch.chat_id) pintarCabecera((HILOS.get(ch.chat_id) || {}).chat || INBOX.rows.get(ch.chat_id) || ch); }, PRES_MS - (Date.now() - ultIn) + 500); }
+  else if (TENANT && Number(TENANT.id) !== 0) est.textContent = delegado ? 'Delegado a Seb' : 'Sin delegar';
+  else est.textContent = ultTs ? 'Último mensaje ' + horaCorta(ultTs) : telFmtDe(tel);
   // row compacto del auto en foco
   const auto = ch.auto !== undefined ? ch.auto : c.auto; const f = $('ch-foco'); const p = autoPartes(auto);
-  f.innerHTML = '<div class="ph">' + (auto && auto.portada ? '<img src="' + esc(auto.portada) + '" alt="">' : ico('car')) + '</div><div class="tx"><div class="t">' + esc(auto ? (p.nombre + (p.anio ? ' ' + p.anio : '')) : 'Elegir auto') + '</div><div class="p' + (auto && auto.precio ? '' : ' none') + '">' + esc(auto ? (precioFmt(auto.precio) || 'Sin precio') : 'Toca para elegir el auto en foco') + '</div></div>' + ico('chev', 'chev');
-  // línea 2: ghosting inline
+  f.innerHTML = '<div class="ph">' + (auto && auto.portada ? '<img src="' + esc(auto.portada) + '" alt="">' : ico('car')) + '</div><div class="tx"><div class="t">' + esc(auto ? (p.nombre + (p.anio ? ' ' + p.anio : '')) : 'Elegir auto en foco') + '</div><div class="p' + (auto && auto.precio ? '' : ' none') + '">' + esc(auto ? (precioFmt(auto.precio) || 'Sin precio') : 'Toca para elegirlo') + '</div></div>' + ico('chev', 'chev');
+  // líneas finas bajo el auto: quién atiende (bot ≠ n/a) + ghosting; el botón de texto ejecuta la MISMA acción de siempre (bot_estado / reactivar)
+  const bot = ch.bot !== undefined ? ch.bot : c.bot;
   let l2 = '';
-  if (gd >= 1) l2 += '<div class="ghost">' + ico('ghost') + 'Sin respuesta · ' + esc(gd) + (gd === 1 ? ' día' : ' días') + '<button onclick="reactivar(this)">Reactivar</button></div>';
+  if (bot && bot !== 'n/a') {
+    if (bot === 'seb') l2 += '<div class="linea ok" data-bot="seb"><span class="dot"></span><span class="t">Seb atendiendo</span><button type="button" onclick="cambiarBot(\'humano\', this)">' + ico('hand') + 'Tomar control</button></div>';
+    else if (bot === 'humano') l2 += '<div class="linea" data-bot="humano"><span class="dot"></span><span class="t">Tú tienes el control</span><button type="button" onclick="cambiarBot(\'seb\', this)">' + ico('bot') + 'Devolver a Seb</button></div>';
+    else l2 += '<div class="linea" data-bot="' + esc(bot) + '">' + ico('pause') + '<span class="t">Seb en pausa</span><button type="button" onclick="cambiarBot(\'seb\', this)">' + ico('play') + 'Reanudar</button></div>';
+  }
+  if (gd >= 1) l2 += '<div class="linea gh">' + ico('belloff') + '<span class="t">Sin respuesta · ' + esc(gd) + (gd === 1 ? ' día' : ' días') + '</span><button type="button" onclick="reactivar(this)">' + ico('refresh') + 'Reactivar</button></div>';
   $('ch-l2').innerHTML = l2; $('ch-l2').style.display = l2 ? '' : 'none';
 }
-// tocar el estado "Seb atiende / Tú atiendes / Seb en pausa" = pasar el control (misma acción bot_estado)
-function toggleBotDesdeEstado(){ const b = $('ch-estado').dataset.bot; if (!b || b === 'n/a') return; cambiarBot(b === 'seb' ? 'humano' : 'seb', null); }
+// presencia: ts (ms) del último mensaje ENTRANTE del comprador (hilo en caché; si no, la fila del inbox)
+const PRES_MS = 10 * 60000; let PRES_T = null;
+function ultimoEntranteTs(h, c){
+  if (h && h.msgs && h.msgs.length) { for (let i = h.msgs.length - 1; i >= 0; i--) { const m = h.msgs[i]; if (m.dir === 'in' && m.emisor !== 'sistema') return ms(m.ts) || 0; } }
+  return c && c.ult_dir === 'in' ? (ms(c.ult_ts) || 0) : 0;
+}
 function diaDe(ts){ const d = new Date(ms(ts)), h = new Date(); if (d.toDateString() === h.toDateString()) return 'Hoy'; const ay = new Date(h); ay.setDate(h.getDate() - 1); if (d.toDateString() === ay.toDateString()) return 'Ayer'; return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }); }
 function estadoHTML(m){
   if (m.dir !== 'out' || m.emisor === 'sistema') return '';
   const e = m.estado || 'enviado';
-  if (e === 'enviando') return '<span class="st enviando" title="Enviando">◌</span>';
-  if (e === 'error') return '<span class="st error" onclick="reintentar(\'' + esc(m.local || '') + '\')">⚠ reintentar</span>';
-  if (e === 'entregado') return '<span class="st entregado">✓✓</span>';
-  return '<span class="st">✓</span>';
+  if (e === 'enviando') return '<span class="st enviando" title="Enviando">' + ico('clock') + '</span>';
+  if (e === 'error') return '<span class="st error" role="button" onclick="reintentar(\'' + esc(m.local || '') + '\')">' + ico('alert') + 'Reintentar</span>';
+  if (e === 'entregado') return '<span class="st entregado" title="Entregado">' + ico('checks') + '</span>';
+  return '<span class="st" title="Enviado">' + ico('check') + '</span>';
 }
 function burbujaHTML(m){
-  const k = keyDe(m);
-  if (m.emisor === 'sistema') return '<div class="sis" data-k="' + esc(k) + '">' + esc(m.texto || textoDe(m)) + '<i>👁 Solo tú lo ves</i></div>';
+  const k = keyDe(m), ts = ms(m.ts) || 0;
+  if (m.emisor === 'sistema') return '<div class="sis" data-k="' + esc(k) + '" data-ts="' + ts + '">' + esc(m.texto || textoDe(m)) + ' <i>' + ico('eye') + 'Solo tú lo ves</i></div>';
   const out = m.dir === 'out';
   let med = '';
   if (m.media && m.media.url) {
-    if (m.media.tipo === 'imagen') med = '<a href="' + esc(m.media.url) + '" target="_blank" rel="noopener"><img class="med" src="' + esc(m.media.url) + '" alt="" loading="lazy"></a>';
-    else if (m.media.tipo === 'ubicacion') med = '<a class="med" href="' + esc(m.media.url) + '" target="_blank" rel="noopener">📍 Ver ubicación</a>';
-    else if (m.media.tipo === 'audio') med = '<audio controls preload="none" src="' + esc(m.media.url) + '"></audio>';
-    else med = '<a class="med" href="' + esc(m.media.url) + '" target="_blank" rel="noopener">📎 Archivo</a>';
+    const u = esc(m.media.url), tipo = m.media.tipo;
+    if (tipo === 'imagen') med = '<a class="med-img" href="' + u + '" target="_blank" rel="noopener"><img src="' + u + '" alt="" loading="lazy"></a>';
+    else if (tipo === 'ubicacion') med = '<a class="med" href="' + u + '" target="_blank" rel="noopener"><span class="sq">' + ico('map') + '</span><span><b>Ubicación</b><small>Abrir en Maps</small></span></a>';
+    else if (tipo === 'audio') med = '<div class="med"><span class="sq">' + ico('mic') + '</span><audio controls preload="none" src="' + u + '"></audio></div>';
+    else med = '<a class="med" href="' + u + '" target="_blank" rel="noopener"><span class="sq">' + ico('file') + '</span><span><b>' + esc(m.media.nombre || 'Archivo') + '</b><small>Abrir</small></span></a>';
   } else if (m.media && !m.texto) med = esc(textoDe(m));
   const quien = out ? (m.emisor === 'bot' || m.emisor === 'asistente' ? 'Seb' : '') : '';
-  const hora = new Date(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-  return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + (ms(m.ts) || 0) + '">' + med + esc(m.texto || '') + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
+  const hora = new Date(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + ts + '">' + med + esc(m.texto || '') + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
 }
 function pintarMensajes(h){
   const box = $('msgs'); let html = '', dia = '';
   if (h.hay_mas) html += '<div class="cargando" id="mas-arriba">Desliza arriba para ver anteriores</div>';
   for (const m of h.msgs) { const d = diaDe(m.ts); if (d !== dia) { dia = d; html += '<div class="dia">' + esc(d) + '</div>'; } html += burbujaHTML(m); }
   box.innerHTML = html; irAlFondo(false);
+  anclarImagenes(box);
 }
+// una imagen que termina de cargar empuja el hilo: si estábamos (casi) al fondo, nos quedamos al fondo
+function anclarImagenes(root){ root.querySelectorAll('img').forEach(i => { if (i.complete) return; i.addEventListener('load', () => { const b = $('msgs'); if (b.scrollHeight - b.scrollTop - b.clientHeight < i.offsetHeight + 120) irAlFondo(false); }, { once: true }); }); }
 const enElFondo = () => { const b = $('msgs'); return b.scrollHeight - b.scrollTop - b.clientHeight < 80; };
 function irAlFondo(suave){ const b = $('msgs'); b.scrollTo({ top: b.scrollHeight, behavior: suave ? 'smooth' : 'auto' }); $('nuevos').classList.remove('on'); }
 $('msgs').addEventListener('scroll', () => { if (enElFondo()) $('nuevos').classList.remove('on'); if ($('msgs').scrollTop < 80) cargarAnteriores(); }, { passive: true });
@@ -990,6 +1028,7 @@ function insertarBurbuja(m, { auto } = {}){
   const last = [...box.querySelectorAll('.msg,.sis')].pop();
   if (!last || Number(last.dataset.ts || 0) <= ts) { const d = diaDe(ts); const dias = box.querySelectorAll('.dia'); const ud = dias[dias.length - 1]; if (!ud || ud.textContent !== d) { const dv = document.createElement('div'); dv.className = 'dia'; dv.textContent = d; box.appendChild(dv); } box.appendChild(el); }
   else { let ref = null; for (const x of box.querySelectorAll('.msg,.sis')) { if (Number(x.dataset.ts || 0) > ts) { ref = x; break; } } box.insertBefore(el, ref); }
+  anclarImagenes(el);
   if (abajo || m.dir === 'out' || !auto) irAlFondo(true); else $('nuevos').classList.add('on');
 }
 function actualizarBurbuja(m){
@@ -1039,7 +1078,7 @@ async function mandar(id, m){
       m.id = r.mensaje.id; m.msg_id = r.mensaje.msg_id; if (r.mensaje.ts) m.ts = r.mensaje.ts; m.estado = m.estado === 'entregado' ? 'entregado' : (r.mensaje.estado === 'error' ? 'error' : 'enviado'); h.keys.add(sk);
     } else { m.estado = 'error'; m._err = r.error || 'No se pudo enviar'; }
     if (CHAT_ID === id) actualizarBurbuja(m);
-    if (m.estado === 'error') avisoError('No se envió: ' + (m._err || '') + ' — toca ⚠ para reintentar');
+    if (m.estado === 'error') avisoError('No se envió: ' + (m._err || '') + ' — toca Reintentar en el mensaje');
   });
 }
 function reintentar(local){ const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const m = h.msgs.find(x => x.local === local); if (!m || m.estado !== 'error') return; m.estado = 'enviando'; m.ts = Date.now(); actualizarBurbuja(m); mandar(id, m); }   // MISMA clave → idempotente
@@ -1057,54 +1096,52 @@ async function cambiarBot(estado, btn){
   const h = hiloDe(id); if (h.chat) h.chat.bot = r.bot || estado; const c = INBOX.rows.get(id); if (c) c.bot = r.bot || estado; pintarCabecera(h.chat || c);
 }
 async function reactivar(btn){
-  const id = CHAT_ID; if (!id) return; bloquear(btn, true); btn.textContent = '…';
+  const id = CHAT_ID; if (!id) return; bloquear(btn, true);
   const r = await apiPost('reactivar', { chat_id: id, clave: clave('reactivar', id) });
-  if (!r.ok) { bloquear(btn, false); btn.textContent = 'Reactivar'; return avisoError(r.error || 'No se pudo programar la reactivación'); }
-  notaLocal(id, '👻 Reactivación programada' + (r.programado_ts ? ' · sale ' + fechaCorta(r.programado_ts) : ''));
+  if (!r.ok) { bloquear(btn, false); return avisoError(r.error || 'No se pudo programar la reactivación'); }
+  notaLocal(id, 'Reactivación programada' + (r.programado_ts ? ' · sale ' + fechaCorta(r.programado_ts) : ''));
   const h = hiloDe(id); if (h.chat) h.chat.ghost_dias = 0; const c = INBOX.rows.get(id); if (c) c.ghost_dias = 0; pintarCabecera(h.chat || c); if (c) pintarFila(c);
 }
 function autosDisponibles(){ const h = CHAT_ID ? hiloDe(CHAT_ID) : null; const a = (h && h.chat && h.chat.autos_disponibles && h.chat.autos_disponibles.length) ? h.chat.autos_disponibles : (TENANT && TENANT.autos) || []; return a; }
 const precioFmt = (p) => { const n = Number(p) || 0; return n ? '$' + n.toLocaleString('es-MX', { maximumFractionDigits: 0 }) : ''; };
-const autoCardHTML = (a, on) => '<button type="button" class="auto-card' + (on ? ' on' : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : '🚗') + '</div><div style="min-width:0;flex:1"><b>' + esc(a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' ')) + '</b><small>' + esc(precioFmt(a.precio)) + '</small></div></button>';
+// auto en foco del chat: selector reutilizable (búsqueda + rows) → foco optimista; si falla, vuelve al anterior
 function abrirSelectorAuto(){
   const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const actual = h.chat && h.chat.auto ? h.chat.auto.id : null;
   const autos = autosDisponibles();
-  const s = sheet({ titulo: 'Auto en foco', html: '<input class="inp" id="sel-q" placeholder="Buscar marca, modelo o año…" autocomplete="off"><div class="auto-l" id="sel-l" style="margin-top:10px"></div>' });
-  const pintar = (q) => { const qq = (q || '').toLowerCase().trim(); const l = autos.filter(a => !qq || String(a.nombre || '').toLowerCase().includes(qq)); s.body.querySelector('#sel-l').innerHTML = l.length ? l.map(a => autoCardHTML(a, Number(a.id) === Number(actual))).join('') : '<div class="hint">No hay autos que coincidan.</div>'; };
-  pintar('');
-  s.body.querySelector('#sel-q').oninput = (e) => pintar(e.target.value);
-  s.body.addEventListener('click', async (e) => {
-    const b = e.target.closest('.auto-card'); if (!b) return;
-    const a = autos.find(x => String(x.id) === b.dataset.id); if (!a) return;
+  if (!autos.length) { sheet({ titulo: 'Auto en foco', html: '<div class="vacio"><b>Este universo aún no tiene autos</b>Agrega el primero en la pestaña Autos.</div>' }); return; }
+  selectorAutos({ autos, actual, titulo: 'Auto en foco', alElegir: async (a) => {
     // optimista
-    const previo = h.chat ? h.chat.auto : null; if (!h.chat) h.chat = { chat_id: id }; h.chat.auto = { id: a.id, nombre: a.nombre, precio: a.precio, portada: a.portada }; pintarCabecera(h.chat); s.cerrar();
+    const previo = h.chat ? h.chat.auto : null; if (!h.chat) h.chat = { chat_id: id }; h.chat.auto = { id: a.id, nombre: a.nombre, anio: a.anio || null, precio: a.precio, portada: a.portada }; pintarCabecera(h.chat);
     const r = await correr('foco:' + id, () => apiPost('foco', { chat_id: id, auto_id: a.id }));
     if (!r.ok) { h.chat.auto = previo; pintarCabecera(h.chat); return avisoError(r.error || 'No se pudo cambiar el auto'); }
     if (r.auto) h.chat.auto = r.auto; const c = INBOX.rows.get(id); if (c) { c.auto = h.chat.auto; pintarFila(c); } pintarCabecera(h.chat);
-  });
-  if (HOVER) setTimeout(() => s.body.querySelector('#sel-q').focus(), 60);
+  } });
 }
+// row del auto dentro de una hoja del chat: tocarlo = cambiar el auto en foco (cierra la hoja y abre el selector)
+function autoEnHojaHTML(auto){ return autoRowHTML(auto, { tag: 'button', extra: 'pick' }); }
+function autoEnHojaWire(s){ const b = s.body.querySelector('.auto-r.pick'); if (b) b.onclick = () => { s.cerrar(); abrirSelectorAuto(); }; }
 function abrirCotizar(){
   const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const auto = h.chat && h.chat.auto;
-  if (!auto) { const s0 = sheet({ titulo: 'Cotizar', html: '<p class="hint">Primero elige el auto en foco de este chat.</p><button class="cta" id="c0">Elegir auto</button>' }); s0.body.querySelector('#c0').onclick = () => { s0.cerrar(); abrirSelectorAuto(); }; return; }
+  if (!auto) { const s0 = sheet({ titulo: 'Cotizar', html: '<p class="hint">Primero elige el auto en foco de este chat.</p>', pie: '<button class="cta" id="c0">Elegir auto</button>' }); s0.pie.querySelector('#c0').onclick = () => { s0.cerrar(); abrirSelectorAuto(); }; return; }
   let plazo = 48;
-  const s = sheet({ titulo: 'Cotizar', html: autoCardHTML(auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') +
-    '<label class="lbl" for="cot-eng">Enganche</label><input class="inp" id="cot-eng" inputmode="numeric" placeholder="$ 0" autocomplete="off"><div class="f-err" id="cot-err"></div>' +
-    '<span class="lbl">Plazo</span><div class="chips" id="cot-pl"><button type="button" class="c" data-p="36">36 meses</button><button type="button" class="c on" data-p="48">48 meses</button><button type="button" class="c" data-p="60">60 meses</button></div>' +
-    '<button class="cta" id="cot-go">Generar cotización</button><div class="g-err" id="cot-gerr"></div>' });
-  const eng = s.body.querySelector('#cot-eng');
-  eng.oninput = () => { const n = eng.value.replace(/\D/g, ''); eng.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; };
+  const s = sheet({ titulo: 'Cotizar', html: '<div class="pillz">' + autoEnHojaHTML(auto) +
+    '<label class="lbl" for="cot-eng">' + ico('dollar') + 'Enganche</label><input class="inp" id="cot-eng" inputmode="numeric" placeholder="$ 0" autocomplete="off"><div class="f-err" id="cot-err"></div>' +
+    '<span class="lbl">' + ico('calendar') + 'Plazo</span><div class="chips" id="cot-pl">' + [36, 48, 60].map(p => '<button type="button" class="c' + (p === plazo ? ' on' : '') + '" data-p="' + p + '">' + p + ' meses</button>').join('') + '</div></div>',
+    pie: '<button class="cta" id="cot-go">Generar cotización</button><div class="g-err" id="cot-gerr"></div>' });
+  autoEnHojaWire(s);
+  const eng = s.body.querySelector('#cot-eng'), ferr = s.body.querySelector('#cot-err'), gerr = s.pie.querySelector('#cot-gerr');
+  eng.oninput = () => { const n = eng.value.replace(/\D/g, ''); eng.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; eng.classList.remove('err'); ferr.textContent = ''; };
   s.body.querySelector('#cot-pl').onclick = (e) => { const b = e.target.closest('.c'); if (!b) return; plazo = Number(b.dataset.p); s.body.querySelectorAll('#cot-pl .c').forEach(x => x.classList.toggle('on', x === b)); };
-  const go = s.body.querySelector('#cot-go'); const cl = clave('cotizar', id);   // clave fija para esta hoja: reintentar = mismo resultado
+  const go = s.pie.querySelector('#cot-go'); const cl = clave('cotizar', id);   // clave fija para esta hoja: reintentar = mismo resultado
   go.onclick = async () => {
-    const n = Number(eng.value.replace(/\D/g, '')) || 0; s.body.querySelector('#cot-err').textContent = ''; s.body.querySelector('#cot-gerr').textContent = '';
-    if (!n) { s.body.querySelector('#cot-err').textContent = 'Escribe el enganche.'; eng.classList.add('err'); eng.focus(); return; }
+    const n = Number(eng.value.replace(/\D/g, '')) || 0; ferr.textContent = ''; gerr.textContent = '';
+    if (!n) { ferr.textContent = 'Escribe el enganche.'; eng.classList.add('err'); eng.focus(); return; }
     bloquear(go, true);
     const r = await correr('cotizar:' + cl, () => apiPost('cotizar_v2', { chat_id: id, enganche: n, plazo, clave: cl }));
     bloquear(go, false);
-    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } if (r.necesita === 'enganche') { s.body.querySelector('#cot-err').textContent = r.error || 'Falta el enganche'; return; } s.body.querySelector('#cot-gerr').textContent = r.error || 'No se pudo cotizar'; return; }
+    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } if (r.necesita === 'enganche') { ferr.textContent = r.error || 'Falta el enganche'; return; } gerr.textContent = r.error || 'No se pudo cotizar'; return; }
     s.cerrar();
-    burbujaSalida(id, r.texto_tarjeta || textoEnviado(r, '💰 Cotización enviada'), r);
+    burbujaSalida(id, r.texto_tarjeta || textoEnviado(r, 'Cotización enviada'), r);
   };
   setTimeout(() => eng.focus(), 80);
 }
@@ -1127,43 +1164,46 @@ function citaFormWire(body){
 }
 function abrirCita(){
   const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const auto = h.chat && h.chat.auto;
-  const s = sheet({ titulo: 'Agendar cita', html: (auto ? autoCardHTML(auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') : '<p class="hint">Sin auto en foco: el servidor lo pedirá si hace falta.</p>') + citaFormHTML('<button class="cta" id="ci-go">Agendar</button><div class="g-err" id="ci-gerr"></div>') });
-  const st = citaFormWire(s.body); const go = s.body.querySelector('#ci-go'); const cl = clave('cita', id);
+  const s = sheet({ titulo: 'Agendar cita', html: '<div class="pillz">' + (auto ? autoEnHojaHTML(auto) : '<p class="hint">Sin auto en foco: el servidor lo pedirá si hace falta.</p>') + citaFormHTML('') + '</div>',
+    pie: '<button class="cta" id="ci-go">Agendar</button><button class="cta sec" id="ci-sin">' + ico('clock') + 'Aún sin horario · proponerle día y hora</button><div class="g-err" id="ci-gerr"></div>' });
+  autoEnHojaWire(s);
+  const st = citaFormWire(s.body); const go = s.pie.querySelector('#ci-go'), sin = s.pie.querySelector('#ci-sin'), gerr = s.pie.querySelector('#ci-gerr'); const cl = clave('cita', id);
   // AÚN SIN HORARIO (owner 2026-09-12): manda la propuesta (busca día y hora) sin crear la cita
-  const sin = document.createElement('button'); sin.type = 'button'; sin.textContent = 'Aún sin horario · proponerle día y hora';
-  sin.style.cssText = 'margin-top:10px;width:100%;padding:13px;border-radius:999px;border:1px solid rgba(120,160,255,.35);background:rgba(255,255,255,.06);color:#dfe8ff;font-weight:700;font-size:14px;cursor:pointer';
-  s.body.appendChild(sin);
   sin.onclick = async () => {
     const clP = clave('citaprop', id); bloquear(sin, true);
     const r = await correr('citaprop:' + clP, () => apiPost('accion_v2', { chat_id: id, accion: 'cita_propuesta', clave: clP }));
     bloquear(sin, false);
-    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } s.body.querySelector('#ci-gerr').textContent = r.error || 'No se pudo mandar'; return; }
-    s.cerrar(); burbujaSalida(id, textoEnviado(r, '📅 Propuesta de cita enviada'), r);
+    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo mandar'; return; }
+    s.cerrar(); burbujaSalida(id, textoEnviado(r, 'Propuesta de cita enviada'), r);
   };
   go.onclick = async () => {
-    if (!st.valida()) return; s.body.querySelector('#ci-gerr').textContent = '';
+    if (!st.valida()) return; gerr.textContent = '';
     bloquear(go, true);
     const r = await correr('cita:' + cl, () => apiPost('cita_v2', { chat_id: id, fecha_iso: st.fecha, hora: st.hora, clave: cl }));
     bloquear(go, false);
-    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } s.body.querySelector('#ci-gerr').textContent = r.error || 'No se pudo agendar'; return; }
+    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo agendar'; return; }
     s.cerrar();
-    const c = r.cita || {}; burbujaSalida(id, textoEnviado(r, '📅 Cita agendada · ' + (c.fecha || st.fecha) + ' ' + (c.hora || st.hora) + (c.auto ? ' · ' + c.auto : '')), r);
+    const c = r.cita || {}; burbujaSalida(id, textoEnviado(r, 'Cita agendada · ' + (c.fecha || st.fecha) + ' ' + (c.hora || st.hora) + (c.auto ? ' · ' + c.auto : '')), r);
     const row = INBOX.rows.get(id); if (row) { pintarFila(row); }
     citasInvalidar();   // la pestaña Citas se vuelve a pedir al abrirla (el timbre `cambio:cita` también lo hace)
   };
 }
-function abrirAdjuntar(){ abrirMasAcciones(); }   // (se separa en el slice del chat: clip = fotos / ubicación / ficha)
+// clip del composer: el contrato aún no define endpoint de adjuntos → el botón queda deshabilitado (tenue) hasta que exista
+const ADJUNTOS = false;
+$('adj-btn').disabled = !ADJUNTOS;
+function abrirAdjuntar(){ if (!ADJUNTOS) return; $('adj-file').click(); }
+// hoja "Más": rows de 60 con icono lineal (Fotos · Ubicación · Información · Recordatorio · Simular respuesta [demo] · Soltar chat en rojo)
 function abrirMasAcciones(){
   const id = CHAT_ID; if (!id) return;
   const demo = !!(TENANT && TENANT.demo);
-  const s = sheet({ titulo: 'Más acciones', html: '<div class="op-l">' +
-    '<button class="op" data-a="fotos"><span class="e">📸</span><div>Fotos del auto<small>Le manda las fotos del auto en foco, sin texto.</small></div></button>' +
-    '<button class="op" data-a="ubicacion"><span class="e">📍</span><div>Ubicación<small>Texto + captura + pin de Maps.</small></div></button>' +
-    '<button class="op" data-a="info"><span class="e">📄</span><div>Información<small>La ficha completa del auto.</small></div></button>' +
-    '<button class="op" data-a="recordatorio"><span class="e">📨</span><div>Recordatorio<small>Programa un mensaje (máximo 2 por chat).</small></div></button>' +
-    (demo ? '<button class="op" data-a="sim"><span class="e">🧪</span><div>Simular respuesta<small>Escribe lo que contestaría el comprador (nada sale a WhatsApp).</small></div></button>' : '') +
-    '<button class="op rojo" data-a="soltar"><span class="e">✋</span><div>Soltar chat<small>El asistente deja de leer y registrar este chat.</small></div></button>' +
-    '</div>' });
+  const fila = (a, i, t, sub, rojo) => '<button type="button" class="row op' + (rojo ? ' rojo' : '') + '" data-a="' + a + '"><div class="sq">' + ico(i) + '</div><div class="tx"><div class="t">' + t + '</div><div class="s">' + sub + '</div></div>' + ico('chev', 'chev') + '</button>';
+  const s = sheet({ titulo: 'Más', html: '<div class="grupo">' +
+    fila('fotos', 'image', 'Fotos', 'Las fotos del auto en foco, sin texto.') +
+    fila('ubicacion', 'map', 'Ubicación', 'Texto, captura y pin de Maps.') +
+    fila('info', 'info', 'Información', 'La ficha completa del auto.') +
+    fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
+    (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
+    '</div><div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
     if (a === 'recordatorio') { s.cerrar(); return abrirRecordatorio(); }
@@ -1173,7 +1213,7 @@ function abrirMasAcciones(){
     const r = await accionSimple(id, a);
     s.cerrar();
     if (!r.ok) { if (r.necesita === 'auto' || r.necesita === 'foco') return abrirSelectorAuto(); return avisoError(r.error || 'No se pudo'); }
-    const et = { fotos: '📸 Fotos enviadas', ubicacion: '📍 Ubicación enviada', info: '📄 Información enviada' }[a];
+    const et = { fotos: 'Fotos enviadas', ubicacion: 'Ubicación enviada', info: 'Información enviada' }[a];
     if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r); else notaLocal(id, et);
   };
 }
@@ -1210,7 +1250,7 @@ function abrirRecordatorio(){
     bloquear(go, false);
     if (!r.ok) { err.textContent = r.error || 'No se pudo programar'; return; }
     try { const l = recPendientes(id); l.push(cuando); localStorage.setItem(recKey(id), JSON.stringify(l)); } catch(e){}
-    s.cerrar(); notaLocal(id, '📨 Recordatorio programado · ' + fechaCorta(cuando) + '\n«' + t + '»');
+    s.cerrar(); notaLocal(id, 'Recordatorio programado · ' + fechaCorta(cuando) + '\n«' + t + '»');
   };
 }
 async function soltarChat(){
@@ -1220,11 +1260,11 @@ async function soltarChat(){
   const r = await correr('soltar:' + id, () => apiPost('soltar_v2', { chat_id: id }));
   if (!r.ok) return avisoError(r.error || 'No se pudo soltar');
   const h = hiloDe(id); if (h.chat) h.chat.delegado = false; const c = INBOX.rows.get(id); if (c) { c.delegado = false; pintarFila(c); }
-  notaLocal(id, '✋ Chat soltado'); pintarCabecera(h.chat || c);
+  notaLocal(id, 'Chat soltado'); pintarCabecera(h.chat || c);
 }
 function abrirSimular(){
   const id = CHAT_ID; if (!id) return; const h = hiloDe(id);
-  const s = sheet({ titulo: '🧪 Simular respuesta', html: '<p class="hint">Se registra como mensaje entrante del comprador. Nada sale a WhatsApp.</p><textarea class="inp" id="si-t" placeholder="¿Qué contesta el comprador?"></textarea><button class="cta" id="si-go">Registrar</button><div class="g-err" id="si-err"></div>' });
+  const s = sheet({ titulo: 'Simular respuesta', html: '<p class="hint">Se registra como mensaje entrante del comprador. Nada sale a WhatsApp.</p><textarea class="inp" id="si-t" placeholder="¿Qué contesta el comprador?"></textarea><button class="cta" id="si-go">Registrar</button><div class="g-err" id="si-err"></div>' });
   const go = s.body.querySelector('#si-go');
   go.onclick = async () => {
     const t = s.body.querySelector('#si-t').value.trim(); if (!t) return;
@@ -1587,6 +1627,7 @@ async function onMensajeTimbre(d){
     else if (m.dir === 'out') c.no_leidos = 0;
   }
   pintarFila(c, { arriba: true }); pintarBell();
+  if (CHAT_ID === id) pintarCabecera(h.chat || c);   // presencia ("En línea") al instante
 }
 async function onCambioTimbre(d){
   const id = d.chat_id; const h = hiloDe(id);
