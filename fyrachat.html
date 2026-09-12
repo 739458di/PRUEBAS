@@ -48,8 +48,8 @@ a{color:var(--pri2)}
 .wm{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1;color:#fff;white-space:nowrap}
 .wm b{font-weight:700;color:var(--pri2)}
 .hdr .der{display:flex;align-items:center;gap:12px}
-.seb{width:116px;height:118px;overflow:hidden;position:relative;flex:0 0 116px;margin-bottom:-54px;z-index:1}   /* busto completo (cabeza, torso y pulgar), se asoma por debajo del header como en la referencia */
-.seb img{position:absolute;width:128px;left:-2px;top:-2px;user-select:none;-webkit-user-drag:none;pointer-events:none;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
+.seb{width:42px;height:92px;overflow:visible;position:relative;flex:0 0 42px;margin:-10px 0 -36px 10px;z-index:1}   /* Seb MINI completo (cuerpo entero) junto al wordmark, orden owner 2026-09-12 */
+.seb img{position:static;display:block;width:42px;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none;filter:drop-shadow(0 4px 10px rgba(0,0,0,.35))}
 .bell{position:relative;width:40px;height:40px;border-radius:50%;background:var(--s1);display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 40px;transition:transform .12s}
 .bell:active{transform:scale(.96)}
 .bell .ic{width:22px;height:22px}
@@ -311,6 +311,9 @@ a{color:var(--pri2)}
 .inp.err{border-color:var(--danger)}
 .inp:disabled{opacity:.6}
 textarea.inp{height:auto;min-height:96px;padding:14px 16px;resize:vertical;line-height:20px}
+textarea.inp.auto{min-height:54px;height:54px;padding:15px 16px;resize:none;overflow:hidden}
+.sh-pie .prog{margin:0 0 12px}
+.sh-pie .prog-t{margin:-4px 0 12px}
 select.inp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237088BD' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;background-size:18px;padding-right:40px}
 select.inp option{background:#09183F;color:#fff}
 .inp[type=date],.inp[type=time]{color-scheme:dark;min-width:0}
@@ -431,7 +434,6 @@ select.inp option{background:#09183F;color:#fff}
 .mas-det.open + .det{display:block}
 .det .grid2 .lbl:first-child{margin-top:12px}
 .grid2 .f-err:empty{display:none}
-.prog[hidden]{display:none}
 .mas-det .ic{color:var(--muted);transition:transform .2s}
 .mas-det.open .ic{transform:rotate(180deg)}
 .prog{height:4px;border-radius:2px;background:var(--s1);overflow:hidden;margin-top:16px}
@@ -511,8 +513,8 @@ select.inp option{background:#09183F;color:#fff}
     <div class="hdr">
       <div class="top">
         <div class="wm">Fyra<b>drive</b></div>
+        <div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div>
         <div class="der">
-          <div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div>
           <button class="bell" id="bell" aria-label="No leídos" onclick="bellClick()"><i data-ico="bell"></i><span class="b" id="bell-b">0</span></button>
         </div>
       </div>
@@ -533,7 +535,7 @@ select.inp option{background:#09183F;color:#fff}
   <!-- ═══════ AUTOS ═══════ -->
   <div class="scr" id="scr-autos">
     <div class="hdr">
-      <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="der"><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div></div></div>
+      <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div><div class="der"></div></div>
       <div class="titulo"><h1>Autos</h1><button class="btn-c" onclick="abrirSubirAuto()"><i data-ico="imgplus"></i>Subir auto</button></div>
     </div>
     <div class="cuerpo" id="autos-lista"></div>
@@ -542,7 +544,7 @@ select.inp option{background:#09183F;color:#fff}
   <!-- ═══════ CITAS ═══════ -->
   <div class="scr" id="scr-citas">
     <div class="hdr">
-      <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="der"><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div></div></div>
+      <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div><div class="der"></div></div>
       <div class="titulo"><h1>Citas</h1></div>
     </div>
     <div class="citas-pills"><div class="pills" id="ci-pills">
@@ -555,7 +557,7 @@ select.inp option{background:#09183F;color:#fff}
   <!-- ═══════ MÁS ═══════ -->
   <div class="scr" id="scr-mas">
     <div class="hdr">
-      <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="der"><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div></div></div>
+      <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div><div class="der"></div></div>
       <div class="titulo"><h1>Más</h1></div>
     </div>
     <div class="cuerpo" id="mas-cuerpo"></div>
@@ -1610,64 +1612,91 @@ async function leerFoto(file){
     return { nombre: (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', base64: data.split(',')[1], preview: data, url: null };
   } finally { URL.revokeObjectURL(url); }
 }
+// AGREGAR AUTO (sheet completo): FOTOS PRIMERO (cover 16:10 + tile "Agregar fotos" + miniaturas reordenables) → inputs en 2 columnas →
+// "Más detalles" colapsado → CTA "Agregar auto" con barra fina de progreso. Errores por campo (el servidor manda `campo`). El auto nace EN REVISIÓN.
+const SU_COLORES = ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Café', 'Verde', 'Beige', 'Otro'];
 function abrirSubirAuto(){
   const st = { fotos: [], subiendo: false };
-  const s = sheet({ titulo: 'Subir auto', full: true, html:
-    '<p class="hint">Mínimo 4 fotos. La primera es la portada. El auto nace <b>en revisión</b>.</p>' +
+  const campo = (c, label, inputHTML) => '<div><label class="lbl" for="su-' + c + '">' + label + '</label>' + inputHTML + '<div class="f-err" data-e="' + c + '"></div></div>';
+  const inp = (c, attrs) => '<input class="inp" id="su-' + c + '" data-c="' + c + '" ' + attrs + '>';
+  const sel = (c, ops) => '<select class="inp" id="su-' + c + '" data-c="' + c + '"><option value="">Elegir</option>' + ops.map(o => '<option>' + o + '</option>').join('') + '</select>';
+  const s = sheet({ titulo: 'Agregar auto', big: true, full: true, html:
     '<input type="file" id="su-file" accept="image/*" multiple hidden>' +
-    '<div class="fotos-g" id="su-g"></div><div class="f-err" id="su-ferr"></div>' +
-    '<div class="grid2"><div><label class="lbl" for="su-marca">Marca</label><input class="inp" id="su-marca" data-c="marca" placeholder="Mazda" autocomplete="off"></div><div><label class="lbl" for="su-modelo">Modelo</label><input class="inp" id="su-modelo" data-c="modelo" placeholder="CX-5" autocomplete="off"></div></div>' +
-    '<div class="grid2"><div><label class="lbl" for="su-anio">Año</label><input class="inp" id="su-anio" data-c="anio" inputmode="numeric" maxlength="4" placeholder="2021"></div><div><label class="lbl" for="su-precio">Precio</label><input class="inp" id="su-precio" data-c="precio" inputmode="numeric" placeholder="$ 0"></div></div>' +
-    '<div class="grid2"><div><label class="lbl" for="su-km">Kilometraje</label><input class="inp" id="su-km" data-c="km" inputmode="numeric" placeholder="km"></div><div><label class="lbl" for="su-version">Versión (opcional)</label><input class="inp" id="su-version" data-c="version" placeholder="i Grand Touring"></div></div>' +
-    '<div class="grid2"><div><label class="lbl" for="su-color">Color (opcional)</label><input class="inp" id="su-color" data-c="color" placeholder="Blanco"></div><div><label class="lbl" for="su-trans">Transmisión (opcional)</label><select class="inp" id="su-trans" data-c="transmision"><option value="">—</option><option>Automática</option><option>Manual</option></select></div></div>' +
-    '<label class="lbl" for="su-comb">Combustible (opcional)</label><select class="inp" id="su-comb" data-c="combustible"><option value="">—</option><option>Gasolina</option><option>Diésel</option><option>Híbrido</option><option>Eléctrico</option></select>' +
-    '<label class="lbl" for="su-desc">Descripción (opcional)</label><textarea class="inp" id="su-desc" data-c="descripcion" placeholder="Único dueño, servicios de agencia…"></textarea>' +
-    '<div class="prog" id="su-prog" hidden><i></i></div><div class="prog-t" id="su-progt"></div>' +
-    '<button class="cta" id="su-go">Publicar auto</button><div class="g-err" id="su-gerr"></div>' });
-  const g = s.body.querySelector('#su-g'), file = s.body.querySelector('#su-file');
+    '<div class="cover-w"><button type="button" class="cover" id="su-cover" aria-label="Fotos"></button><button type="button" class="tile" id="su-add">' + ico('imgplus') + 'Agregar fotos</button></div>' +
+    '<div class="thumbs" id="su-thumbs" hidden></div><div class="f-err" data-e="fotos"></div>' +
+    '<div class="grid2">' + campo('marca', 'Marca', inp('marca', 'placeholder="Mazda" autocomplete="off" autocapitalize="words"')) + campo('modelo', 'Modelo', inp('modelo', 'placeholder="CX-5" autocomplete="off" autocapitalize="words"')) + '</div>' +
+    '<div class="grid2">' + campo('anio', 'Año', inp('anio', 'inputmode="numeric" maxlength="4" placeholder="2021"')) + campo('precio', 'Precio', inp('precio', 'inputmode="numeric" placeholder="$ 0"')) + '</div>' +
+    '<div class="grid2">' + campo('km', 'Kilometraje <span style="font-weight:400">(opcional)</span>', inp('km', 'inputmode="numeric" placeholder="0 km"')) + campo('color', 'Color <span style="font-weight:400">(opcional)</span>', sel('color', SU_COLORES)) + '</div>' +
+    '<button type="button" class="mas-det" id="su-mas">Más detalles' + ico('down') + '</button>' +
+    '<div class="det">' +
+      '<div class="grid2">' + campo('version', 'Versión', inp('version', 'placeholder="i Grand Touring" autocomplete="off"')) + campo('transmision', 'Transmisión', sel('transmision', ['Automática', 'Manual'])) + '</div>' +
+      '<div class="grid2">' + campo('combustible', 'Combustible', sel('combustible', ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'])) + '<div></div></div>' +
+      campo('descripcion', 'Descripción', '<textarea class="inp auto" id="su-descripcion" data-c="descripcion" rows="1" placeholder="Único dueño, servicios de agencia…"></textarea>') +
+    '</div>' +
+    '<div class="g-err" id="su-gerr"></div>',
+    pie: '<div class="prog" id="su-prog" hidden><i></i></div><div class="prog-t" id="su-progt" hidden></div><button type="button" class="cta" id="su-go">Agregar auto</button>' });
+  const q = (sl) => s.el.querySelector(sl);
+  const file = q('#su-file'), cov = q('#su-cover'), th = q('#su-thumbs'), go = q('#su-go'), prog = q('#su-prog'), progt = q('#su-progt'), gerr = q('#su-gerr');
+  const setErr = (c, msg) => { const e = q('.f-err[data-e="' + c + '"]'); if (e) e.textContent = msg || ''; const i = q('[data-c="' + c + '"]'); if (i) i.classList.toggle('err', !!msg); };
   const pintarFotos = () => {
-    g.innerHTML = st.fotos.map((f, i) => '<div class="foto' + (f.url ? ' subida' : '') + '"><img src="' + f.preview + '" alt=""><span class="n' + (i === 0 ? ' p' : '') + '">' + (i === 0 ? 'Portada' : i + 1) + '</span><div class="ctl"><button type="button" data-i="' + i + '" data-op="izq" aria-label="Mover antes">‹</button><button type="button" data-i="' + i + '" data-op="der" aria-label="Mover después">›</button><button type="button" data-i="' + i + '" data-op="x" aria-label="Quitar">✕</button></div><div class="ok">✓</div></div>').join('') +
-      '<button type="button" class="add-f" id="su-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>' + (st.fotos.length ? 'Agregar' : 'Fotos') + '</button>';
-    s.body.querySelector('#su-add').onclick = () => file.click();
-    s.body.querySelector('#su-ferr').textContent = st.fotos.length && st.fotos.length < 4 ? 'Faltan ' + (4 - st.fotos.length) + ' fotos (mínimo 4).' : '';
+    const n = st.fotos.length;
+    cov.innerHTML = n ? '<img src="' + st.fotos[0].preview + '" alt=""><span class="cnt">1/' + n + '</span>' : '<span class="vac">' + ico('image') + 'Sin fotos aún</span>';
+    th.hidden = !n;
+    th.innerHTML = st.fotos.map((f, i) => '<div class="thumb' + (i === 0 ? ' p' : '') + (f.url ? ' subida' : '') + '" draggable="true" data-i="' + i + '"><img src="' + f.preview + '" alt="">' + (i === 0 ? '<span class="tp">PORTADA</span>' : '') +
+      '<button type="button" class="x" data-i="' + i + '" data-op="x" aria-label="Quitar">' + ico('x') + '</button>' +
+      '<div class="mv"><button type="button" data-i="' + i + '" data-op="izq" aria-label="Mover antes"' + (i === 0 ? ' disabled' : '') + '>' + ico('chevl') + '</button><button type="button" data-i="' + i + '" data-op="der" aria-label="Mover después"' + (i === n - 1 ? ' disabled' : '') + '>' + ico('chev') + '</button></div>' +
+      '<span class="okm">' + ico('check') + '</span></div>').join('');
+    setErr('fotos', n && n < 4 ? 'Faltan ' + (4 - n) + ' (mínimo 4 fotos).' : '');
   };
-  g.onclick = (e) => { const b = e.target.closest('button[data-op]'); if (!b || st.subiendo) return; const i = Number(b.dataset.i), op = b.dataset.op; if (op === 'x') st.fotos.splice(i, 1); if (op === 'izq' && i > 0) { [st.fotos[i - 1], st.fotos[i]] = [st.fotos[i], st.fotos[i - 1]]; } if (op === 'der' && i < st.fotos.length - 1) { [st.fotos[i + 1], st.fotos[i]] = [st.fotos[i], st.fotos[i + 1]]; } pintarFotos(); };
+  cov.onclick = () => { if (!st.subiendo) file.click(); };
+  q('#su-add').onclick = () => { if (!st.subiendo) file.click(); };
+  th.onclick = (e) => { const b = e.target.closest('button[data-op]'); if (!b || st.subiendo) return; const i = Number(b.dataset.i), op = b.dataset.op; if (op === 'x') st.fotos.splice(i, 1); if (op === 'izq' && i > 0) { [st.fotos[i - 1], st.fotos[i]] = [st.fotos[i], st.fotos[i - 1]]; } if (op === 'der' && i < st.fotos.length - 1) { [st.fotos[i + 1], st.fotos[i]] = [st.fotos[i], st.fotos[i + 1]]; } pintarFotos(); };
+  // arrastre simple entre miniaturas (desktop / navegadores con drag nativo); las flechas cubren el móvil
+  let dragI = null;
+  th.addEventListener('dragstart', (e) => { const t = e.target.closest('.thumb'); if (!t || st.subiendo) { e.preventDefault(); return; } dragI = Number(t.dataset.i); t.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(dragI)); } catch(_){} });
+  th.addEventListener('dragover', (e) => { const t = e.target.closest('.thumb'); if (!t || dragI == null) return; e.preventDefault(); th.querySelectorAll('.over').forEach(x => x.classList.remove('over')); t.classList.add('over'); });
+  th.addEventListener('drop', (e) => { const t = e.target.closest('.thumb'); if (!t || dragI == null) return; e.preventDefault(); const j = Number(t.dataset.i); if (j !== dragI) { const [f] = st.fotos.splice(dragI, 1); st.fotos.splice(j, 0, f); } dragI = null; pintarFotos(); });
+  th.addEventListener('dragend', () => { dragI = null; th.querySelectorAll('.drag,.over').forEach(x => x.classList.remove('drag', 'over')); });
   file.onchange = async () => { const fs = [...file.files]; file.value = ''; for (const f of fs) { try { st.fotos.push(await leerFoto(f)); pintarFotos(); } catch(e){ avisoError('No pude leer una foto: ' + (f.name || '')); } } };
   pintarFotos();
-  const pr = s.body.querySelector('#su-precio'); pr.oninput = () => { const n = pr.value.replace(/\D/g, ''); pr.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; };
-  const km = s.body.querySelector('#su-km'); km.oninput = () => { const n = km.value.replace(/\D/g, ''); km.value = n ? Number(n).toLocaleString('es-MX') : ''; };
-  const go = s.body.querySelector('#su-go'), prog = s.body.querySelector('#su-prog'), progt = s.body.querySelector('#su-progt'), gerr = s.body.querySelector('#su-gerr');
+  // formato al escribir: precio con $ y miles; km con miles; el error del campo se borra al corregir
+  const pr = q('#su-precio'); pr.oninput = () => { const n = pr.value.replace(/\D/g, ''); pr.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; };
+  const km = q('#su-km'); km.oninput = () => { const n = km.value.replace(/\D/g, ''); km.value = n ? Number(n).toLocaleString('es-MX') : ''; };
+  const de = q('#su-descripcion'); de.oninput = () => { de.style.height = 'auto'; de.style.height = Math.min(200, de.scrollHeight) + 'px'; };
+  s.body.querySelectorAll('[data-c]').forEach(i => i.addEventListener('input', () => setErr(i.dataset.c, '')));
+  const mas = q('#su-mas'); mas.onclick = () => mas.classList.toggle('open');
   const cl = clave('auto_subir', TENANT ? TENANT.id : 0);
-  const v = (id) => s.body.querySelector('#' + id).value.trim();
-  const marcarCampo = (campo, msg) => { const el = s.body.querySelector('[data-c="' + campo + '"]'); if (el) { el.classList.add('err'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } gerr.textContent = msg; };
+  const v = (c) => (q('#su-' + c).value || '').trim();
+  const marcarCampo = (c, msg) => { setErr(c, msg); const el = q('[data-c="' + c + '"]') || q('.f-err[data-e="' + c + '"]'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (c === 'fotos') s.body.scrollTo({ top: 0, behavior: 'smooth' }); if (el && el.focus && c !== 'fotos') setTimeout(() => el.focus({ preventScroll: true }), 300); };
+  const progreso = (pct, txt) => { prog.hidden = false; progt.hidden = !txt; prog.querySelector('i').style.width = pct + '%'; progt.textContent = txt || ''; };
   go.onclick = async () => {
-    gerr.textContent = ''; s.body.querySelectorAll('.inp.err').forEach(x => x.classList.remove('err'));
-    const datos = { marca: v('su-marca'), modelo: v('su-modelo'), anio: Number(v('su-anio')) || 0, precio: Number(v('su-precio').replace(/\D/g, '')) || 0, km: Number(v('su-km').replace(/\D/g, '')) || 0, version: v('su-version') || undefined, color: v('su-color') || undefined, transmision: v('su-trans') || undefined, combustible: v('su-comb') || undefined, descripcion: v('su-desc') || undefined };
-    if (st.fotos.length < 4) { s.body.querySelector('#su-ferr').textContent = 'Mínimo 4 fotos.'; g.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    gerr.textContent = ''; ['fotos', 'marca', 'modelo', 'anio', 'precio', 'km', 'color', 'version', 'transmision', 'combustible', 'descripcion'].forEach(c => setErr(c, ''));
+    const datos = { marca: v('marca'), modelo: v('modelo'), anio: Number(v('anio')) || 0, precio: Number(v('precio').replace(/\D/g, '')) || 0, km: Number(v('km').replace(/\D/g, '')) || 0, version: v('version') || undefined, color: v('color') || undefined, transmision: v('transmision') || undefined, combustible: v('combustible') || undefined, descripcion: v('descripcion') || undefined };
+    if (st.fotos.length < 4) return marcarCampo('fotos', st.fotos.length ? 'Faltan ' + (4 - st.fotos.length) + ' (mínimo 4 fotos).' : 'Agrega al menos 4 fotos.');
     if (!datos.marca) return marcarCampo('marca', 'Falta la marca.'); if (!datos.modelo) return marcarCampo('modelo', 'Falta el modelo.');
-    const y = new Date().getFullYear(); if (!datos.anio || datos.anio < 1980 || datos.anio > y + 1) return marcarCampo('anio', 'Año inválido.');
-    if (!datos.precio) return marcarCampo('precio', 'Falta el precio.'); if (!datos.km && datos.km !== 0) return marcarCampo('km', 'Falta el kilometraje.');
-    st.subiendo = true; bloquear(go, true); prog.hidden = false;
+    const y = new Date().getFullYear(); if (!datos.anio || datos.anio < 1990 || datos.anio > y + 1) return marcarCampo('anio', 'Año entre 1990 y ' + (y + 1) + '.');
+    if (!datos.precio) return marcarCampo('precio', 'Falta el precio.');
+    st.subiendo = true; bloquear(go, true); progreso(2, '');
     try {
       // 1) fotos por foto_subir (una a la vez, con progreso; las ya subidas no se repiten)
       for (let i = 0; i < st.fotos.length; i++) {
         const f = st.fotos[i]; if (f.url) continue;
-        progt.textContent = 'Subiendo foto ' + (i + 1) + ' de ' + st.fotos.length + '…'; prog.querySelector('i').style.width = Math.round((i / (st.fotos.length + 1)) * 100) + '%';
+        progreso(Math.round((i / (st.fotos.length + 1)) * 100), 'Subiendo foto ' + (i + 1) + ' de ' + st.fotos.length + '…');
         const r = await apiPost('foto_subir', { nombre: f.nombre, base64: f.base64 });
         if (!r.ok || !r.url) throw new Error('Foto ' + (i + 1) + ': ' + (r.error || 'no se pudo subir'));
         f.url = r.url; pintarFotos();
       }
       // 2) auto_subir con clave (idempotente)
-      progt.textContent = 'Publicando…'; prog.querySelector('i').style.width = '92%';
+      progreso(92, 'Guardando…');
       const r = await apiPost('auto_subir', Object.assign({}, datos, { fotos: st.fotos.map(f => f.url), clave: cl }));
-      if (!r.ok) { if (r.campo) marcarCampo(r.campo, r.error || 'Revisa este campo'); else gerr.textContent = r.error || 'No se pudo publicar'; throw null; }
-      prog.querySelector('i').style.width = '100%'; progt.textContent = 'Listo';
-      const nuevo = { id: r.auto_id, nombre: [datos.marca, datos.modelo, datos.anio].join(' '), marca: datos.marca, modelo: datos.modelo, anio: datos.anio, precio: datos.precio, km: datos.km, portada: st.fotos[0].url, estado: r.estado || 'revision', fotos: st.fotos.length };
-      AUTOS = [nuevo].concat(AUTOS || []); pintarAutos();
+      if (!r.ok) { if (r.campo) marcarCampo(r.campo, (r.campos && r.campos[r.campo]) || r.error || 'Revisa este campo'); else gerr.textContent = r.error || 'No se pudo agregar'; throw null; }
+      progreso(100, 'Listo');
+      const nuevo = { id: r.auto_id, nombre: [datos.marca, datos.modelo, datos.anio].join(' '), marca: datos.marca, modelo: datos.modelo, anio: datos.anio, precio: datos.precio, km: datos.km, portada: st.fotos[0].url, estado: r.estado || 'revision', fotos: st.fotos.length, _nuevo: true };
+      AUTOS = [nuevo].concat((AUTOS || []).filter(a => String(a.id) !== String(nuevo.id))); pintarAutos();
       if (TENANT) TENANT.autos = [{ id: nuevo.id, nombre: nuevo.nombre, precio: nuevo.precio }].concat(TENANT.autos || []);
       s.cerrar(); irTab('autos');
     } catch (e) { if (e) gerr.textContent = e.message || 'No se pudo'; }
-    finally { st.subiendo = false; bloquear(go, false); if (gerr.textContent) { prog.hidden = true; progt.textContent = ''; } }
+    finally { st.subiendo = false; bloquear(go, false); if (gerr.textContent || s.body.querySelector('.inp.err')) { prog.hidden = true; progt.hidden = true; } }
   };
 }
 
