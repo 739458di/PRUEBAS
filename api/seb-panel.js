@@ -2071,6 +2071,14 @@ module.exports = async function handler(req, res) {
                     if (!env.ok) return R(200, { ok: false, error: env.error || 'no se pudo mandar el machote', auto: nombreAuto });
                     return R(200, { ok: true, simulado: !!env.simulado, auto: nombreAuto, enviado: (env.simulado ? simTxt() + 'machote de info' : 'machote completo de ' + nombreAuto), texto_enviado: String(mch), machote: String(mch).slice(0, 150), msg_id: env.msg_id || null, clave: claveB, repetido: !!env.repetido });
                 }
+                if (accB === 'cita_propuesta') {
+                    // 📅 AÚN SIN HORARIO (orden owner 2026-09-12): sale la PROPUESTA de cita — busca día y hora — sin crear la cita todavía.
+                    const nomP = String(B.comprador_nombre || '').trim().split(/\s+/)[0] || '';
+                    const txtP = (nomP ? nomP + ', ¿' : '¿') + 'qué día y a qué hora te queda bien pasar a ver el ' + nombreAuto + '? Dime y te lo aparto para esa hora.';
+                    const env = await mandar({ texto: txtP, meta: { auto: nombreAuto, tipo: 'cita_propuesta' } });
+                    if (!env.ok) return R(200, { ok: false, error: env.error || 'no se pudo mandar la propuesta', auto: nombreAuto });
+                    return R(200, { ok: true, simulado: !!env.simulado, auto: nombreAuto, enviado: (env.simulado ? simTxt() : '') + 'propuesta de cita (sin horario)', texto_enviado: txtP });
+                }
                 if (accB === 'fotos') {
                     const urls = await H.fotosDeAuto(inv.id, 8);
                     if (!urls || !urls.length) return R(200, { ok: false, error: 'ese auto no tiene fotos en el sistema' });
@@ -2534,9 +2542,9 @@ module.exports = async function handler(req, res) {
                 const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
                 const acc = String(req.body.accion || '');
-                if (!['fotos', 'ubicacion', 'info'].includes(acc)) return err(400, "accion debe ser 'fotos' | 'ubicacion' | 'info'");
+                if (!['fotos', 'ubicacion', 'info', 'cita_propuesta'].includes(acc)) return err(400, "accion debe ser 'fotos' | 'ubicacion' | 'info' | 'cita_propuesta'");
                 const r = await MSJ.conClave(clave, { tenantId: TV, chatId: c.id, accion: 'accion_v2:' + acc, sesionId: SID }, async () => {
-                    const rA = await ejecutarAccion(tV, c.telefono, acc, { clave, via: 'v2' });
+                    const rA = await ejecutarAccion(tV, c.telefono, acc, { clave, via: 'v2', comprador_nombre: c.nombre || '' });
                     const o = rA.out || {};
                     return { ok: !!o.ok, status: rA.status, chat_id: Number(c.id), accion: acc, enviado: enviadoDe(o), detalle: o.ok ? (o.enviado || acc) : null, fotos: o.fotos || undefined, simulado: !!o.simulado, auto: o.auto || null, msg_id: o.msg_id || null, error: o.error || undefined, necesita: o.necesita === 'foco' ? 'auto' : (o.necesita || undefined) };
                 });

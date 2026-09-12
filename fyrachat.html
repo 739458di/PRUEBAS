@@ -975,6 +975,17 @@ function abrirCita(){
   const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const auto = h.chat && h.chat.auto;
   const s = sheet({ titulo: 'Agendar cita', html: (auto ? autoCardHTML(auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') : '<p class="hint">Sin auto en foco: el servidor lo pedirá si hace falta.</p>') + citaFormHTML('<button class="cta" id="ci-go">Agendar</button><div class="g-err" id="ci-gerr"></div>') });
   const st = citaFormWire(s.body); const go = s.body.querySelector('#ci-go'); const cl = clave('cita', id);
+  // AÚN SIN HORARIO (owner 2026-09-12): manda la propuesta (busca día y hora) sin crear la cita
+  const sin = document.createElement('button'); sin.type = 'button'; sin.textContent = 'Aún sin horario · proponerle día y hora';
+  sin.style.cssText = 'margin-top:10px;width:100%;padding:13px;border-radius:999px;border:1px solid rgba(120,160,255,.35);background:rgba(255,255,255,.06);color:#dfe8ff;font-weight:700;font-size:14px;cursor:pointer';
+  s.body.appendChild(sin);
+  sin.onclick = async () => {
+    const clP = clave('citaprop', id); bloquear(sin, true);
+    const r = await correr('citaprop:' + clP, () => apiPost('accion_v2', { chat_id: id, accion: 'cita_propuesta', clave: clP }));
+    bloquear(sin, false);
+    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } s.body.querySelector('#ci-gerr').textContent = r.error || 'No se pudo mandar'; return; }
+    s.cerrar(); burbujaSalida(id, textoEnviado(r, '📅 Propuesta de cita enviada'), r);
+  };
   go.onclick = async () => {
     if (!st.valida()) return; s.body.querySelector('#ci-gerr').textContent = '';
     bloquear(go, true);
