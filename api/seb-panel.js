@@ -298,11 +298,11 @@ module.exports = async function handler(req, res) {
         }
         if (action === 'acceso_canjear') {
             const r = await ACC.canjearTicket(String(req.query.t || ''), req.headers['user-agent'], IP);
-            if (!r.ok) { res.setHeader('Location', '/copilot.html?vendedor=entrar&aviso=' + encodeURIComponent(r.error)); return res.status(302).end(); }
+            if (!r.ok) { res.setHeader('Location', '/fyrachat.html?vendedor=entrar&aviso=' + encodeURIComponent(r.error)); return res.status(302).end(); }
             ACC.ponerCookie(res, r.token);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_canjear', ip: IP });
             if (r.origen !== 'sb') await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);   // el pase del Sales Brain no avisa (es el owner)
-            res.setHeader('Location', r.destino && r.maestra ? '/copilot.html?vendedor=' + encodeURIComponent(r.destino) : '/copilot.html?bienvenida=1'); return res.status(302).end();
+            res.setHeader('Location', r.destino && r.maestra ? '/fyrachat.html?vendedor=' + encodeURIComponent(r.destino) : '/fyrachat.html?bienvenida=1'); return res.status(302).end();
         }
         if (action === 'acceso_ticket_maestra' && req.method === 'POST') {
             // Solo el Sales Brain (K_PANEL, tras su PIN): pase de un solo uso con la sesión MAESTRA que abre el FyraChat del universo pedido
