@@ -1507,20 +1507,23 @@ async function autosParaDelegar(){
 
 // ══════════ AUTOS (autos_mios) + SUBIR AUTO ══════════
 let AUTOS = null;
+let AUTOS_LOCAL = [];   // agregados en esta sesión: se conservan arriba (En revisión) hasta que autos_mios ya los traiga
 async function cargarAutos({ silencioso } = {}){
   const c = $('autos-lista');
   if (!AUTOS && !silencioso) c.innerHTML = Array.from({ length: 5 }, () => '<div class="auto-c sk"><div class="ph"></div><div class="tx"><div class="l1"></div><div class="l2"></div></div></div>').join('');
   return correr('autos_mios', async () => {
     const r = await apiGet('autos_mios', {});
     if (!r.ok) { if (!silencioso) c.innerHTML = '<div class="vacio"><b>No pude cargar tus autos</b>' + esc(r.error || '') + '<br><button class="masbtn" onclick="cargarAutos()">Reintentar</button></div>'; return; }
-    AUTOS = r.autos || []; pintarAutos();
+    const srv = r.autos || [];
+    AUTOS_LOCAL = AUTOS_LOCAL.filter(l => !srv.some(a => String(a.id) === String(l.id)));
+    AUTOS = AUTOS_LOCAL.concat(srv); pintarAutos();
   });
 }
 const AUTO_ESTADO = { activo: 'Activo', revision: 'En revisión', vendido: 'Vendido' };
 // row de 72: foto 64×48 · nombre 15/600 · año 13 · precio 14/600 verde · chip de estado (Activo / En revisión / Vendido)
 function autoFilaHTML(a, extra){
   const est = AUTO_ESTADO[a.estado] ? a.estado : 'revision';
-  return '<div class="auto-c' + (extra ? ' ' + extra : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : ico('car')) + '</div>' +
+  return '<div class="auto-c' + (extra ? ' ' + extra : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy" onerror="this.parentNode.innerHTML=ico(\'car\')">' : ico('car')) + '</div>' +
     '<div class="tx"><div class="nm">' + esc(nombreSinAnio(a) || 'Auto') + '</div><div class="y">' + esc([anioDe(a), a.km ? Number(a.km).toLocaleString('es-MX') + ' km' : ''].filter(Boolean).join(' · ')) + '</div></div>' +
     '<div class="der"><span class="pr">' + esc(precioFmt(a.precio)) + '</span><span class="est ' + esc(est) + '">' + AUTO_ESTADO[est] + '</span></div></div>';
 }
@@ -1691,10 +1694,11 @@ function abrirSubirAuto(){
       const r = await apiPost('auto_subir', Object.assign({}, datos, { fotos: st.fotos.map(f => f.url), clave: cl }));
       if (!r.ok) { if (r.campo) marcarCampo(r.campo, (r.campos && r.campos[r.campo]) || r.error || 'Revisa este campo'); else gerr.textContent = r.error || 'No se pudo agregar'; throw null; }
       progreso(100, 'Listo');
-      const nuevo = { id: r.auto_id, nombre: [datos.marca, datos.modelo, datos.anio].join(' '), marca: datos.marca, modelo: datos.modelo, anio: datos.anio, precio: datos.precio, km: datos.km, portada: st.fotos[0].url, estado: r.estado || 'revision', fotos: st.fotos.length, _nuevo: true };
+      const nuevo = { id: r.auto_id, nombre: [datos.marca, datos.modelo, datos.anio].join(' '), marca: datos.marca, modelo: datos.modelo, anio: datos.anio, precio: datos.precio, km: datos.km, portada: st.fotos[0].preview || st.fotos[0].url, estado: r.estado || 'revision', fotos: st.fotos.length, _nuevo: true };
+      AUTOS_LOCAL = [nuevo].concat(AUTOS_LOCAL.filter(a => String(a.id) !== String(nuevo.id)));
       AUTOS = [nuevo].concat((AUTOS || []).filter(a => String(a.id) !== String(nuevo.id))); pintarAutos();
       if (TENANT) TENANT.autos = [{ id: nuevo.id, nombre: nuevo.nombre, precio: nuevo.precio }].concat(TENANT.autos || []);
-      s.cerrar(); irTab('autos');
+      s.cerrar(); if (TAB !== 'autos') irTab('autos'); else $('autos-lista').scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) { if (e) gerr.textContent = e.message || 'No se pudo'; }
     finally { st.subiendo = false; bloquear(go, false); if (gerr.textContent || s.body.querySelector('.inp.err')) { prog.hidden = true; progt.hidden = true; } }
   };
