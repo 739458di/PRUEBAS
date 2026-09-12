@@ -83,6 +83,8 @@ a{color:var(--pri2)}
 .fila:focus-visible{box-shadow:inset 0 0 0 2px var(--pri2)}
 .ava{flex:0 0 48px;width:48px;height:48px;border-radius:50%;background:var(--pri);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#fff;overflow:hidden}
 .ava img{width:100%;height:100%;object-fit:cover}
+.ava.car{background:var(--s2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.ava.car img{transform:scale(1.18)}   /* la portada trae aire alrededor del auto: se acerca para que llene el círculo */
 .ava.gh{background:var(--s2);color:var(--txt2)}
 .fila .mid{flex:1;min-width:0}
 .fila .nom{font-size:15px;line-height:20px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
@@ -995,7 +997,9 @@ function previewDe(c){
   const quien = mio ? (c.ult_emisor === 'bot' || c.ult_emisor === 'asistente' ? 'Seb: ' : 'Tú: ') : '';
   return (quien ? '<span class="tu">' + esc(quien) + '</span>' : '') + esc(t || (c.delegado ? 'Conversación delegada' : 'Sin mensajes'));
 }
-const avaHTML = (c, extra) => '<div class="ava' + (c.ghost_dias >= 1 ? ' gh' : '') + (extra ? ' ' + extra : '') + '">' + (c.foto ? '<img src="' + esc(c.foto) + '" alt="" loading="lazy">' : esc(iniDe(c))) + '</div>';
+// FOTO DE PERFIL = EL AUTO por el que pregunta (orden owner 2026-09-12): portada del auto en foco; sin auto, la inicial de siempre
+const fotoDe = (c) => c.foto || (c.auto && c.auto.portada) || null;
+const avaHTML = (c, extra) => { const f = fotoDe(c); return '<div class="ava' + (c.ghost_dias >= 1 ? ' gh' : '') + (f ? ' car' : '') + (extra ? ' ' + extra : '') + '">' + (f ? '<img src="' + esc(f) + '" alt="" loading="lazy" onerror="this.parentNode.classList.remove(\'car\');this.replaceWith(document.createTextNode(\'' + esc(iniDe(c)).replace(/'/g, '') + '\'))">' : esc(iniDe(c))) + '</div>'; };
 // cronómetro de la cita: "en 2 h 15 min" · "en 3 d 4 h" · "es ahora" · "cita pasada"
 function cuentaRegresiva(ts){
   const d = (ms(ts) || 0) - Date.now(); if (!ms(ts)) return '';
@@ -1145,7 +1149,7 @@ function pintarCabecera(ch){
   const c = INBOX.rows.get(ch.chat_id) || {};
   const nombre = ch.nombre || c.nombre || ('+' + String(ch.telefono || c.telefono || '').replace(/\D/g, ''));
   const gd = ch.ghost_dias != null ? ch.ghost_dias : c.ghost_dias;
-  $('ch-ava').innerHTML = avaHTML({ ini: ch.ini || c.ini, nombre, foto: ch.foto || c.foto, ghost_dias: gd }).replace(/^<div[^>]*>|<\/div>$/g, ''); $('ch-ava').classList.toggle('gh', gd >= 1);
+  $('ch-ava').innerHTML = avaHTML({ ini: ch.ini || c.ini, nombre, foto: ch.foto || c.foto, auto: ch.auto || c.auto, ghost_dias: gd }).replace(/^<div[^>]*>|<\/div>$/g, ''); $('ch-ava').classList.toggle('gh', gd >= 1);
   $('ch-nombre').textContent = nombre;
   const tel = String(ch.telefono || c.telefono || '').replace(/\D/g, ''); const telA = $('ch-tel'); telA.hidden = !tel; telA.href = tel ? 'tel:+' + tel : '#';
   // estado bajo el nombre: "En línea" (verde) si hubo entrante < 10 min; si no, universo ≠ 0 → delegación, universo 0 → hora del último mensaje
