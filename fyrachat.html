@@ -111,6 +111,14 @@ a{color:var(--pri2)}
 .cal-d.has{font-weight:700}.cal-d .dots{display:flex;gap:3px;height:5px}.cal-d .dots i{width:5px;height:5px;border-radius:50%;background:var(--pos)}.cal-d.on .dots i{background:#fff}.cal-d.pas .dots i{background:var(--muted)}
 .cal-sel{font-size:13px;color:var(--txt2);margin:2px 4px 10px}
 .btn-c.sec{background:var(--s2);box-shadow:none;color:#fff}
+/* SUBIR AUTO POR CHAT */
+.sc{display:flex;flex-direction:column;gap:6px;padding:4px 0 8px;min-height:100%}
+.sc .msg{max-width:88%}
+.sc .fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:2px 0 6px;min-width:180px}.sc .fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block}
+.sc .btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.sc .btns button{height:40px;padding:0 14px;border-radius:12px;font-weight:700;font-size:14px;background:#fff;color:var(--pri)}.sc .btns button.sec{background:rgba(255,255,255,.14);color:#fff}.sc .btns button:disabled{opacity:.5}
+.sc-comp{display:flex;align-items:flex-end;gap:8px}.sc-comp textarea{flex:1;min-height:44px;max-height:120px;resize:none;text-align:left;font-size:15px;letter-spacing:0}
+.sc-comp .ib,.sc-comp .go{flex:0 0 44px;width:44px;height:44px;border-radius:14px;display:grid;place-items:center;color:#fff}.sc-comp .ib{background:var(--s2)}.sc-comp .go{background:var(--pri)}.sc-comp .go svg,.sc-comp .ib svg{width:20px;height:20px}
+.sc-pend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.sc-pend span{position:relative}.sc-pend img{width:52px;height:52px;object-fit:cover;border-radius:10px;display:block}.sc-pend button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--danger);color:#fff;display:grid;place-items:center}.sc-pend button svg{width:12px;height:12px}
 .fila.sk{pointer-events:none}
 .fila.sk .ava{background:var(--s1)}
 .fila.sk .l1{height:14px;width:55%;border-radius:7px;background:var(--s1)}
@@ -1771,90 +1779,91 @@ async function leerFoto(file){
 // AGREGAR AUTO (sheet completo): FOTOS PRIMERO (cover 16:10 + tile "Agregar fotos" + miniaturas reordenables) → inputs en 2 columnas →
 // "Más detalles" colapsado → CTA "Agregar auto" con barra fina de progreso. Errores por campo (el servidor manda `campo`). El auto nace EN REVISIÓN.
 const SU_COLORES = ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Café', 'Verde', 'Beige', 'Otro'];
+// ══════════ SUBIR AUTO POR CHAT (orden owner 2026-09-12): en vez de cuestionario, un chat con Seb ══════════
+// Fotos + datos como le acomode al vendedor; Seb palomea y pide lo que falte; varios autos uno por uno; al completar
+// propone la consignación virtual (fórmula del owner) con botones Sí / No. Estado y hilo viven en el servidor.
+let SC = null;   // { s (sheet), pend: [fotos pendientes], sesion, enviando }
+function scMsgHTML(m){
+  const out = m.dir === 'in';   // 'in' = lo que escribió el vendedor (sale a la derecha, como en el chat)
+  const fotos = (m.fotos || []).length ? '<div class="fotos">' + m.fotos.map(u => '<img src="' + esc(u) + '" alt="" loading="lazy">').join('') + '</div>' : '';
+  const botones = (!out && (m.botones || []).length) ? '<div class="btns">' + m.botones.map(b => '<button type="button" class="' + (b.a === 'consignar_no' ? 'sec' : '') + '" data-a="' + esc(b.a) + '" data-s="' + esc(m.sesion_id || '') + '">' + esc(b.t) + '</button>').join('') + '</div>' : '';
+  return '<div class="msg ' + (out ? 'out' : 'in') + '" data-id="' + esc(m.id || '') + '">' + fotos + (m.texto ? esc(m.texto) : '') + botones + '<div class="meta">' + (out ? '' : '<span class="quien">Seb</span>') + esc(horaCorta(m.ts)) + '</div></div>';
+}
+function scPintar(msgs, { agregar } = {}){
+  const box = SC.s.body.querySelector('#sc-msgs'); if (!box) return;
+  if (!agregar) box.innerHTML = '';
+  box.insertAdjacentHTML('beforeend', msgs.map(scMsgHTML).join(''));
+  // los botones de consignación viven solo en el último mensaje de Seb que los trae
+  const conBtn = [...box.querySelectorAll('.msg .btns')]; conBtn.slice(0, -1).forEach(b => b.remove());
+  if (SC.sesion == null) conBtn.slice(-1).forEach(b => b.remove());
+  requestAnimationFrame(() => { SC.s.body.scrollTo({ top: SC.s.body.scrollHeight, behavior: agregar ? 'smooth' : 'auto' }); });
+}
+function scPend(){
+  const w = SC.s.pie.querySelector('#sc-pend'); w.hidden = !SC.pend.length;
+  w.innerHTML = SC.pend.map((f, i) => '<span><img src="' + f.preview + '" alt=""><button type="button" data-i="' + i + '" aria-label="Quitar">' + ico('x') + '</button></span>').join('');
+  w.querySelectorAll('button').forEach(b => { b.onclick = () => { SC.pend.splice(Number(b.dataset.i), 1); scPend(); }; });
+}
+function scAutoLocal(a){
+  if (!a) return;
+  const nuevo = { id: a.id, nombre: a.nombre, marca: a.marca, modelo: a.modelo, anio: a.anio, precio: a.precio, km: a.km, portada: a.portada, estado: a.estado || 'revision', fotos: a.fotos, _nuevo: true };
+  AUTOS_LOCAL = [nuevo].concat(AUTOS_LOCAL.filter(x => String(x.id) !== String(nuevo.id)));
+  AUTOS = [nuevo].concat((AUTOS || []).filter(x => String(x.id) !== String(nuevo.id))); pintarAutos();
+  if (TENANT) TENANT.autos = [{ id: nuevo.id, nombre: nuevo.nombre, precio: nuevo.precio }].concat(TENANT.autos || []);
+}
+async function scBoton(accion, sesionId){
+  if (!SC || SC.enviando) return; SC.enviando = true;
+  const box = SC.s.body.querySelector('#sc-msgs'); box.querySelectorAll('.btns button').forEach(b => { b.disabled = true; });
+  const r = await apiPost('subir_chat_boton', { sesion_id: Number(sesionId), accion, clave: 'subirchat:' + sesionId + ':' + accion });
+  SC.enviando = false;
+  if (!r.ok && !(r.salida && r.salida.length)) { box.querySelectorAll('.btns button').forEach(b => { b.disabled = false; }); return avisoError(r.error || 'No se pudo'); }
+  SC.sesion = r.sesion || null;
+  if (r.ok) { box.querySelectorAll('.btns').forEach(b => b.remove()); scPintar([{ dir: 'in', texto: accion === 'consignar_si' ? 'Sí, acepto' : 'No, gracias', ts: Date.now() }], { agregar: true }); }
+  scPintar(r.salida || [], { agregar: true });
+  if (r.ok && r.auto) scAutoLocal(r.auto);
+}
+async function scEnviar(){
+  if (!SC || SC.enviando) return;
+  const tx = SC.s.pie.querySelector('#sc-tx'), go = SC.s.pie.querySelector('#sc-send');
+  const texto = (tx.value || '').trim(); const pend = SC.pend.slice();
+  if (!texto && !pend.length) return;
+  SC.enviando = true; bloquear(go, true); tx.value = ''; tx.style.height = ''; SC.pend = []; scPend();
+  // eco optimista (fotos con su preview local)
+  scPintar([{ dir: 'in', texto, fotos: pend.map(f => f.preview), ts: Date.now() }], { agregar: true });
+  const urls = [];
+  try {
+    for (let i = 0; i < pend.length; i++) {
+      const f = pend[i]; tx.placeholder = 'Subiendo foto ' + (i + 1) + ' de ' + pend.length + '…';
+      const r = await apiPost('foto_subir', { nombre: f.nombre, base64: f.base64 });
+      if (!r.ok || !r.url) throw new Error('Foto ' + (i + 1) + ': ' + (r.error || 'no se pudo subir'));
+      urls.push(r.url);
+    }
+    tx.placeholder = 'Escribe o manda fotos…';
+    let r = await apiPost('subir_chat_msg', { texto, fotos: urls });
+    if (r.ok && r.redirigir) { SC.enviando = false; bloquear(go, false); return scBoton(r.redirigir, r.sesion_id); }
+    if (!r.ok) throw new Error(r.error || 'No se pudo');
+    SC.sesion = r.sesion || null;
+    scPintar(r.salida || [], { agregar: true });
+  } catch (e) { avisoError(e.message || 'No se pudo'); }
+  finally { SC.enviando = false; bloquear(go, false); tx.placeholder = 'Escribe o manda fotos…'; }
+}
 function abrirSubirAuto(){
-  const st = { fotos: [], subiendo: false };
-  const campo = (c, label, inputHTML) => '<div><label class="lbl" for="su-' + c + '">' + label + '</label>' + inputHTML + '<div class="f-err" data-e="' + c + '"></div></div>';
-  const inp = (c, attrs) => '<input class="inp" id="su-' + c + '" data-c="' + c + '" ' + attrs + '>';
-  const sel = (c, ops) => '<select class="inp" id="su-' + c + '" data-c="' + c + '"><option value="">Elegir</option>' + ops.map(o => '<option>' + o + '</option>').join('') + '</select>';
-  const s = sheet({ titulo: 'Agregar auto', big: true, full: true, html:
-    '<input type="file" id="su-file" accept="image/*" multiple hidden>' +
-    '<div class="cover-w"><button type="button" class="cover" id="su-cover" aria-label="Fotos"></button><button type="button" class="tile" id="su-add">' + ico('imgplus') + 'Agregar fotos</button></div>' +
-    '<div class="thumbs" id="su-thumbs" hidden></div><div class="f-err" data-e="fotos"></div>' +
-    '<div class="grid2">' + campo('marca', 'Marca', inp('marca', 'placeholder="Mazda" autocomplete="off" autocapitalize="words"')) + campo('modelo', 'Modelo', inp('modelo', 'placeholder="CX-5" autocomplete="off" autocapitalize="words"')) + '</div>' +
-    '<div class="grid2">' + campo('anio', 'Año', inp('anio', 'inputmode="numeric" maxlength="4" placeholder="2021"')) + campo('precio', 'Precio', inp('precio', 'inputmode="numeric" placeholder="$ 0"')) + '</div>' +
-    '<div class="grid2">' + campo('km', 'Kilometraje <span style="font-weight:400">(opcional)</span>', inp('km', 'inputmode="numeric" placeholder="0 km"')) + campo('color', 'Color <span style="font-weight:400">(opcional)</span>', sel('color', SU_COLORES)) + '</div>' +
-    '<button type="button" class="mas-det" id="su-mas">Más detalles' + ico('down') + '</button>' +
-    '<div class="det">' +
-      '<div class="grid2">' + campo('version', 'Versión', inp('version', 'placeholder="i Grand Touring" autocomplete="off"')) + campo('transmision', 'Transmisión', sel('transmision', ['Automática', 'Manual'])) + '</div>' +
-      '<div class="grid2">' + campo('combustible', 'Combustible', sel('combustible', ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'])) + '<div></div></div>' +
-      campo('descripcion', 'Descripción', '<textarea class="inp auto" id="su-descripcion" data-c="descripcion" rows="1" placeholder="Único dueño, servicios de agencia…"></textarea>') +
-    '</div>' +
-    '<div class="g-err" id="su-gerr"></div>',
-    pie: '<div class="prog" id="su-prog" hidden><i></i></div><div class="prog-t" id="su-progt" hidden></div><button type="button" class="cta" id="su-go">Agregar auto</button>' });
-  const q = (sl) => s.el.querySelector(sl);
-  const file = q('#su-file'), cov = q('#su-cover'), th = q('#su-thumbs'), go = q('#su-go'), prog = q('#su-prog'), progt = q('#su-progt'), gerr = q('#su-gerr');
-  const setErr = (c, msg) => { const e = q('.f-err[data-e="' + c + '"]'); if (e) e.textContent = msg || ''; const i = q('[data-c="' + c + '"]'); if (i) i.classList.toggle('err', !!msg); };
-  const pintarFotos = () => {
-    const n = st.fotos.length;
-    cov.innerHTML = n ? '<img src="' + st.fotos[0].preview + '" alt=""><span class="cnt">1/' + n + '</span>' : '<span class="vac">' + ico('image') + 'Sin fotos aún</span>';
-    th.hidden = !n;
-    th.innerHTML = st.fotos.map((f, i) => '<div class="thumb' + (i === 0 ? ' p' : '') + (f.url ? ' subida' : '') + '" draggable="true" data-i="' + i + '"><img src="' + f.preview + '" alt="">' + (i === 0 ? '<span class="tp">PORTADA</span>' : '') +
-      '<button type="button" class="x" data-i="' + i + '" data-op="x" aria-label="Quitar">' + ico('x') + '</button>' +
-      '<div class="mv"><button type="button" data-i="' + i + '" data-op="izq" aria-label="Mover antes"' + (i === 0 ? ' disabled' : '') + '>' + ico('chevl') + '</button><button type="button" data-i="' + i + '" data-op="der" aria-label="Mover después"' + (i === n - 1 ? ' disabled' : '') + '>' + ico('chev') + '</button></div>' +
-      '<span class="okm">' + ico('check') + '</span></div>').join('');
-    setErr('fotos', n && n < 4 ? 'Faltan ' + (4 - n) + ' (mínimo 4 fotos).' : '');
-  };
-  cov.onclick = () => { if (!st.subiendo) file.click(); };
-  q('#su-add').onclick = () => { if (!st.subiendo) file.click(); };
-  th.onclick = (e) => { const b = e.target.closest('button[data-op]'); if (!b || st.subiendo) return; const i = Number(b.dataset.i), op = b.dataset.op; if (op === 'x') st.fotos.splice(i, 1); if (op === 'izq' && i > 0) { [st.fotos[i - 1], st.fotos[i]] = [st.fotos[i], st.fotos[i - 1]]; } if (op === 'der' && i < st.fotos.length - 1) { [st.fotos[i + 1], st.fotos[i]] = [st.fotos[i], st.fotos[i + 1]]; } pintarFotos(); };
-  // arrastre simple entre miniaturas (desktop / navegadores con drag nativo); las flechas cubren el móvil
-  let dragI = null;
-  th.addEventListener('dragstart', (e) => { const t = e.target.closest('.thumb'); if (!t || st.subiendo) { e.preventDefault(); return; } dragI = Number(t.dataset.i); t.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(dragI)); } catch(_){} });
-  th.addEventListener('dragover', (e) => { const t = e.target.closest('.thumb'); if (!t || dragI == null) return; e.preventDefault(); th.querySelectorAll('.over').forEach(x => x.classList.remove('over')); t.classList.add('over'); });
-  th.addEventListener('drop', (e) => { const t = e.target.closest('.thumb'); if (!t || dragI == null) return; e.preventDefault(); const j = Number(t.dataset.i); if (j !== dragI) { const [f] = st.fotos.splice(dragI, 1); st.fotos.splice(j, 0, f); } dragI = null; pintarFotos(); });
-  th.addEventListener('dragend', () => { dragI = null; th.querySelectorAll('.drag,.over').forEach(x => x.classList.remove('drag', 'over')); });
-  file.onchange = async () => { const fs = [...file.files]; file.value = ''; for (const f of fs) { try { st.fotos.push(await leerFoto(f)); pintarFotos(); } catch(e){ avisoError('No pude leer una foto: ' + (f.name || '')); } } };
-  pintarFotos();
-  // formato al escribir: precio con $ y miles; km con miles; el error del campo se borra al corregir
-  const pr = q('#su-precio'); pr.oninput = () => { const n = pr.value.replace(/\D/g, ''); pr.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; };
-  const km = q('#su-km'); km.oninput = () => { const n = km.value.replace(/\D/g, ''); km.value = n ? Number(n).toLocaleString('es-MX') : ''; };
-  const de = q('#su-descripcion'); de.oninput = () => { de.style.height = 'auto'; de.style.height = Math.min(200, de.scrollHeight) + 'px'; };
-  s.body.querySelectorAll('[data-c]').forEach(i => i.addEventListener('input', () => setErr(i.dataset.c, '')));
-  const mas = q('#su-mas'); mas.onclick = () => mas.classList.toggle('open');
-  const cl = clave('auto_subir', TENANT ? TENANT.id : 0);
-  const v = (c) => (q('#su-' + c).value || '').trim();
-  const marcarCampo = (c, msg) => { setErr(c, msg); const el = q('[data-c="' + c + '"]') || q('.f-err[data-e="' + c + '"]'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (c === 'fotos') s.body.scrollTo({ top: 0, behavior: 'smooth' }); if (el && el.focus && c !== 'fotos') setTimeout(() => el.focus({ preventScroll: true }), 300); };
-  const progreso = (pct, txt) => { prog.hidden = false; progt.hidden = !txt; prog.querySelector('i').style.width = pct + '%'; progt.textContent = txt || ''; };
-  go.onclick = async () => {
-    gerr.textContent = ''; ['fotos', 'marca', 'modelo', 'anio', 'precio', 'km', 'color', 'version', 'transmision', 'combustible', 'descripcion'].forEach(c => setErr(c, ''));
-    const datos = { marca: v('marca'), modelo: v('modelo'), anio: Number(v('anio')) || 0, precio: Number(v('precio').replace(/\D/g, '')) || 0, km: Number(v('km').replace(/\D/g, '')) || 0, version: v('version') || undefined, color: v('color') || undefined, transmision: v('transmision') || undefined, combustible: v('combustible') || undefined, descripcion: v('descripcion') || undefined };
-    if (st.fotos.length < 4) return marcarCampo('fotos', st.fotos.length ? 'Faltan ' + (4 - st.fotos.length) + ' (mínimo 4 fotos).' : 'Agrega al menos 4 fotos.');
-    if (!datos.marca) return marcarCampo('marca', 'Falta la marca.'); if (!datos.modelo) return marcarCampo('modelo', 'Falta el modelo.');
-    const y = new Date().getFullYear(); if (!datos.anio || datos.anio < 1990 || datos.anio > y + 1) return marcarCampo('anio', 'Año entre 1990 y ' + (y + 1) + '.');
-    if (!datos.precio) return marcarCampo('precio', 'Falta el precio.');
-    st.subiendo = true; bloquear(go, true); progreso(2, '');
-    try {
-      // 1) fotos por foto_subir (una a la vez, con progreso; las ya subidas no se repiten)
-      for (let i = 0; i < st.fotos.length; i++) {
-        const f = st.fotos[i]; if (f.url) continue;
-        progreso(Math.round((i / (st.fotos.length + 1)) * 100), 'Subiendo foto ' + (i + 1) + ' de ' + st.fotos.length + '…');
-        const r = await apiPost('foto_subir', { nombre: f.nombre, base64: f.base64 });
-        if (!r.ok || !r.url) throw new Error('Foto ' + (i + 1) + ': ' + (r.error || 'no se pudo subir'));
-        f.url = r.url; pintarFotos();
-      }
-      // 2) auto_subir con clave (idempotente)
-      progreso(92, 'Guardando…');
-      const r = await apiPost('auto_subir', Object.assign({}, datos, { fotos: st.fotos.map(f => f.url), clave: cl }));
-      if (!r.ok) { if (r.campo) marcarCampo(r.campo, (r.campos && r.campos[r.campo]) || r.error || 'Revisa este campo'); else gerr.textContent = r.error || 'No se pudo agregar'; throw null; }
-      progreso(100, 'Listo');
-      const nuevo = { id: r.auto_id, nombre: [datos.marca, datos.modelo, datos.anio].join(' '), marca: datos.marca, modelo: datos.modelo, anio: datos.anio, precio: datos.precio, km: datos.km, portada: st.fotos[0].preview || st.fotos[0].url, estado: r.estado || 'revision', fotos: st.fotos.length, _nuevo: true };
-      AUTOS_LOCAL = [nuevo].concat(AUTOS_LOCAL.filter(a => String(a.id) !== String(nuevo.id)));
-      AUTOS = [nuevo].concat((AUTOS || []).filter(a => String(a.id) !== String(nuevo.id))); pintarAutos();
-      if (TENANT) TENANT.autos = [{ id: nuevo.id, nombre: nuevo.nombre, precio: nuevo.precio }].concat(TENANT.autos || []);
-      s.cerrar(); if (TAB !== 'autos') irTab('autos'); else $('autos-lista').scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (e) { if (e) gerr.textContent = e.message || 'No se pudo'; }
-    finally { st.subiendo = false; bloquear(go, false); if (gerr.textContent || s.body.querySelector('.inp.err')) { prog.hidden = true; progt.hidden = true; } }
-  };
+  const s = sheet({ titulo: 'Subir auto', big: true, full: true, html: '<div class="sc" id="sc-msgs"><div class="cargando">Cargando…</div></div>',
+    pie: '<div class="sc-pend" id="sc-pend" hidden></div><div class="sc-comp"><input type="file" id="sc-file" accept="image/*" multiple hidden><button type="button" class="ib" id="sc-clip" aria-label="Fotos">' + ico('clip') + '</button><textarea class="inp" id="sc-tx" rows="1" placeholder="Escribe o manda fotos…" enterkeyhint="send"></textarea><button type="button" class="go" id="sc-send" aria-label="Enviar">' + ico('send') + '</button></div>',
+    alCerrar: () => { SC = null; } });
+  SC = { s, pend: [], sesion: null, enviando: false };
+  const file = s.pie.querySelector('#sc-file'), tx = s.pie.querySelector('#sc-tx');
+  s.pie.querySelector('#sc-clip').onclick = () => file.click();
+  file.onchange = async () => { const fs = [...file.files].slice(0, 30); file.value = ''; for (const f of fs) { try { SC.pend.push(await leerFoto(f)); } catch (e) { } } scPend(); };
+  s.pie.querySelector('#sc-send').onmousedown = (e) => e.preventDefault();
+  s.pie.querySelector('#sc-send').onclick = scEnviar;
+  tx.oninput = () => { tx.style.height = 'auto'; tx.style.height = Math.min(120, tx.scrollHeight) + 'px'; };
+  tx.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); scEnviar(); } };
+  s.body.addEventListener('click', (e) => { const b = e.target.closest('.btns button'); if (b && !b.disabled) scBoton(b.dataset.a, b.dataset.s); });
+  apiGet('subir_chat_hilo', {}).then(r => {
+    if (!SC || SC.s !== s) return;
+    if (!r.ok) { s.body.querySelector('#sc-msgs').innerHTML = '<div class="vacio"><b>No pude abrir el chat</b>' + esc(r.error || '') + '</div>'; return; }
+    SC.sesion = r.sesion || null; scPintar(r.mensajes || []);
+  });
 }
 
 // ══════════ TIMBRE (WebSocket del puente) — filtra por tenant, actualiza SOLO la fila/hilo del chat_id ══════════

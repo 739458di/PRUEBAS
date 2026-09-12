@@ -22,7 +22,8 @@ const { responderCont } = require('../lib/seb/continuacion.js');
 // cancelación/en-camino; señal manual del owner; recordatorios via cron.
 const citasVivas = require('../lib/seb/citas-vivas.js');
 const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
-const DEMO = require('../lib/seb/demo.js');    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
+const DEMO = require('../lib/seb/demo.js');
+const SUBIR = require('../lib/seb/subir-chat.js');   // SUBIR AUTO POR CHAT (2026-09-12): alta conversacional + consignación virtual    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
 // aprobada, botones, opener de delegar en t0, programados, rescates) sale por lib/seb/mensajeria.js: resuelve chat →
 // teléfono real → delegación viva → carril de pruebas → idempotencia por `clave` (tabla envios) → puente → recibo.
@@ -2811,9 +2812,10 @@ module.exports = async function handler(req, res) {
             // 13) AUTO_SUBIR — publish-batch particular (K_PANEL), dueño = teléfono del universo (t0 → el owner), ≥4 fotos, campos
             //     obligatorios con error por campo; NACE EN REVISIÓN: la web lo crea activo → se deja `autos.estado='en_revision'`
             //     (fyradmin/pending lo aprueba; el catálogo público lo oculta) y en universos ≠0 queda en autos_universo (rol dueno).
-            if (action === 'auto_subir' && req.method === 'POST') {
-                const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
-                const B = req.body || {};
+            // ══ PUERTA ÚNICA DE ALTA (auto_subir y el chat de alta): publica en la web, fija el estado, amarra el universo ══
+            //    estadoWeb: 'en_revision' (pendiente en el admin) | 'privado' (solo en el universo del vendedor, fuera de fyradrive.com)
+            //    consignacion: null | { tipo:'virtual', comision, precio, regla, acepto_ts, tenant_id }
+            const subirAutoCore = async (B, { estadoWeb, consignacion } = {}) => {
                 const campos = {};
                 const marca = String(B.marca || '').trim(), modelo = String(B.modelo || '').trim();
                 const anio = Number(B.anio), yNow = new Date().getFullYear();
@@ -2826,32 +2828,59 @@ module.exports = async function handler(req, res) {
                 if (kmRaw === '' || !Number.isFinite(km) || km < 0) campos.km = 'kilometraje requerido';
                 const fotos = (Array.isArray(B.fotos) ? B.fotos : []).map(String).filter(u => /^https?:\/\//.test(u));
                 if (fotos.length < 4) campos.fotos = 'mínimo 4 fotos (van ' + fotos.length + ')';
-                if (Object.keys(campos).length) { const campo = Object.keys(campos)[0]; return res.status(400).json({ ok: false, error: campo + ': ' + campos[campo], campo, campos }); }
-                const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'auto_subir', sesionId: SID }, async () => {
-                    if (!process.env.K_PANEL) return { ok: false, status: 503, error: 'K_PANEL no configurada' };
-                    const duenoTel = TV ? String(tV.telefono || '') : ACC.OWNER_TEL;
-                    const partes = String(tV.nombre || 'Vendedor').trim().split(/\s+/).filter(Boolean);
-                    const cuerpo = {
-                        tipo: 'particular', key: process.env.KEY_VIEJA || undefined,
-                        vendedor: { nombre: partes[0] || 'Vendedor', apellido: partes.slice(1).join(' ') || undefined, telefono: duenoTel },
-                        autos: [{
-                            marca, modelo: [modelo, String(B.version || '').trim()].filter(Boolean).join(' '), anio, precio, kilometraje: km,
-                            color: B.color ? String(B.color).slice(0, 40) : undefined, transmision: B.transmision ? String(B.transmision).slice(0, 30) : undefined,
-                            comentarios: [B.combustible ? 'Combustible: ' + String(B.combustible).slice(0, 30) : null, B.descripcion ? String(B.descripcion).slice(0, 600) : null].filter(Boolean).join('. ') || undefined,
-                            photos: fotos.map((u, i) => ({ url: u, isPrincipal: i === 0 }))
-                        }]
-                    };
-                    const resp = await fetch(WEB_URL + '/api/agency/publish-batch', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(cuerpo) });
-                    const d = await resp.json().catch(() => ({}));
-                    const okPub = resp.ok && d && d.ok !== false && Array.isArray(d.created) && d.created.length && !(d.errors && d.errors.length);
-                    if (!okPub) return { ok: false, status: 502, error: String((d.errors && d.errors[0] && d.errors[0].error) || d.error || ('web ' + resp.status)).slice(0, 200) };
-                    const webId = Number(d.created[0].id);
-                    await run("UPDATE autos SET estado='en_revision' WHERE id=?", [webId]).catch(() => { });   // nace en revisión (la web lo crea activo)
-                    let invId = null; try { const iv = (await query('SELECT id FROM inventario_autos WHERE fyradrive_web_id=? LIMIT 1', [webId]))[0]; invId = iv ? Number(iv.id) : null; } catch (e) { }
-                    if (TV && invId) await run('INSERT OR IGNORE INTO autos_universo (inv_auto_id, tenant_id, rol, origen, activo, created, updated) VALUES (?,?,?,?,1,?,?)', [invId, TV, 'dueno', 'fyrachat', Date.now(), Date.now()]).catch(() => { });
-                    await ACCIONES.registrar({ tenant_id: TV, chat_id: null, tipo: 'auto_subido', ref_id: invId || webId, meta: { web_id: webId, inv_id: invId, marca, modelo, anio, precio, fotos: fotos.length, template: !!d.created[0].template }, actor: 'vendedor', sesion_id: SID });
-                    return { ok: true, auto_id: invId || webId, web_id: webId, inv_id: invId, estado: 'revision', fotos: fotos.length, template: !!d.created[0].template };
-                });
+                if (Object.keys(campos).length) { const campo = Object.keys(campos)[0]; return { ok: false, status: 400, error: campo + ': ' + campos[campo], campo, campos }; }
+                // MODO PRUEBA (PRUEBAS#): jamás publica en fyradrive.com; el alta se simula completa en la UI
+                if (tV && tV.demo) return { ok: true, simulado: true, auto_id: 'demo-' + Date.now(), web_id: null, inv_id: null, estado: estadoWeb === 'privado' ? 'activo' : 'revision', fotos: fotos.length, template: false };
+                if (!process.env.K_PANEL) return { ok: false, status: 503, error: 'K_PANEL no configurada' };
+                const duenoTel = TV ? String(tV.telefono || '') : ACC.OWNER_TEL;
+                const partes = String(tV.nombre || 'Vendedor').trim().split(/\s+/).filter(Boolean);
+                const cuerpo = {
+                    tipo: 'particular', key: process.env.KEY_VIEJA || undefined,
+                    vendedor: { nombre: partes[0] || 'Vendedor', apellido: partes.slice(1).join(' ') || undefined, telefono: duenoTel },
+                    autos: [{
+                        marca, modelo: [modelo, String(B.version || '').trim()].filter(Boolean).join(' '), anio, precio, kilometraje: km,
+                        color: B.color ? String(B.color).slice(0, 40) : undefined, transmision: B.transmision ? String(B.transmision).slice(0, 30) : undefined,
+                        comentarios: [B.combustible ? 'Combustible: ' + String(B.combustible).slice(0, 30) : null, B.descripcion ? String(B.descripcion).slice(0, 600) : null].filter(Boolean).join('. ') || undefined,
+                        photos: fotos.map((u, i) => ({ url: u, isPrincipal: i === 0 }))
+                    }]
+                };
+                const resp = await fetch(WEB_URL + '/api/agency/publish-batch', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(cuerpo) });
+                const d = await resp.json().catch(() => ({}));
+                const okPub = resp.ok && d && d.ok !== false && Array.isArray(d.created) && d.created.length && !(d.errors && d.errors.length);
+                if (!okPub) return { ok: false, status: 502, error: String((d.errors && d.errors[0] && d.errors[0].error) || d.error || ('web ' + resp.status)).slice(0, 200) };
+                const webId = Number(d.created[0].id);
+                const est = estadoWeb === 'privado' ? 'privado' : 'en_revision';
+                try { await run("ALTER TABLE autos ADD COLUMN consignacion_json TEXT"); } catch (e) { /* ya existe */ }
+                await run("UPDATE autos SET estado=?, consignacion_json=? WHERE id=?", [est, consignacion ? JSON.stringify(consignacion) : null, webId]).catch(() => { });   // la web lo crea activo; aquí se fija su destino
+                let invId = null; try { const iv = (await query('SELECT id FROM inventario_autos WHERE fyradrive_web_id=? LIMIT 1', [webId]))[0]; invId = iv ? Number(iv.id) : null; } catch (e) { }
+                if (TV && invId) await run('INSERT OR IGNORE INTO autos_universo (inv_auto_id, tenant_id, rol, origen, activo, created, updated) VALUES (?,?,?,?,1,?,?)', [invId, TV, 'dueno', 'fyrachat', Date.now(), Date.now()]).catch(() => { });
+                await ACCIONES.registrar({ tenant_id: TV, chat_id: null, tipo: 'auto_subido', ref_id: invId || webId, meta: { web_id: webId, inv_id: invId, marca, modelo, anio, precio, fotos: fotos.length, estado_web: est, consignacion: consignacion ? consignacion.comision : null, template: !!d.created[0].template }, actor: 'vendedor', sesion_id: SID });
+                return { ok: true, auto_id: invId || webId, web_id: webId, inv_id: invId, estado: est === 'privado' ? 'activo' : 'revision', fotos: fotos.length, template: !!d.created[0].template };
+            };
+
+            // ══ SUBIR AUTO POR CHAT (orden owner 2026-09-12) ══
+            if (action === 'subir_chat_hilo') return okJ(await SUBIR.hilo(tV));
+            if (action === 'subir_chat_msg' && req.method === 'POST') {
+                const r = await SUBIR.mensaje(tV, { texto: req.body.texto, fotos: req.body.fotos });
+                return res.status(r.ok ? 200 : 400).json(r);
+            }
+            if (action === 'subir_chat_boton' && req.method === 'POST') {
+                const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
+                const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'subir_chat_boton', sesionId: SID }, async () => SUBIR.boton(tV, {
+                    sesion_id: req.body.sesion_id, accion: req.body.accion,
+                    subir: async (s, acepta) => {
+                        const d = s.datos || {};
+                        const cons = acepta ? { tipo: 'virtual', comision: s.comision || SUBIR.comisionDe(d.precio), precio: Number(d.precio) || 0, regla: SUBIR.reglaDe(d.precio), acepto_ts: Date.now(), tenant_id: TV, tenant_nombre: tV.nombre || null, tenant_tel: tV.telefono || null } : null;
+                        return subirAutoCore({ marca: d.marca, modelo: d.modelo, version: d.version, anio: d.anio, precio: d.precio, km: d.kilometraje, color: d.color, transmision: d.transmision, combustible: d.combustible, fotos: s.fotos }, { estadoWeb: acepta ? 'en_revision' : 'privado', consignacion: cons });
+                    }
+                }));
+                return res.status(r.ok ? 200 : (r.status || 400)).json(r);
+            }
+
+            if (action === 'auto_subir' && req.method === 'POST') {
+                const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
+                const B = req.body || {};
+                const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'auto_subir', sesionId: SID }, async () => subirAutoCore(B, { estadoWeb: 'en_revision', consignacion: null }));
                 return res.status(codigoDe(r)).json(r);
             }
         }
