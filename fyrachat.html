@@ -1149,7 +1149,7 @@ function pintarCabecera(ch){
   const c = INBOX.rows.get(ch.chat_id) || {};
   const nombre = ch.nombre || c.nombre || ('+' + String(ch.telefono || c.telefono || '').replace(/\D/g, ''));
   const gd = ch.ghost_dias != null ? ch.ghost_dias : c.ghost_dias;
-  $('ch-ava').innerHTML = avaHTML({ ini: ch.ini || c.ini, nombre, foto: ch.foto || c.foto, auto: ch.auto || c.auto, ghost_dias: gd }).replace(/^<div[^>]*>|<\/div>$/g, ''); $('ch-ava').classList.toggle('gh', gd >= 1);
+  $('ch-ava').innerHTML = avaHTML({ ini: ch.ini || c.ini, nombre, foto: ch.foto || c.foto, auto: ch.auto || c.auto, ghost_dias: gd }).replace(/^<div[^>]*>|<\/div>$/g, ''); $('ch-ava').classList.toggle('gh', gd >= 1); $('ch-ava').classList.toggle('car', !!fotoDe({ foto: ch.foto || c.foto, auto: ch.auto || c.auto }));
   $('ch-nombre').textContent = nombre;
   const tel = String(ch.telefono || c.telefono || '').replace(/\D/g, ''); const telA = $('ch-tel'); telA.hidden = !tel; telA.href = tel ? 'tel:+' + tel : '#';
   // estado bajo el nombre: "En línea" (verde) si hubo entrante < 10 min; si no, universo ≠ 0 → delegación, universo 0 → hora del último mensaje
