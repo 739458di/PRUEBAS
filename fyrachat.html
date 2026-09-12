@@ -327,6 +327,18 @@ select.inp option{background:#09183F;color:#fff}
 .existe b{display:block;font-size:15px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .existe small{display:block;font-size:13px;line-height:18px;color:var(--txt2)}
 .existe button{height:36px;padding:0 14px;border-radius:999px;background:var(--pri);color:#fff;font-weight:600;font-size:13px;flex:0 0 auto}
+/* Nuevo comprador: row de modo (60), despliegue bajo la row elegida, auto preseleccionado, skeleton */
+.sh-head .bk{grid-column:1}
+.row.op{min-height:60px;padding:10px 16px}
+.row.op .s{font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desp{padding:0 16px 16px;background:rgba(31,111,255,.06);border-top:1px solid var(--sep)}
+.desp .lbl{margin-top:12px}
+.desp + .row{border-top:1px solid var(--sep)}
+.auto-r.pick{background:var(--s1);border-radius:16px;padding:8px 12px;transition:background .12s;box-shadow:var(--sh-card)}
+.auto-r.pick:active{background:var(--s2)}
+.auto-r.sk .l1{height:14px;width:55%;border-radius:7px;background:var(--s1)}
+.auto-r.sk .l2{height:12px;width:30%;border-radius:6px;background:rgba(9,24,63,.7);margin-top:8px}
+.f-note{font-size:12px;line-height:16px;color:var(--warn);margin-top:8px}
 /* ¡Listo! */
 .listo{display:flex;flex-direction:column;align-items:center;text-align:center;padding:12px 0 0}
 .listo .ok{position:relative;width:112px;height:112px;margin:8px 0 20px}
@@ -342,7 +354,9 @@ select.inp option{background:#09183F;color:#fff}
 .listo .card{width:100%;background:var(--s1);border-radius:20px;padding:16px;text-align:left;box-shadow:var(--sh-card)}
 .listo .card .who{display:flex;align-items:center;gap:12px}
 .listo .card .n{font-size:15px;line-height:20px;font-weight:600}
-.listo .card .tel{font-size:13px;line-height:18px;color:var(--txt2)}
+.listo .card .who .ava{width:40px;height:40px;flex:0 0 40px;font-size:16px}
+.listo .card .who .tx{flex:1;min-width:0}
+.listo .card .num{font-size:13px;line-height:18px;color:var(--txt2)}
 .listo .card .estado{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--sep);font-size:13px;line-height:18px;color:var(--pos);font-weight:600}
 /* Agregar auto: fotos primero */
 .cover-w{display:grid;grid-template-columns:1fr 104px;gap:12px}
@@ -598,7 +612,8 @@ const ICO = {
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   play: '<path d="m6 4 14 8-14 8z"/>',
-  usercheck: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/>'
+  usercheck: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/>',
+  wa: '<path d="M3 21l1.7-4.6A8.5 8.5 0 1 1 8 19.5z"/><path d="M9 9.6c0 2.6 2.8 5.4 5.4 5.4l1.3-1.3-1.9-1-1 .9c-.9-.4-2-1.5-2.4-2.4l.9-1-1-1.9z"/>'
 };
 const ico = (n, c) => '<svg class="ic' + (c ? ' ' + c : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICO[n] || '') + '</svg>';
 // hidratación de los iconos estáticos del HTML: <i data-ico="nombre" class="..."></i> → svg (única fuente de verdad)
@@ -1224,90 +1239,156 @@ function abrirSimular(){
   setTimeout(() => s.body.querySelector('#si-t').focus(), 80);
 }
 
-// ══════════ + COMPRADOR / DELEGAR (delegar_v2) ══════════
+// ══════════ + COMPRADOR / DELEGAR (delegar_v2) — sheet de 3 pasos (sistema visual 2026-09-12) ══════════
+// Paso 1 = número + auto · Paso 2 = ¿cómo entra? (8 modos) · ¡Listo! en el MISMO sheet. La UI no decide el destino: manda teléfono + auto_id + entrada + clave.
+const telFmt10 = (d) => { d = String(d || '').replace(/\D/g, '').slice(0, 10); return [d.slice(0, 2), d.slice(2, 6), d.slice(6, 10)].filter(Boolean).join(' '); };
+const anioDe = (a) => { if (!a) return ''; if (a.anio) return String(a.anio); const m = String(a.nombre || '').match(/\b(19|20)\d{2}\b/); return m ? m[0] : ''; };
+const nombreSinAnio = (a) => { if (!a) return ''; const n = String(a.nombre || [a.marca, a.modelo].filter(Boolean).join(' ')); const y = anioDe(a); const s = y ? n.replace(new RegExp('\\s*\\b' + y + '\\b'), '').trim() : n; return s || n; };
+// row visual del auto: foto 64×48 · nombre 15/600 · año 13 · precio verde · chevron
+function autoRowHTML(a, { tag, on, extra } = {}){
+  const t = tag || 'div';
+  return '<' + t + (t === 'button' ? ' type="button"' : '') + ' class="auto-r' + (on ? ' on' : '') + (extra ? ' ' + extra : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : ico('car')) + '</div><div class="tx"><div class="t">' + esc(nombreSinAnio(a)) + '</div>' + (anioDe(a) ? '<div class="y">' + esc(anioDe(a)) + '</div>' : '') + '</div><div class="p">' + esc(precioFmt(a.precio)) + '</div>' + ico('chev', 'chev') + '</' + t + '>';
+}
+// selector de autos reutilizable: búsqueda + lista de rows; alElegir(auto)
+function selectorAutos({ autos, actual, titulo, alElegir }){
+  const s = sheet({ titulo: titulo || 'Elegir auto', html: '<input class="inp" id="sa-q" placeholder="Buscar marca, modelo o año" autocomplete="off"><div class="auto-l" id="sa-l" style="margin-top:12px"></div>' });
+  const l = s.body.querySelector('#sa-l'), q = s.body.querySelector('#sa-q');
+  const pintar = () => { const qq = q.value.toLowerCase().trim(); const f = autos.filter(a => !qq || (String(a.nombre || '') + ' ' + anioDe(a)).toLowerCase().includes(qq)); l.innerHTML = f.length ? f.map(a => autoRowHTML(a, { tag: 'button', on: actual != null && Number(a.id) === Number(actual) })).join('') : '<div class="vacio"><b>Nada coincide</b>Prueba con otra marca, modelo o año.</div>'; };
+  pintar(); q.oninput = pintar;
+  l.onclick = (e) => { const b = e.target.closest('.auto-r'); if (!b) return; const a = autos.find(x => String(x.id) === b.dataset.id); if (!a) return; s.cerrar(); alElegir(a); };
+  if (HOVER) setTimeout(() => q.focus(), 60);
+  return s;
+}
+const NC_ACCION = [
+  { m: 'info', ico: 'info', t: 'Información', s: 'La ficha completa del auto.' },
+  { m: 'fotos', ico: 'image', t: 'Fotos del vehículo', s: 'Solo las fotos del auto, sin texto.' },
+  { m: 'ubicacion', ico: 'map', t: 'Ubicación', s: 'Texto, captura y pin de Maps.' },
+  { m: 'cotizar', ico: 'dollar', t: 'Cotizar', s: 'La tarjeta de precio con el enganche que pongas.' },
+  { m: 'cita', ico: 'calendar', t: 'Agendar cita', s: 'Le confirma día y hora y programa recordatorios.' }
+];
+const NC_MENSAJE = [
+  { m: 'bot', ico: 'bot', t: 'Se presenta a tu nombre', s: 'El asistente manda el primer mensaje como tuyo.' },
+  { m: 'texto', ico: 'pen', t: 'Escribo yo el mensaje', s: 'Tu texto, literal, firmado como tuyo.' },
+  { m: 'silencio', ico: 'mute', t: 'Entra callado', s: 'Solo entra al chat. No manda mensaje.' }
+];
+const NC_CTA = { cotizar: 'Delegar y cotizar', cita: 'Delegar y agendar' };
+const NC_NOTA = { silencio: 'entró callado', texto: 'con tu texto', bot: 'se presentó a tu nombre', info: 'mandó la ficha', fotos: 'mandó las fotos', ubicacion: 'mandó la ubicación', cotizar: 'mandó la cotización', cita: 'agendó la cita' };
 function abrirNuevoComprador(){
   const demo = !!(TENANT && TENANT.demo);
-  const st = { tel: demo ? DEMO_TEL.slice(-10) : '', nombre: '', auto: null, modo: null, texto: '', enganche: 0, cita: null };
-  const s = sheet({ titulo: '＋ Nuevo comprador', html: '<div id="nc"></div>' });
+  const telInicial = () => demo ? DEMO_TEL.slice(-10) : '';
+  const st = { tel: telInicial(), auto: null, autos: null, modo: null, listo: null };
+  const s = sheet({ titulo: 'Nuevo comprador', html: '<div id="nc"></div>' });
   const box = s.body.querySelector('#nc');
+  const pasos = (n) => '<div class="pasos">' + [1, 2, 3].map(i => (i > 1 ? '<i class="' + (i <= n ? 'on' : '') + '"></i>' : '') + '<span class="' + (i < n ? 'ok' : i === n ? 'on' : '') + '">' + (i < n ? ico('check') : i) + '</span>').join('') + '</div>';
+  const setBack = (fn) => { let b = s.head.querySelector('.bk'); if (!fn) { if (b) b.remove(); return; } if (!b) { b = document.createElement('button'); b.type = 'button'; b.className = 'x bk'; b.setAttribute('aria-label', 'Atrás'); b.innerHTML = ico('back'); s.head.prepend(b); } b.onclick = fn; };
+  const arriba = () => { s.body.scrollTop = 0; };
+  const cargarAutosNC = async () => { if (st.autos) return st.autos; const a = await autosParaDelegar(); st.autos = a; if (!st.auto && a.length) st.auto = a[0]; return a; };
+
+  // ── PASO 1: número de WhatsApp + auto preseleccionado ──
   const paso1 = () => {
-    box.innerHTML = '<div class="paso">Paso 1 de 3 · Teléfono</div>' +
-      '<label class="lbl" for="nc-tel">WhatsApp del comprador</label><input class="inp" id="nc-tel" inputmode="numeric" maxlength="10" placeholder="10 dígitos" autocomplete="off" value="' + esc(st.tel) + '"' + (demo ? ' disabled' : '') + '>' +
-      (demo ? '<div class="f-err" style="color:var(--amar)">🧪 número de prueba (bloqueado)</div>' : '<div class="f-err" id="nc-terr"></div>') +
-      '<div id="nc-existe"></div>' +
-      '<label class="lbl" for="nc-nom">Nombre (opcional)</label><input class="inp" id="nc-nom" placeholder="Cómo se llama" autocomplete="off" value="' + esc(st.nombre) + '">' +
-      '<button class="cta" id="nc-next">Continuar</button>';
-    const ti = box.querySelector('#nc-tel'), ex = box.querySelector('#nc-existe'); let tT = null;
-    const buscar = async () => { const v = ti.value.replace(/\D/g, ''); ex.innerHTML = ''; if (v.length !== 10) return; const r = await apiGet('inbox', { q: v, limit: 5, filtro: 'todos' }); const c = (r.chats || []).find(x => String(x.telefono || '').replace(/\D/g, '').endsWith(v)); if (!c || ti.value.replace(/\D/g, '') !== v) return; ex.innerHTML = '<div class="existe"><div class="ava" style="width:36px;height:36px;flex:0 0 36px;font-size:15px">' + esc(iniDe(c)) + '</div><div><b>' + esc(c.nombre || '+' + v) + '</b><small>Ya hay una conversación' + (c.delegado ? ' delegada' : '') + '</small></div><button type="button" id="nc-abrir">Abrir</button></div>'; ex.querySelector('#nc-abrir').onclick = () => { INBOX.rows.set(c.chat_id, c); s.cerrar(); abrirChat(c.chat_id); }; };
-    if (!demo) { ti.oninput = () => { ti.value = ti.value.replace(/\D/g, '').slice(0, 10); clearTimeout(tT); tT = setTimeout(buscar, 250); }; setTimeout(() => ti.focus(), 80); }
-    else buscar();
-    box.querySelector('#nc-next').onclick = () => { const v = ti.value.replace(/\D/g, ''); if (v.length !== 10) { const e = box.querySelector('#nc-terr'); if (e) e.textContent = 'Son 10 dígitos.'; ti.classList.add('err'); return; } st.tel = v; st.nombre = box.querySelector('#nc-nom').value.trim(); paso2(); };
+    setBack(null); s.setTitulo('Nuevo comprador'); arriba();
+    box.innerHTML = pasos(1) + '<p class="sub">Solo necesitas su número para empezar.</p>' +
+      '<label class="lbl" for="nc-tel">' + ico('wa') + 'Número de WhatsApp</label>' +
+      '<div class="tel" id="nc-telw"><div class="pre">+52' + ico('down') + '</div><input id="nc-tel" inputmode="numeric" autocomplete="off" placeholder="81 2006 6355" maxlength="12" value="' + esc(telFmt10(st.tel)) + '"></div>' +
+      '<div id="nc-tok"></div><div class="f-err" id="nc-terr"></div>' + (demo ? '<div class="f-note">Modo prueba: cualquier número de 10 dígitos sirve. No llega ningún WhatsApp real.</div>' : '') + '<div id="nc-existe"></div>' +
+      '<label class="lbl">' + ico('car') + '¿A qué auto se refiere?</label><div id="nc-auto"></div>';
+    s.setPie('<button class="cta" id="nc-next" disabled>Continuar' + ico('next') + '</button>');
+    const ti = box.querySelector('#nc-tel'), tw = box.querySelector('#nc-telw'), tok = box.querySelector('#nc-tok'), terr = box.querySelector('#nc-terr'), ex = box.querySelector('#nc-existe'), next = s.pie.querySelector('#nc-next');
+    let tT = null, gen = 0;
+    const valida = () => st.tel.length === 10;
+    const refrescar = () => { next.disabled = !(valida() && st.auto); tok.innerHTML = valida() ? '<div class="f-ok">' + ico('check') + 'Número válido</div>' : ''; if (valida()) { terr.textContent = ''; tw.classList.remove('err'); } };
+    // ¿ya hay conversación con ese número en este universo? → "Ya existe: abrir chat"
+    const buscar = async () => {
+      const g = ++gen; ex.innerHTML = ''; if (!valida()) return; const v = st.tel;
+      const r = await apiGet('inbox', { q: v, limit: 5, filtro: 'todos' }); if (g !== gen || !box.isConnected) return;
+      const c = (r.chats || []).find(x => String(x.telefono || '').replace(/\D/g, '').endsWith(v)); if (!c) return;
+      ex.innerHTML = '<div class="existe"><div class="ava">' + esc(iniDe(c)) + '</div><div class="tx"><b>' + esc(c.nombre || '+52 ' + telFmt10(v)) + '</b><small>Ya existe' + (c.delegado ? ' · Seb ya lo atiende' : ' una conversación') + '</small></div><button type="button" id="nc-abrir">Abrir chat</button></div>';
+      ex.querySelector('#nc-abrir').onclick = () => { INBOX.rows.set(c.chat_id, c); s.cerrar(); irTab('inicio'); abrirChat(c.chat_id); };
+    };
+    ti.oninput = () => { st.tel = ti.value.replace(/\D/g, '').slice(0, 10); ti.value = telFmt10(st.tel); refrescar(); clearTimeout(tT); tT = setTimeout(buscar, 250); };
+    ti.onblur = () => { if (st.tel && !valida()) { terr.textContent = 'Son 10 dígitos.'; tw.classList.add('err'); } };
+    ti.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (!next.disabled) next.click(); else ti.blur(); } };
+    const pintarAuto = () => {
+      const w = box.querySelector('#nc-auto'); if (!w) return;
+      if (!st.autos) { w.innerHTML = '<div class="auto-r sk"><div class="ph"></div><div class="tx"><div class="l1"></div><div class="l2"></div></div></div>'; return; }
+      if (!st.autos.length) { w.innerHTML = '<div class="vacio" style="padding:16px 0 4px"><b>Este universo aún no tiene autos</b>Agrega el primero y vuelve aquí.</div><button type="button" class="liga" id="nc-subir">Agregar auto</button>'; w.querySelector('#nc-subir').onclick = () => { s.cerrar(); irTab('autos'); abrirSubirAuto(); }; return; }
+      w.innerHTML = autoRowHTML(st.auto, { tag: 'button', extra: 'pick' }) + (st.autos.length > 1 ? '<button type="button" class="liga" id="nc-otro">Buscar otro auto</button>' : '');
+      const elegir = () => selectorAutos({ autos: st.autos, actual: st.auto && st.auto.id, titulo: '¿A qué auto se refiere?', alElegir: (a) => { st.auto = a; pintarAuto(); refrescar(); } });
+      w.querySelector('.auto-r').onclick = elegir; const o = w.querySelector('#nc-otro'); if (o) o.onclick = elegir;
+    };
+    pintarAuto(); refrescar(); if (valida()) buscar();
+    cargarAutosNC().then(() => { if (box.querySelector('#nc-auto')) { pintarAuto(); refrescar(); } });
+    if (!st.tel) setTimeout(() => ti.focus(), 80);
+    next.onclick = () => { if (!valida()) { terr.textContent = 'Son 10 dígitos.'; tw.classList.add('err'); ti.focus(); return; } if (!st.auto) return; paso2(); };
   };
-  const paso2 = async () => {
-    box.innerHTML = '<div class="paso">Paso 2 de 3 · Auto</div><input class="inp" id="nc-q" placeholder="Buscar marca, modelo o año…" autocomplete="off"><div class="auto-l" id="nc-l" style="margin-top:10px"><div class="hint">Cargando autos…</div></div><button class="cta" id="nc-next2" disabled>Continuar</button><button class="cta sec" id="nc-back">Atrás</button>';
-    let autos = await autosParaDelegar();
-    if (autos.length === 1 && !st.auto) st.auto = autos[0];
-    const l = box.querySelector('#nc-l'), next = box.querySelector('#nc-next2');
-    const pintar = (q) => { const qq = (q || '').toLowerCase().trim(); const f = autos.filter(a => !qq || String(a.nombre || '').toLowerCase().includes(qq)); l.innerHTML = f.length ? f.map(a => autoCardHTML(a, st.auto && Number(st.auto.id) === Number(a.id))).join('') : '<div class="hint">' + (autos.length ? 'Nada coincide.' : 'Este universo aún no tiene autos. Súbelo con el botón (+).') + '</div>'; next.disabled = !st.auto; };
-    pintar('');
-    box.querySelector('#nc-q').oninput = (e) => pintar(e.target.value);
-    l.onclick = (e) => { const b = e.target.closest('.auto-card'); if (!b) return; st.auto = autos.find(a => String(a.id) === b.dataset.id) || null; pintar(box.querySelector('#nc-q').value); };
-    next.onclick = () => { if (st.auto) paso3(); };
-    box.querySelector('#nc-back').onclick = paso1;
-  };
-  const paso3 = () => {
-    box.innerHTML = '<div class="paso">Paso 3 de 3 · ¿Cómo entra?</div>' + autoCardHTML(st.auto, false).replace('<button type="button"', '<div').replace(/<\/button>$/, '</div>') +
-      '<span class="lbl">Ejecuta una acción · sin presentarse</span><div class="op-l">' +
-      '<button class="op" data-m="cotizar"><span class="e">💰</span><div>Cotizar<small>Le manda solo la tarjeta de precio con el enganche que pongas.</small></div></button>' +
-      '<button class="op" data-m="cita"><span class="e">📅</span><div>Agendar cita<small>Eliges día y hora; le confirma la cita y programa los recordatorios.</small></div></button>' +
-      '<button class="op" data-m="fotos"><span class="e">📸</span><div>Fotos del vehículo<small>Solo las fotos del auto, sin texto.</small></div></button>' +
-      '<button class="op" data-m="ubicacion"><span class="e">📍</span><div>Ubicación<small>Dónde está el auto: texto + captura + pin de Maps.</small></div></button>' +
-      '<button class="op" data-m="info"><span class="e">📄</span><div>Información<small>La ficha completa del auto.</small></div></button></div>' +
-      '<span class="lbl">Solo un primer mensaje</span><div class="op-l">' +
-      '<button class="op" data-m="bot"><span class="e">🤖</span><div>Se presenta a tu nombre<small>El asistente manda el primer mensaje firmado como tuyo.</small></div></button>' +
-      '<button class="op" data-m="texto"><span class="e">✍️</span><div>Escribo yo el mensaje<small>Tu texto, literal, firmado como tuyo.</small></div></button></div>' +
-      '<span class="lbl">Sin decir nada</span><div class="op-l"><button class="op" data-m="silencio"><span class="e">🤫</span><div>Entra callado<small>Solo entra al chat. No manda mensaje.</small></div></button></div>' +
-      '<div id="nc-extra"></div><button class="cta" id="nc-go" disabled>Delegar</button><div class="g-err" id="nc-gerr"></div><button class="cta sec" id="nc-back3">Atrás</button>';
-    const extra = box.querySelector('#nc-extra'), go = box.querySelector('#nc-go'); let ciSt = null;
-    box.querySelectorAll('.op').forEach(b => b.onclick = () => {
-      st.modo = b.dataset.m; box.querySelectorAll('.op').forEach(x => x.classList.toggle('on', x === b)); ciSt = null; go.disabled = false;
-      if (st.modo === 'cotizar') { extra.innerHTML = '<label class="lbl" for="nc-eng">Enganche</label><input class="inp" id="nc-eng" inputmode="numeric" placeholder="$ 0"><div class="f-err" id="nc-eerr"></div>'; const e = extra.querySelector('#nc-eng'); e.oninput = () => { const n = e.value.replace(/\D/g, ''); e.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; }; setTimeout(() => e.focus(), 60); }
-      else if (st.modo === 'cita') { extra.innerHTML = citaFormHTML(''); ciSt = citaFormWire(extra); }
-      else if (st.modo === 'texto') { extra.innerHTML = '<label class="lbl" for="nc-tx">Tu mensaje</label><textarea class="inp" id="nc-tx" placeholder="Hola, soy…"></textarea><div class="f-err" id="nc-txerr"></div>'; setTimeout(() => extra.querySelector('#nc-tx').focus(), 60); }
-      else extra.innerHTML = '';
-      go.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    });
-    box.querySelector('#nc-back3').onclick = paso2;
-    const cl = clave('delegar', st.tel);
+
+  // ── PASO 2: ¿cómo entra? (8 modos en dos superficies; cotizar/cita/texto despliegan debajo de su row) ──
+  const paso2 = () => {
+    setBack(paso1); s.setTitulo('¿Cómo entra?'); arriba();
+    const rowOp = (o) => '<button type="button" class="row op" data-m="' + o.m + '"><div class="sq">' + ico(o.ico) + '</div><div class="tx"><div class="t">' + esc(o.t) + '</div><div class="s">' + esc(o.s) + '</div></div>' + ico('chev', 'chev') + '</button>';
+    box.innerHTML = pasos(2) + '<p class="sub">' + esc(nombreSinAnio(st.auto) + (anioDe(st.auto) ? ' ' + anioDe(st.auto) : '')) + ' · +52 ' + esc(telFmt10(st.tel)) + '</p>' +
+      '<span class="lbl">Ejecuta una acción</span><div class="grupo">' + NC_ACCION.map(rowOp).join('') + '</div>' +
+      '<span class="lbl">Solo un mensaje / nada</span><div class="grupo">' + NC_MENSAJE.map(rowOp).join('') + '</div>';
+    s.setPie('<button class="cta" id="nc-go" disabled>Delegar</button><div class="g-err" id="nc-gerr"></div>');
+    const go = s.pie.querySelector('#nc-go'), gerr = s.pie.querySelector('#nc-gerr'); let ciSt = null, desp = null;
+    const elegir = (b) => {
+      st.modo = b.dataset.m; box.querySelectorAll('.row.op').forEach(x => x.classList.toggle('on', x === b));
+      if (desp) { desp.remove(); desp = null; } ciSt = null; go.disabled = false; go.textContent = NC_CTA[st.modo] || 'Delegar'; gerr.textContent = '';
+      let h = '';
+      if (st.modo === 'cotizar') h = '<label class="lbl" for="nc-eng">Enganche</label><input class="inp" id="nc-eng" inputmode="numeric" placeholder="$ 0" autocomplete="off"><div class="f-err" id="nc-eerr"></div>';
+      else if (st.modo === 'cita') h = citaFormHTML('');
+      else if (st.modo === 'texto') h = '<label class="lbl" for="nc-tx">Tu mensaje</label><textarea class="inp" id="nc-tx" placeholder="Hola, soy…"></textarea><div class="f-err" id="nc-txerr"></div>';
+      if (!h) return;
+      desp = document.createElement('div'); desp.className = 'desp'; desp.innerHTML = h; b.after(desp);
+      if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); e.oninput = () => { const n = e.value.replace(/\D/g, ''); e.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; e.classList.remove('err'); desp.querySelector('#nc-eerr').textContent = ''; }; setTimeout(() => e.focus(), 60); }
+      if (st.modo === 'cita') ciSt = citaFormWire(desp);
+      if (st.modo === 'texto') setTimeout(() => desp.querySelector('#nc-tx').focus(), 60);
+      setTimeout(() => desp.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 40);
+    };
+    box.querySelectorAll('.row.op').forEach(b => b.onclick = () => elegir(b));
+    if (st.modo) { const b = box.querySelector('.row.op[data-m="' + st.modo + '"]'); if (b) elegir(b); }
+    const cl = clave('delegar', st.tel);   // clave fija para esta hoja: reintentar = mismo resultado
     go.onclick = async () => {
-      if (!st.modo) return; const gerr = box.querySelector('#nc-gerr'); gerr.textContent = '';
+      if (!st.modo || !st.auto) return; gerr.textContent = '';
       const entrada = { modo: st.modo };
-      if (st.modo === 'cotizar') { const n = Number((extra.querySelector('#nc-eng').value || '').replace(/\D/g, '')) || 0; if (!n) { extra.querySelector('#nc-eerr').textContent = 'Escribe el enganche.'; return; } entrada.enganche = n; }
+      if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); const n = Number((e.value || '').replace(/\D/g, '')) || 0; if (!n) { desp.querySelector('#nc-eerr').textContent = 'Escribe el enganche.'; e.classList.add('err'); e.focus(); return; } entrada.enganche = n; }
       if (st.modo === 'cita') { if (!ciSt || !ciSt.valida()) return; entrada.fecha_iso = ciSt.fecha; entrada.hora = ciSt.hora; }
-      if (st.modo === 'texto') { const t = (extra.querySelector('#nc-tx').value || '').trim(); if (!t) { extra.querySelector('#nc-txerr').textContent = 'Escribe el mensaje.'; return; } entrada.texto = t; }
+      if (st.modo === 'texto') { const t = (desp.querySelector('#nc-tx').value || '').trim(); if (!t) { desp.querySelector('#nc-txerr').textContent = 'Escribe el mensaje.'; desp.querySelector('#nc-tx').focus(); return; } entrada.texto = t; }
       bloquear(go, true);
-      const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, nombre: st.nombre || undefined, auto_id: st.auto.id, entrada, clave: cl }));
-      bloquear(go, false);
+      const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, auto_id: st.auto.id, entrada, clave: cl }));
+      bloquear(go, false); go.textContent = NC_CTA[st.modo] || 'Delegar';
       if (!r.ok) { gerr.textContent = r.error || 'No se pudo delegar'; return; }
-      s.cerrar();
-      const id = r.chat_id; if (!id) { avisoError('Delegado, pero el servidor no devolvió chat_id'); cargarInbox({ reset: true }); return; }
+      const id = r.chat_id; if (!id) { gerr.textContent = 'Delegado, pero el servidor no devolvió el chat.'; cargarInbox({ reset: true }); return; }
       let c = INBOX.rows.get(id); if (!c) c = await filaDesdeServidor(id);
-      if (c) { c.delegado = true; c.nombre = r.nombre || c.nombre || st.nombre; c.auto = c.auto || { id: st.auto.id, nombre: st.auto.nombre, precio: st.auto.precio, portada: st.auto.portada }; pintarFila(c, { arriba: true }); pintarBell(); }
-      irTab('inicio'); abrirChat(id);
-      const nota = (r.ya_delegado ? '↩ Ya estaba delegado · ' : '✅ Delegado · ') + ({ silencio: 'entró callado', texto: 'con tu texto', bot: 'se presentó a tu nombre', info: 'mandó la ficha', fotos: 'mandó las fotos', ubicacion: 'mandó la ubicación', cotizar: 'mandó la cotización', cita: 'agendó la cita' }[st.modo] || st.modo) + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : '');
-      notaLocal(id, nota);
+      if (c) { c.delegado = true; c.nombre = r.nombre || c.nombre; c.auto = c.auto || { id: st.auto.id, nombre: st.auto.nombre, precio: st.auto.precio, portada: st.auto.portada }; pintarFila(c, { arriba: true }); pintarBell(); }
+      // la nota y la burbuja de lo enviado quedan en el hilo: se pintan al abrir el chat (lógica existente)
+      notaLocal(id, (r.ya_delegado ? 'Ya estaba delegado · ' : 'Delegado · ') + (NC_NOTA[st.modo] || st.modo) + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : ''));
       if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r);
       if (st.modo === 'cita') citasInvalidar();
+      st.listo = { id, nombre: r.nombre || (c && c.nombre) || '' };
+      paso3();
     };
+  };
+
+  // ── ¡LISTO! (mismo sheet): check verde animado + confeti, card del comprador, Ir al chat / Agregar otro ──
+  const paso3 = () => {
+    setBack(null); s.setTitulo('Nuevo comprador'); arriba();
+    const L = st.listo, nom = L.nombre || 'Comprador nuevo';
+    const cf = Array.from({ length: 8 }, (_, i) => '<i class="cf" style="--r:' + (i * 45 + 20) + 'deg"></i>').join('');
+    box.innerHTML = pasos(3) + '<div class="listo"><div class="ok"><div class="ring"></div>' + cf + '<div class="c">' + ico('check') + '</div></div><h2>¡Listo!</h2><p>El comprador se ha agregado y Seb se encargará de este chat.</p>' +
+      '<div class="card"><div class="who"><div class="ava">' + esc(iniDe({ nombre: nom })) + '</div><div class="tx"><div class="n">' + esc(nom) + '</div><div class="num">+52 ' + esc(telFmt10(st.tel)) + '</div></div></div><div class="estado"><span class="dot"></span>Seb ahora atiende este chat</div></div></div>';
+    s.setPie('<button class="cta" id="nc-ir">Ir al chat</button><button class="cta sec" id="nc-otro-c">Agregar otro comprador</button>');
+    s.pie.querySelector('#nc-ir').onclick = () => { s.cerrar(); irTab('inicio'); abrirChat(L.id); };
+    s.pie.querySelector('#nc-otro-c').onclick = () => { st.tel = telInicial(); st.auto = st.autos && st.autos.length ? st.autos[0] : null; st.modo = null; st.listo = null; paso1(); };
   };
   paso1();
 }
 async function autosParaDelegar(){
   // catálogo del universo: autos_mios (con portada) si ya está en caché o responde rápido; si no, tenant_info.autos
   try { if (!AUTOS) await cargarAutos({ silencioso: true }); } catch(e){}
-  const mios = (AUTOS || []).filter(a => a.estado !== 'vendido').map(a => ({ id: a.id, nombre: a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio, portada: a.portada }));
+  const mios = (AUTOS || []).filter(a => a.estado !== 'vendido').map(a => ({ id: a.id, nombre: a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), anio: a.anio || null, precio: a.precio, portada: a.portada }));
   if (mios.length) return mios;
-  return ((TENANT && TENANT.autos) || []).map(a => ({ id: a.id, nombre: a.nombre, precio: a.precio, portada: a.portada || null }));
+  return ((TENANT && TENANT.autos) || []).map(a => ({ id: a.id, nombre: a.nombre, anio: a.anio || null, precio: a.precio, portada: a.portada || null }));
 }
 
 // ══════════ AUTOS (autos_mios) + SUBIR AUTO ══════════
