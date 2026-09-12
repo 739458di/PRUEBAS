@@ -705,6 +705,9 @@ async function filaDesdeServidor(chatId){
 const HILOS = new Map();
 function hiloDe(id){ if (!HILOS.has(id)) HILOS.set(id, { id, chat: null, msgs: [], keys: new Set(), hay_mas: true, ult_ts: 0, cargado: false, leido: false }); return HILOS.get(id); }
 const keyDe = (m) => m.id != null && m.id !== '' ? 'id:' + m.id : (m.msg_id ? 'mid:' + m.msg_id : (m.local ? 'l:' + m.local : 'x:' + (m.ts || 0) + ':' + String(m.texto || '').slice(0, 40)));
+// Igualdad de texto tolerante para casar la burbuja local de una ACCIÓN con el mensaje real del servidor
+// (el simulador antepone "[prueba] ", y el servidor puede recortar espacios): así no se pinta doble.
+const normTxt = (t) => String(t || '').replace(/^\s*\[prueba\]\s*/i, '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 160);
 function textoDe(m){ if (m.texto) return m.texto; if (m.media) return m.media.tipo === 'imagen' ? '📷 Foto' : m.media.tipo === 'ubicacion' ? '📍 Ubicación' : m.media.tipo === 'audio' ? '🎤 Audio' : '📎 Archivo'; return ''; }
 function mezclar(h, mensajes){
   const nuevos = [];
@@ -712,7 +715,7 @@ function mezclar(h, mensajes){
     const k = keyDe(m);
     if (h.keys.has(k)) { if (m.dir === 'out' && m.emisor !== 'sistema') { const ya = h.msgs.find(x => keyDe(x) === k || (m.id != null && x.id === m.id)); if (ya && ya.estado !== 'entregado' && ya.estado !== 'error') { ya.estado = 'entregado'; nuevos.push(Object.assign(ya, { _eco: true })); } } continue; }
     // ECO de un optimista mío (mismo texto saliente, <60 s): adopta el id del servidor en vez de duplicar
-    if (m.dir === 'out' && m.emisor !== 'sistema') { const op = h.msgs.find(x => x.local && x.estado !== 'error' && x.texto === m.texto && Math.abs(ms(m.ts) - ms(x.ts)) < 60000 && !x.id); if (op) { op.id = m.id; op.msg_id = m.msg_id; op.estado = 'entregado'; h.keys.add(k); nuevos.push(Object.assign(op, { _eco: true })); continue; } }
+    if (m.dir === 'out' && m.emisor !== 'sistema') { const op = h.msgs.find(x => x.local && x.estado !== 'error' && normTxt(x.texto) === normTxt(m.texto) && Math.abs(ms(m.ts) - ms(x.ts)) < 120000 && !x.id); if (op) { op.id = m.id; op.msg_id = m.msg_id; op.estado = 'entregado'; h.keys.add(k); nuevos.push(Object.assign(op, { _eco: true })); continue; } }
     h.keys.add(k); h.msgs.push(m); nuevos.push(m);
     if (ms(m.ts) > h.ult_ts) h.ult_ts = ms(m.ts);
   }
