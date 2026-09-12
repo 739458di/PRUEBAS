@@ -102,14 +102,14 @@ a{color:var(--pri2)}
 .fila .cd svg{width:12px;height:12px}
 /* CALENDARIO de Citas (orden owner 2026-09-12) */
 .cal{background:var(--s1);border-radius:20px;padding:14px 12px 10px;margin-bottom:12px}
-.cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.cal-h b{font-size:16px;font-weight:700;text-transform:capitalize}
+.cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.cal-h b{font-size:16px;font-weight:700}
 .cal-nav{width:36px;height:36px;border-radius:12px;background:var(--s2);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center}
 .cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .cal-g .wd{font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;font-weight:600}
 .cal-d{height:46px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font-size:14px}
 .cal-d.off{color:var(--muted);opacity:.4}.cal-d.hoy{box-shadow:inset 0 0 0 1.5px var(--pri2)}.cal-d.on{background:var(--pri)}
 .cal-d.has{font-weight:700}.cal-d .dots{display:flex;gap:3px;height:5px}.cal-d .dots i{width:5px;height:5px;border-radius:50%;background:var(--pos)}.cal-d.on .dots i{background:#fff}.cal-d.pas .dots i{background:var(--muted)}
-.cal-sel{font-size:13px;color:var(--txt2);margin:2px 4px 10px;text-transform:capitalize}
+.cal-sel{font-size:13px;color:var(--txt2);margin:2px 4px 10px}
 .btn-c.sec{background:var(--s2);box-shadow:none;color:#fff}
 .fila.sk{pointer-events:none}
 .fila.sk .ava{background:var(--s1)}
@@ -1738,9 +1738,10 @@ function pintarCalendario(){
     const pas = dt < new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     g += '<button type="button" class="cal-d' + (n ? ' has' : '') + (k === claveDia(hoy) ? ' hoy' : '') + (k === sel ? ' on' : '') + (pas ? ' pas' : '') + '" data-k="' + k + '">' + d + (n ? '<span class="dots">' + '<i></i>'.repeat(Math.min(n, 3)) + '</span>' : '') + '</button>';
   }
-  const titulo = m.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  const cap1 = t => t.charAt(0).toUpperCase() + t.slice(1);
+  const titulo = cap1(m.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }));
   const lst = sel ? (porDia[sel] || []) : [];
-  const selTxt = sel ? CITAS.dia.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
+  const selTxt = sel ? cap1(CITAS.dia.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })) : '';
   c.innerHTML = '<div class="cal"><div class="cal-h"><button type="button" class="cal-nav" data-d="-1">‹</button><b>' + esc(titulo) + '</b><button type="button" class="cal-nav" data-d="1">›</button></div><div class="cal-g">' + g + '</div></div>' +
     (sel ? '<div class="cal-sel">' + esc(selTxt) + (lst.length ? ' · ' + lst.length + (lst.length === 1 ? ' cita' : ' citas') : ' · sin citas') + '</div>' + lst.map(citaHTML).join('') : '');
   c.querySelectorAll('.cal-nav').forEach(b => { b.onclick = () => { CITAS.mes = new Date(m.getFullYear(), m.getMonth() + Number(b.dataset.d), 1); pintarCalendario(); }; });
