@@ -23,7 +23,8 @@ const { responderCont } = require('../lib/seb/continuacion.js');
 const citasVivas = require('../lib/seb/citas-vivas.js');
 const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
 const DEMO = require('../lib/seb/demo.js');
-const SUBIR = require('../lib/seb/subir-chat.js');   // SUBIR AUTO POR CHAT (2026-09-12): alta conversacional + consignación virtual    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
+const SUBIR = require('../lib/seb/subir-chat.js');
+const AUTOBOTON = require('../lib/seb/auto-boton.js');   // LA IA APRIETA LOS BOTONES (2026-09-12): solo PRUEBAS# por ahora   // SUBIR AUTO POR CHAT (2026-09-12): alta conversacional + consignación virtual    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
 // aprobada, botones, opener de delegar en t0, programados, rescates) sale por lib/seb/mensajeria.js: resuelve chat →
 // teléfono real → delegación viva → carril de pruebas → idempotencia por `clave` (tabla envios) → puente → recibo.
@@ -254,7 +255,17 @@ module.exports = async function handler(req, res) {
             let telDm = req.body.telefono;
             if (!telDm && req.body.chat_id) { const cDm = await U.chatPorId(Number(req.body.chat_id) || 0); if (!cDm || Number(cDm.tenant_id) !== Number(tDm.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' }); telDm = cDm.telefono; }
             const r = await DEMO.responder({ tenant: tDm, tel: telDm, texto: req.body.texto });
-            return res.status(r.ok ? 200 : 400).json(Object.assign({ simulado: true, chat_id: req.body.chat_id ? Number(req.body.chat_id) : undefined }, r));
+            // ══ AUTO-BOTÓN (orden owner 2026-09-12, SOLO PRUEBAS#): la IA decide si un humano apretaría un botón con este mensaje y lo aprieta
+            //    por la MISMA puerta que la UI (accion_v2 / cotizar_v2 / cita_v2 con K_PANEL + vendedor=demo). Sin gancho, sin maquillaje.
+            let autoBoton = null;
+            if (r.ok && r.chat_id && process.env.K_PANEL && req.body.sin_auto_boton !== true) {
+                try {
+                    const chatAB = await U.chatPorId(Number(r.chat_id));
+                    const puerta = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tDm.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tDm.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
+                    autoBoton = await AUTOBOTON.correr({ tenant: tDm, chat: chatAB, texto: req.body.texto, msgId: r.msg_id, puerta, rastro: (txt) => DEMO.sistema(tDm, telDm, txt) });
+                } catch (e) { autoBoton = { resultado: 'error', error: e.message }; }
+            }
+            return res.status(r.ok ? 200 : 400).json(Object.assign({ simulado: true, chat_id: req.body.chat_id ? Number(req.body.chat_id) : undefined, auto_boton: autoBoton }, r));
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
