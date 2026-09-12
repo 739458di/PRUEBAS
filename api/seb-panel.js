@@ -815,7 +815,7 @@ module.exports = async function handler(req, res) {
             //                machote seco de los botones del chat (ejecutarAccion = una sola puerta): sin saludo, sin "soy el asistente".
             // Al comprador NO le llega NADA más que lo elegido: nada de "chat delegado", nada de "el bot…". Jamás se manda un
             // machote que el vendedor no eligió (una UI vieja/cacheada no puede disparar nada).
-            const MODOS_MSJ = ['silencio', 'texto', 'bot'], MODOS_ACC = ['info', 'fotos', 'ubicacion', 'cotizar', 'cita'];
+            const MODOS_MSJ = ['silencio', 'texto', 'bot'], MODOS_ACC = ['info', 'fotos', 'ubicacion', 'cotizar', 'cita', 'primer_mensaje'];
             const modoRaw = String(body.modo_entrada || '');
             const modoE = MODOS_MSJ.concat(MODOS_ACC).includes(modoRaw) ? modoRaw : 'silencio';
             const esAccion = MODOS_ACC.includes(modoE);
@@ -2071,6 +2071,14 @@ module.exports = async function handler(req, res) {
                     if (!env.ok) return R(200, { ok: false, error: env.error || 'no se pudo mandar el machote', auto: nombreAuto });
                     return R(200, { ok: true, simulado: !!env.simulado, auto: nombreAuto, enviado: (env.simulado ? simTxt() + 'machote de info' : 'machote completo de ' + nombreAuto), texto_enviado: String(mch), machote: String(mch).slice(0, 150), msg_id: env.msg_id || null, clave: claveB, repetido: !!env.repetido });
                 }
+                if (accB === 'primer_mensaje') {
+                    // PRIMER MENSAJE (orden owner 2026-09-12): el vendedor se presenta en primera persona y pregunta si le interesa el auto.
+                    const nomV = String((tAcc && tAcc.nombre) || '').trim() || 'el vendedor';
+                    const txt1 = 'Hola, mi nombre es ' + nomV + ', del ' + nombreAuto + '. Te escribo para ver si te interesaba comprar el auto.';
+                    const env = await mandar({ texto: txt1, manual: true, meta: { auto: nombreAuto, tipo: 'primer_mensaje' } });
+                    if (!env.ok) return R(200, { ok: false, error: env.error || 'no se pudo mandar el primer mensaje', auto: nombreAuto });
+                    return R(200, { ok: true, simulado: !!env.simulado, auto: nombreAuto, enviado: (env.simulado ? simTxt() : '') + 'primer mensaje', texto_enviado: txt1 });
+                }
                 if (accB === 'cita_propuesta') {
                     // 📅 AÚN SIN HORARIO (orden owner 2026-09-12): sale la PROPUESTA de cita — busca día y hora — sin crear la cita todavía.
                     const nomP = String(B.comprador_nombre || '').trim().split(/\s+/)[0] || '';
@@ -2542,7 +2550,7 @@ module.exports = async function handler(req, res) {
                 const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
                 const acc = String(req.body.accion || '');
-                if (!['fotos', 'ubicacion', 'info', 'cita_propuesta'].includes(acc)) return err(400, "accion debe ser 'fotos' | 'ubicacion' | 'info' | 'cita_propuesta'");
+                if (!['fotos', 'ubicacion', 'info', 'cita_propuesta', 'primer_mensaje'].includes(acc)) return err(400, "accion debe ser 'fotos' | 'ubicacion' | 'info' | 'cita_propuesta' | 'primer_mensaje'");
                 const r = await MSJ.conClave(clave, { tenantId: TV, chatId: c.id, accion: 'accion_v2:' + acc, sesionId: SID }, async () => {
                     const rA = await ejecutarAccion(tV, c.telefono, acc, { clave, via: 'v2', comprador_nombre: c.nombre || '' });
                     const o = rA.out || {};
