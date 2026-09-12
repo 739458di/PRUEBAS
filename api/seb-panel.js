@@ -2460,10 +2460,30 @@ module.exports = async function handler(req, res) {
                     }
                     rows = await query(`SELECT ${COLS} FROM conversaciones WHERE ${w.join(' AND ')} ORDER BY ult_msg_ts DESC LIMIT ?`, a.concat([limit + SOBRA]));
                 }
-                const lista = []; let consumidas = 0;
+                // ══ CITAS ARRIBA (orden owner 2026-09-12): los chats con cita próxima van SIEMPRE hasta arriba (verde + cronómetro + auto).
+                // Solo en la primera página y sin búsqueda; se leen aparte para que no dependan de la paginación por último mensaje.
+                const nowC = Date.now();
+                const citaMap = {};
+                const fijados = [];
+                if (!cursor && !q && filtro !== 'sugerencia') {
+                    const proximas = await query(`SELECT m.chat_id, MIN(m.cita_ts) cita_ts FROM citas_match m
+                                                  WHERE COALESCE(m.tenant_id,0) = ? AND m.cita_ts >= ? AND m.estado NOT IN ('reemplazada','cancelada','rechazo','vencida','realizada')
+                                                  GROUP BY m.chat_id ORDER BY cita_ts ASC LIMIT 30`, [TV, nowC - 3 * 3600000]).catch(() => []);
+                    const idsC = proximas.map(r => Number(r.chat_id)).filter(Boolean);
+                    if (idsC.length) {
+                        const det = await query(`SELECT chat_id, cita_ts, auto_nombre, estado, comprador_nombre FROM citas_match WHERE chat_id IN (${ph(idsC)}) AND cita_ts >= ? AND estado NOT IN ('reemplazada','cancelada','rechazo','vencida','realizada') ORDER BY cita_ts ASC`, idsC.concat([nowC - 3 * 3600000])).catch(() => []);
+                        for (const d of det) if (!citaMap[Number(d.chat_id)]) citaMap[Number(d.chat_id)] = { cita_ts: Number(d.cita_ts), auto: d.auto_nombre || null, estado: d.estado === 'match' ? 'confirmada' : 'match' };
+                        const filasC = await query(`SELECT ${COLS} FROM conversaciones WHERE id IN (${ph(idsC)}) AND COALESCE(tenant_id,0) = ?`, idsC.concat([TV])).catch(() => []);
+                        const porId = {}; for (const f of filasC) porId[Number(f.id)] = f;
+                        for (const id of idsC) if (porId[id]) fijados.push(porId[id]);
+                    }
+                }
+                const fijadosIds = new Set(fijados.map(f => Number(f.id)));
+                const lista = fijados.slice(); let consumidas = 0;
                 for (const c of rows) {
-                    if (lista.length >= limit) break;
+                    if (lista.length >= limit + fijados.length) break;
                     consumidas++;
+                    if (fijadosIds.has(Number(c.id))) continue;
                     const tel10 = String(c.telefono || '').replace(/\D/g, '').slice(-10);
                     const esDueno = Number(c.is_dueno_chat) === 1 || (!TV && duenos.has(tel10));
                     if (esDueno && (filtro === 'compradores' || filtro === 'sugerencia')) continue;
@@ -2492,7 +2512,8 @@ module.exports = async function handler(req, res) {
                         ult_ts: Number(c.ult_msg_ts) || 0, no_leidos: Number(c.no_leidos) || 0,
                         sugerencia: !!pendMap[String(c.telefono)], delegado: !!d,
                         auto: a ? autoJson(a, portadas) : (d && d.auto_nombre ? { id: d.auto_id == null ? null : Number(d.auto_id), web_id: null, nombre: d.auto_nombre, precio: null, portada: null } : null),
-                        bot: botInbox(c), ghost_dias: ghostDias(c)
+                        bot: botInbox(c), ghost_dias: ghostDias(c),
+                        cita: citaMap[Number(c.id)] || null   // { cita_ts, auto, estado } → fila verde, arriba, con cronómetro
                     };
                 });
                 return okJ({ chats, cursor_next, filtro, q, tenant_id: TV });

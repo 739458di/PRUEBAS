@@ -95,6 +95,22 @@ a{color:var(--pri2)}
 .fila .hora.new{color:var(--pri2)}
 .fila .bd{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--pri);color:#fff;font-size:11px;font-weight:700;display:none;align-items:center;justify-content:center}
 .fila .bd.on{display:flex}
+/* CITA PRÓXIMA (orden owner 2026-09-12): fila verde, arriba, con cronómetro y auto */
+.fila.cc{background:linear-gradient(90deg,rgba(53,224,176,.14),rgba(53,224,176,.04));box-shadow:inset 3px 0 0 var(--pos)}
+.fila.cc .prev{color:#9ff0d6}
+.fila .cd{display:inline-flex;align-items:center;gap:4px;color:var(--pos);font-weight:700}
+.fila .cd svg{width:12px;height:12px}
+/* CALENDARIO de Citas (orden owner 2026-09-12) */
+.cal{background:var(--s1);border-radius:20px;padding:14px 12px 10px;margin-bottom:12px}
+.cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.cal-h b{font-size:16px;font-weight:700;text-transform:capitalize}
+.cal-nav{width:36px;height:36px;border-radius:12px;background:var(--s2);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-g .wd{font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;font-weight:600}
+.cal-d{height:46px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font-size:14px}
+.cal-d.off{color:var(--muted);opacity:.4}.cal-d.hoy{box-shadow:inset 0 0 0 1.5px var(--pri2)}.cal-d.on{background:var(--pri)}
+.cal-d.has{font-weight:700}.cal-d .dots{display:flex;gap:3px;height:5px}.cal-d .dots i{width:5px;height:5px;border-radius:50%;background:var(--pos)}.cal-d.on .dots i{background:#fff}.cal-d.pas .dots i{background:var(--muted)}
+.cal-sel{font-size:13px;color:var(--txt2);margin:2px 4px 10px;text-transform:capitalize}
+.btn-c.sec{background:var(--s2);box-shadow:none;color:#fff}
 .fila.sk{pointer-events:none}
 .fila.sk .ava{background:var(--s1)}
 .fila.sk .l1{height:14px;width:55%;border-radius:7px;background:var(--s1)}
@@ -567,7 +583,7 @@ select.inp option{background:#09183F;color:#fff}
   <div class="scr" id="scr-citas">
     <div class="hdr">
       <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div><div class="der"></div></div>
-      <div class="titulo"><h1>Citas</h1></div>
+      <div class="titulo"><h1>Citas</h1><button class="btn-c sec" id="ci-vista" onclick="toggleVistaCitas()"><i data-ico="calendar"></i>Calendario</button></div>
     </div>
     <div class="citas-pills"><div class="pills" id="ci-pills">
       <button class="pill on" data-e="proximas" onclick="setCitasEstado('proximas')">Próximas</button>
@@ -972,13 +988,21 @@ function previewDe(c){
   return (quien ? '<span class="tu">' + esc(quien) + '</span>' : '') + esc(t || (c.delegado ? 'Conversación delegada' : 'Sin mensajes'));
 }
 const avaHTML = (c, extra) => '<div class="ava' + (c.ghost_dias >= 1 ? ' gh' : '') + (extra ? ' ' + extra : '') + '">' + (c.foto ? '<img src="' + esc(c.foto) + '" alt="" loading="lazy">' : esc(iniDe(c))) + '</div>';
+// cronómetro de la cita: "en 2 h 15 min" · "en 3 d 4 h" · "es ahora" · "cita pasada"
+function cuentaRegresiva(ts){
+  const d = (ms(ts) || 0) - Date.now(); if (!ms(ts)) return '';
+  if (d <= -3 * 3600000) return 'cita pasada'; if (d <= 0) return 'es ahora';
+  const m = Math.floor(d / 60000), h = Math.floor(m / 60), dd = Math.floor(h / 24);
+  if (dd >= 1) return 'en ' + dd + ' d ' + (h % 24) + ' h'; if (h >= 1) return 'en ' + h + ' h ' + String(m % 60).padStart(2, '0') + ' min'; return 'en ' + m + ' min';
+}
+const citaPrevHTML = (c) => '<span class="cd">' + ico('clock') + esc(cuentaRegresiva(c.cita.cita_ts)) + '</span> · ' + esc(c.cita.auto || 'Cita agendada');
 function filaHTML(c){
   return avaHTML(c) +
-    '<div class="mid"><div class="nom"><span class="nomt">' + esc(c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''))) + '</span>' + (c.sugerencia ? '<span class="sug" title="Con sugerencia"></span>' : '') + '</div><div class="prev">' + previewDe(c) + '</div></div>' +
+    '<div class="mid"><div class="nom"><span class="nomt">' + esc(c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''))) + '</span>' + (c.sugerencia ? '<span class="sug" title="Con sugerencia"></span>' : '') + '</div><div class="prev">' + (c.cita && c.cita.cita_ts ? citaPrevHTML(c) : previewDe(c)) + '</div></div>' +
     '<div class="der"><span class="hora' + (c.no_leidos > 0 ? ' new' : '') + '">' + esc(horaCorta(c.ult_ts)) + '</span><span class="bd' + (c.no_leidos > 0 ? ' on' : '') + '">' + (c.no_leidos > 99 ? '99+' : (c.no_leidos || 0)) + '</span></div>';
 }
 function crearFila(c){
-  const el = document.createElement('div'); el.className = 'fila'; el.tabIndex = 0; el.setAttribute('role', 'button'); el.dataset.id = c.chat_id;
+  const el = document.createElement('div'); el.className = 'fila' + (c.cita && c.cita.cita_ts ? ' cc' : ''); el.tabIndex = 0; el.setAttribute('role', 'button'); el.dataset.id = c.chat_id;
   el.innerHTML = filaHTML(c);
   el.onclick = () => abrirChat(c.chat_id);
   el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirChat(c.chat_id); } };
@@ -986,12 +1010,21 @@ function crearFila(c){
   if (HOVER) el.onmouseenter = () => { const h = HILOS.get(c.chat_id); if (!h || !h.cargado) cargarHilo(c.chat_id, { previo: true }).catch(() => {}); };   // prefetch del hilo al hover (desktop)
   return el;
 }
+// "arriba" respeta a los fijados: una fila con cita va al tope; una sin cita va debajo de la última con cita
+function subirFila(lista, el, conCita){
+  if (conCita) { if (el !== lista.firstElementChild) lista.prepend(el); return; }
+  const fij = lista.querySelectorAll('.fila.cc'); const ult = fij.length ? fij[fij.length - 1] : null;
+  if (!ult) { if (el !== lista.firstElementChild) lista.prepend(el); } else if (ult.nextElementSibling !== el) ult.after(el);
+}
 function pintarFila(c, { arriba } = {}){
   const lista = $('lista'); let el = lista.querySelector('.fila[data-id="' + CSS.escape(String(c.chat_id)) + '"]');
-  if (el) { el.innerHTML = filaHTML(c); if (arriba && el !== lista.firstElementChild) lista.prepend(el); }
-  else { el = crearFila(c); const v = lista.querySelector('.vacio'); if (v) v.remove(); if (arriba) lista.prepend(el); else { const m = lista.querySelector('.masbtn'); if (m) lista.insertBefore(el, m); else lista.appendChild(el); } }
+  const conCita = !!(c.cita && c.cita.cita_ts);
+  if (el) { el.innerHTML = filaHTML(c); el.classList.toggle('cc', conCita); if (arriba || conCita) subirFila(lista, el, conCita); }
+  else { el = crearFila(c); const v = lista.querySelector('.vacio'); if (v) v.remove(); if (arriba || conCita) { lista.appendChild(el); subirFila(lista, el, conCita); } else { const m = lista.querySelector('.masbtn'); if (m) lista.insertBefore(el, m); else lista.appendChild(el); } }
   return el;
 }
+// el cronómetro late cada 30 s sin repintar toda la fila
+setInterval(() => { document.querySelectorAll('#lista .fila.cc .cd').forEach(cd => { const el = cd.closest('.fila'); const c = INBOX.rows.get(Number(el.dataset.id)); if (c && c.cita) cd.innerHTML = ico('clock') + esc(cuentaRegresiva(c.cita.cita_ts)); }); }, 30000);
 function pintarBell(){ let n = 0; INBOX.rows.forEach(c => { n += Number(c.no_leidos) || 0; }); const b = $('bell-b'); b.textContent = n > 99 ? '99+' : n; b.classList.toggle('on', n > 0); }
 function bellClick(){ irTab('inicio'); setFiltro('todos'); $('lista').scrollTo({ top: 0, behavior: 'smooth' }); }
 async function cargarInbox({ reset, mas } = {}){
@@ -1337,7 +1370,7 @@ function abrirCita(){
     if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo agendar'; return; }
     s.cerrar();
     const c = r.cita || {}; burbujaSalida(id, textoEnviado(r, 'Cita agendada · ' + (c.fecha || st.fecha) + ' ' + (c.hora || st.hora) + (c.auto ? ' · ' + c.auto : '')), r);
-    const row = INBOX.rows.get(id); if (row) { pintarFila(row); }
+    const row = INBOX.rows.get(id); if (row) { const cf = r.cita || {}; const dts = citaFecha({ fecha: cf.fecha || st.fecha, hora: cf.hora || st.hora }); row.cita = { cita_ts: dts ? dts.getTime() : null, auto: cf.auto || (auto && auto.nombre) || null, estado: 'confirmada' }; pintarFila(row, { arriba: true }); }
     citasInvalidar();   // la pestaña Citas se vuelve a pedir al abrirla (el timbre `cambio:cita` también lo hace)
   };
 }
@@ -1615,7 +1648,7 @@ function pintarAutos(){
   AUTOS.forEach(a => { delete a._nuevo; });
 }
 // ══════════ CITAS (citas_mias) — cache por pestaña, refetch al abrir, refresco por timbre `cambio:cita` ══════════
-const CITAS = { estado: 'proximas', cache: { proximas: null, pasadas: null } };
+const CITAS = { estado: 'proximas', cache: { proximas: null, pasadas: null }, vista: 'lista', mes: null, dia: null };
 const REC_TIPO = { vispera: 'Víspera', dia: 'Día de la cita', dia_cita: 'Día de la cita', dia_de_la_cita: 'Día de la cita', hora_antes: '1 h antes', '1h': '1 h antes', '1h_antes': '1 h antes', una_hora: '1 h antes', en_camino: 'En camino', camino: 'En camino' };
 const REC_ESTADO = { enviada: 'Enviado', pendiente: 'Pendiente', cancelada: 'Cancelado', saltada: 'Saltado', pausada: 'Pausado' };
 const REC_ICONO = { enviada: 'checks', pendiente: 'clock', cancelada: 'xcircle', saltada: 'xcircle', pausada: 'pause' };
@@ -1676,7 +1709,44 @@ function citaHTML(ci){
     (recs.length ? '<div class="tl">' + recs.map(recHTML).join('') + '</div>' : '') +
   '</button>';
 }
+// ══ CALENDARIO (orden owner 2026-09-12): botón Lista ⇄ Calendario; mini mes con puntitos en los días con cita; vacío si no hay
+function toggleVistaCitas(){
+  CITAS.vista = CITAS.vista === 'cal' ? 'lista' : 'cal';
+  const b = $('ci-vista'); b.innerHTML = CITAS.vista === 'cal' ? ico('more') + 'Lista' : ico('calendar') + 'Calendario';
+  const pills = $('ci-pills').parentElement; pills.style.display = CITAS.vista === 'cal' ? 'none' : '';
+  if (CITAS.vista === 'cal') { if (!CITAS.mes) { const h = new Date(); CITAS.mes = new Date(h.getFullYear(), h.getMonth(), 1); } pintarCalendario(); cargarCitasTodas(); }
+  else pintarCitas();
+}
+async function cargarCitasTodas(){
+  const faltan = ['proximas', 'pasadas'].filter(e => !CITAS.cache[e]);
+  await Promise.all(faltan.map(e => correr('citas_mias:' + e, async () => { const r = await apiGet('citas_mias', { estado: e }); if (r.ok) CITAS.cache[e] = Array.isArray(r.citas) ? r.citas : []; })));
+  if (CITAS.vista === 'cal') pintarCalendario();
+}
+function citasTodas(){ const v = new Map(); [].concat(CITAS.cache.proximas || [], CITAS.cache.pasadas || []).forEach(ci => { if (!v.has(ci.id)) v.set(ci.id, ci); }); return [...v.values()]; }
+const claveDia = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function pintarCalendario(){
+  const c = $('citas-lista'); const m = CITAS.mes || new Date(); const hoy = new Date();
+  const porDia = {}; citasTodas().forEach(ci => { const d = citaFecha(ci); if (!d) return; const k = claveDia(d); (porDia[k] = porDia[k] || []).push(ci); });
+  const primero = new Date(m.getFullYear(), m.getMonth(), 1); const off = (primero.getDay() + 6) % 7;   // semana empieza en lunes
+  const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+  const sel = CITAS.dia && CITAS.dia.getMonth() === m.getMonth() && CITAS.dia.getFullYear() === m.getFullYear() ? claveDia(CITAS.dia) : null;
+  let g = ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(w => '<div class="wd">' + w + '</div>').join('');
+  for (let i = 0; i < off; i++) g += '<div class="cal-d off"></div>';
+  for (let d = 1; d <= dias; d++) {
+    const dt = new Date(m.getFullYear(), m.getMonth(), d), k = claveDia(dt), n = (porDia[k] || []).length;
+    const pas = dt < new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    g += '<button type="button" class="cal-d' + (n ? ' has' : '') + (k === claveDia(hoy) ? ' hoy' : '') + (k === sel ? ' on' : '') + (pas ? ' pas' : '') + '" data-k="' + k + '">' + d + (n ? '<span class="dots">' + '<i></i>'.repeat(Math.min(n, 3)) + '</span>' : '') + '</button>';
+  }
+  const titulo = m.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  const lst = sel ? (porDia[sel] || []) : [];
+  const selTxt = sel ? CITAS.dia.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
+  c.innerHTML = '<div class="cal"><div class="cal-h"><button type="button" class="cal-nav" data-d="-1">‹</button><b>' + esc(titulo) + '</b><button type="button" class="cal-nav" data-d="1">›</button></div><div class="cal-g">' + g + '</div></div>' +
+    (sel ? '<div class="cal-sel">' + esc(selTxt) + (lst.length ? ' · ' + lst.length + (lst.length === 1 ? ' cita' : ' citas') : ' · sin citas') + '</div>' + lst.map(citaHTML).join('') : '');
+  c.querySelectorAll('.cal-nav').forEach(b => { b.onclick = () => { CITAS.mes = new Date(m.getFullYear(), m.getMonth() + Number(b.dataset.d), 1); pintarCalendario(); }; });
+  c.querySelectorAll('.cal-d[data-k]').forEach(b => { b.onclick = () => { const [y, mo, d] = b.dataset.k.split('-').map(Number); CITAS.dia = (sel === b.dataset.k) ? null : new Date(y, mo - 1, d); pintarCalendario(); }; });
+}
 function pintarCitas(){
+  if (CITAS.vista === 'cal') return pintarCalendario();
   const c = $('citas-lista'); const l = CITAS.cache[CITAS.estado]; if (!l) return;
   if (!l.length) { c.innerHTML = '<div class="vacio"><div class="vic">' + ico(CITAS.estado === 'pasadas' ? 'calendar' : 'calcheck') + '</div><b>' + (CITAS.estado === 'pasadas' ? 'Sin citas pasadas' : 'Aún no tienes citas') + '</b>' + (CITAS.estado === 'pasadas' ? 'Aquí quedarán las que ya pasaron.' : 'Se agendan desde el chat con un toque.') + '</div>'; return; }
   c.innerHTML = l.map(citaHTML).join('');
