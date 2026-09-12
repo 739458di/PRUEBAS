@@ -643,6 +643,9 @@ async function conectar() {
     U.sock = makeWASocket({
         version,
         auth: { creds: state.creds, keys },
+        // VENTANA DE VINCULACIÓN (orden owner 2026-09-12): cada ref de QR vive 60 s (Baileys usaba 20 s en los siguientes) →
+        // el código de 8 letras aguanta ~6 min mientras el vendedor abre WhatsApp y lo teclea; antes moría a los ~2 min.
+        qrTimeout: 60000,
         logger,
         printQRInTerminal: false,
         syncFullHistory: false,
@@ -710,7 +713,12 @@ async function conectar() {
         if (gen !== U.genConexion) return;   // evento de un socket ZOMBI → ignorar por completo
         const { connection, lastDisconnect, qr } = u;
         if (qr) {
-            U.ultimoQR = qr; U.estado = 'esperando_qr'; reportarSesion(tenant.id, 'esperando_qr', 'escanea el QR');
+            U.ultimoQR = qr;
+            // CÓDIGO PENDIENTE: mientras el código de 8 letras siga vivo (< 6 min) el estado NO regresa a 'esperando_qr' — el vendedor
+            // lo está tecleando y la web/Sales Brain leen este estado; el QR nuevo solo se guarda por si alguien escanea.
+            const codigoVivo = U.estado === 'esperando_codigo' && U.codigoTs && (Date.now() - U.codigoTs) < 6 * 60000;
+            if (codigoVivo) { console.log('[sesión] tenant ' + tenant.id + ' → QR nuevo, código de vinculación sigue vivo'); return; }
+            U.estado = 'esperando_qr'; reportarSesion(tenant.id, 'esperando_qr', 'escanea el QR');
             console.log('\n================ ESCANEA ESTE QR CON WHATSAPP ================\n');
             qrcode.generate(qr, { small: true });
             console.log('\nWhatsApp → Dispositivos vinculados → Vincular un dispositivo\n');
