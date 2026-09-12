@@ -48,8 +48,8 @@ a{color:var(--pri2)}
 .wm{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1;color:#fff;white-space:nowrap}
 .wm b{font-weight:700;color:var(--pri2)}
 .hdr .der{display:flex;align-items:center;gap:12px}
-.seb{width:96px;height:118px;overflow:hidden;position:relative;flex:0 0 96px;margin-bottom:-54px;z-index:3}   /* busto completo (cabeza, torso y pulgar), se asoma por debajo del header como en la referencia */
-.seb img{position:absolute;width:128px;left:-14px;top:-2px;user-select:none;-webkit-user-drag:none;pointer-events:none;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
+.seb{width:116px;height:118px;overflow:hidden;position:relative;flex:0 0 116px;margin-bottom:-54px;z-index:1}   /* busto completo (cabeza, torso y pulgar), se asoma por debajo del header como en la referencia */
+.seb img{position:absolute;width:128px;left:-2px;top:-2px;user-select:none;-webkit-user-drag:none;pointer-events:none;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
 .bell{position:relative;width:40px;height:40px;border-radius:50%;background:var(--s1);display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 40px;transition:transform .12s}
 .bell:active{transform:scale(.96)}
 .bell .ic{width:22px;height:22px}
@@ -158,6 +158,8 @@ a{color:var(--pri2)}
 .row.rojo{color:var(--danger)}
 .row.rojo .sq{color:var(--danger);background:rgba(255,92,108,.12)}
 .row .este{font-size:11px;font-weight:600;color:var(--pos);background:rgba(53,224,176,.12);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.row .este.off{color:var(--warn);background:rgba(255,209,102,.12)}
+.grupo .desp{padding:0 16px 16px}
 
 /* ═══════════ CITAS (citas_mias): tarjeta con estos tokens ═══════════ */
 .citas-pills{flex:0 0 auto}
@@ -532,7 +534,7 @@ select.inp option{background:#09183F;color:#fff}
   <div class="scr" id="scr-autos">
     <div class="hdr">
       <div class="top"><div class="wm">Fyra<b>drive</b></div><div class="der"><div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div></div></div>
-      <div class="titulo"><h1>Autos</h1><button class="btn-txt" onclick="abrirSubirAuto()"><i data-ico="plus"></i>Agregar auto</button></div>
+      <div class="titulo"><h1>Autos</h1><button class="btn-c" onclick="abrirSubirAuto()"><i data-ico="imgplus"></i>Subir auto</button></div>
     </div>
     <div class="cuerpo" id="autos-lista"></div>
   </div>
@@ -666,7 +668,14 @@ const ICO = {
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   play: '<path d="m6 4 14 8-14 8z"/>',
   usercheck: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/>',
-  wa: '<path d="M3 21l1.7-4.6A8.5 8.5 0 1 1 8 19.5z"/><path d="M9 9.6c0 2.6 2.8 5.4 5.4 5.4l1.3-1.3-1.9-1-1 .9c-.9-.4-2-1.5-2.4-2.4l.9-1-1-1.9z"/>'
+  wa: '<path d="M3 21l1.7-4.6A8.5 8.5 0 1 1 8 19.5z"/><path d="M9 9.6c0 2.6 2.8 5.4 5.4 5.4l1.3-1.3-1.9-1-1 .9c-.9-.4-2-1.5-2.4-2.4l.9-1-1-1.9z"/>',
+  imgplus: '<path d="M16 5h6M19 2v6"/><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  calcheck: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/>',
+  xcircle: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>',
+  chevl: '<path d="m15 18-6-6 6-6"/>',
+  monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>'
 };
 const ico = (n, c) => '<svg class="ic' + (c ? ' ' + c : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICO[n] || '') + '</svg>';
 // hidratación de los iconos estáticos del HTML: <i data-ico="nombre" class="..."></i> → svg (única fuente de verdad)
@@ -704,13 +713,14 @@ function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('
 async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/fyrachat.html'); }
 function fechaCorta(x){ try { return new Date(ms(x)).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
 async function abrirDispositivos(){
-  const sh = sheet({ titulo:'Tus dispositivos', html:'<ul class="disp" id="disp-lista"><li>Cargando…</li></ul><button class="cta rojo" id="disp-cerrar">Cerrar todas las sesiones</button>' });
-  sh.body.querySelector('#disp-cerrar').onclick = () => cerrarTodasSesiones(sh);
+  const sh = sheet({ titulo:'Tus dispositivos', html:'<p class="hint">Cada dispositivo donde entraste con tu código.</p><div class="grupo" id="disp-lista"><div class="row"><div class="sq">' + ico('devices') + '</div><div class="tx"><div class="t">Cargando…</div></div></div></div>', pie:'<button type="button" class="cta rojo" id="disp-cerrar">Cerrar todas las sesiones</button>' });
+  sh.pie.querySelector('#disp-cerrar').onclick = () => cerrarTodasSesiones(sh);
   const r = await fetch(API+'?action=acceso_sesiones').then(x=>x.json()).catch(()=>({ok:false}));
   const ul = sh.body.querySelector('#disp-lista'); if (!ul) return;
-  if (!r.ok) { ul.innerHTML = '<li>No pude leer tus sesiones.</li>'; return; }
+  const fila = (icono, t, s, actual) => '<div class="row"><div class="sq">' + ico(icono) + '</div><div class="tx"><div class="t">' + esc(t) + '</div>' + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>' + (actual ? '<span class="este">Este</span>' : '') + '</div>';
+  if (!r.ok) { ul.innerHTML = fila('alert', 'No pude leer tus sesiones', r.error || ''); return; }
   const ses = r.sesiones || [];
-  ul.innerHTML = ses.length ? ses.map(x => '<li><div><div class="nav">' + esc(x.navegador || 'Navegador') + '</div><div class="fecha">Entró ' + esc(fechaCorta(x.creada)) + ' · último uso ' + esc(fechaCorta(x.ultimo_uso)) + (x.ip_mascara ? ' · ' + esc(x.ip_mascara) : '') + '</div></div>' + (x.actual ? '<span class="este">este dispositivo</span>' : '') + '</li>').join('') : '<li>Sin sesiones abiertas.</li>';
+  ul.innerHTML = ses.length ? ses.map(x => fila(/iphone|ipad|android|móvil|movil|mobile/i.test(String(x.navegador || '')) ? 'devices' : 'monitor', x.navegador || 'Navegador', 'Entró ' + fechaCorta(x.creada) + ' · último uso ' + fechaCorta(x.ultimo_uso) + (x.ip_mascara ? ' · ' + x.ip_mascara : ''), x.actual)).join('') : fila('devices', 'Sin sesiones abiertas', '');
 }
 async function cerrarTodasSesiones(shPadre){
   const ok = await confirmar({ titulo:'¿Cerrar TODAS las sesiones?', texto:'Se cierra tu FyraChat en todos los dispositivos (incluido este). Para volver a entrar pedirás un código.', ok:'Cerrar todas', peligro:true });
@@ -812,16 +822,47 @@ function irTab(t){
   ['inicio', 'autos', 'citas', 'mas'].forEach(x => $('scr-' + x).classList.toggle('on', x === t));
   if (t === 'autos') cargarAutos(); if (t === 'citas') cargarCitas(); if (t === 'mas') pintarMas();
 }
+// row de Más: icono en cuadro 40×40 · título 15/600 · subtítulo 13 · chevron
+const masRow = (icono, t, s, onclick, extra) => '<button type="button" class="row' + (extra ? ' ' + extra : '') + '" onclick="' + onclick + '"><div class="sq">' + ico(icono) + '</div><div class="tx"><div class="t">' + esc(t) + '</div>' + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>' + ico('chev', 'chev') + '</button>';
 function pintarMas(){
   const c = $('mas-cuerpo'); if (!TENANT) return;
-  let h = '';
-  h += '<div class="opc" style="cursor:default"><div class="i">👤</div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(TENANT.nombre || 'Mi universo') + '</div><small>Universo ' + esc(TENANT.id) + (TENANT.telefono ? ' · +' + esc(String(TENANT.telefono).replace(/\D/g, '')) : '') + (TENANT.demo ? ' · MODO PRUEBA' : '') + '</small></div></div>';
-  h += '<button class="opc" onclick="abrirDispositivos()"><div class="i">📱</div><div>Tus dispositivos<small>Dónde está abierto tu FyraChat</small></div><span class="chev">›</span></button>';
-  if (TENANT.demo) h += '<button class="opc" onclick="reiniciarPrueba()"><div class="i">↺</div><div>Reiniciar prueba<small>Borra todo el universo de prueba (nada real se toca)</small></div><span class="chev">›</span></button>';
-  h += '<button class="opc" onclick="tutoArrancar({ forzar: true })"><div class="i">🎓</div><div>Ver tutorial<small>Agrégalo a tu inicio y cómo se usa</small></div><span class="chev">›</span></button>';
-  h += '<button class="opc" style="opacity:.55;cursor:default"><div class="i">⚙️</div><div>Ajustes<small>Pronto</small></div></button>';
-  h += '<button class="opc rojo" onclick="accSalir()"><div class="i">🚪</div><div>Salir</div></button>';
-  c.innerHTML = h;
+  c.innerHTML =
+    '<div class="grupo">' +
+      masRow('user', 'Tu cuenta', 'Perfil y datos', 'abrirCuenta()') +
+      masRow('devices', 'Tus dispositivos', 'Dónde está abierto tu FyraChat', 'abrirDispositivos()') +
+      masRow('bell', 'Notificaciones', 'Configura tus alertas', "abrirPronto('Notificaciones', 'Aquí vas a elegir qué alertas te llegan y cuándo.')") +
+      masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
+      masRow('settings', 'Ajustes', 'Preferencias de la app', "abrirPronto('Ajustes', 'Las preferencias de la app llegan en una próxima versión.')") +
+    '</div>' +
+    '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
+}
+// Tu cuenta: universo, teléfono, estado de WhatsApp; "Reiniciar prueba" solo en demo
+function abrirCuenta(){
+  if (!TENANT) return;
+  const tel = String(TENANT.telefono || '').replace(/\D/g, '');
+  const vinc = T0 || (TENANT.sesion && TENANT.sesion.estado === 'vinculado');
+  const s = sheet({ titulo: 'Tu cuenta', html:
+    '<div class="grupo">' +
+      '<div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(TENANT.nombre || 'Mi universo') + '</div><div class="s">Universo ' + esc(TENANT.id) + (TENANT.demo ? ' · modo prueba' : '') + '</div></div></div>' +
+      '<div class="row"><div class="sq">' + ico('phone') + '</div><div class="tx"><div class="t">' + esc(telFmtDe(tel) || 'Sin teléfono') + '</div><div class="s">Teléfono</div></div></div>' +
+      '<div class="row"><div class="sq">' + ico('wa') + '</div><div class="tx"><div class="t">WhatsApp</div><div class="s">' + (vinc ? 'Seb atiende desde tu número' : 'Vincúlalo en fyradrive.com/seb') + '</div></div><span class="este' + (vinc ? '' : ' off') + '">' + (vinc ? 'Vinculado' : 'Desvinculado') + '</span></div>' +
+    '</div>' +
+    (TENANT.demo ? '<button type="button" class="cta sec" id="cu-reset" style="margin-top:16px">' + ico('refresh') + 'Reiniciar prueba</button><p class="hint" style="margin-top:8px;text-align:center">Borra todo el universo de prueba. Nada real se toca.</p>' : '') });
+  const b = s.body.querySelector('#cu-reset'); if (b) b.onclick = () => { s.cerrar(); reiniciarPrueba(); };
+}
+function abrirPronto(titulo, texto){
+  sheet({ titulo, html: '<div class="vacio"><div class="vic">' + ico('clock') + '</div><b>Pronto</b>' + esc(texto || '') + '</div>' });
+}
+function abrirAyuda(){
+  const s = sheet({ titulo: 'Ayuda', html:
+    '<div class="grupo">' +
+      masRow('play', 'Ver tutorial', 'Agrégalo a tu inicio', '') +
+      masRow('wa', 'Cómo se vincula WhatsApp', 'En 3 pasos', '') +
+      '<div class="desp" id="ay-wa" hidden><p class="hint" style="margin:12px 0 0">1. Entra a <b>fyradrive.com/seb</b> con tu número.<br>2. En tu WhatsApp abre <b>Dispositivos vinculados</b> y escanea el código que te da la página.<br>3. Listo: Seb atiende a tus compradores desde tu propio número y tú lo ves todo aquí.</p></div>' +
+    '</div>' });
+  const rows = s.body.querySelectorAll('.row');
+  rows[0].onclick = () => { s.cerrar(); tutoArrancar({ forzar: true }); };
+  rows[1].onclick = () => { const d = s.body.querySelector('#ay-wa'); d.hidden = !d.hidden; rows[1].classList.toggle('on', !d.hidden); };
 }
 async function reiniciarPrueba(){
   const ok = await confirmar({ titulo:'¿Reiniciar la prueba?', texto:'Se borran TODOS los chats, delegaciones y mensajes del universo de prueba. Nada real se toca.', ok:'Reiniciar', peligro:true });
@@ -1466,23 +1507,32 @@ async function autosParaDelegar(){
 let AUTOS = null;
 async function cargarAutos({ silencioso } = {}){
   const c = $('autos-lista');
-  if (!AUTOS && !silencioso) c.innerHTML = Array.from({ length: 5 }, () => '<div class="auto-c"><div class="ph" style="background:rgba(120,160,255,.14);border:0"></div><div style="flex:1"><div style="height:14px;width:60%;border-radius:7px;background:rgba(120,160,255,.16)"></div><div style="height:12px;width:35%;border-radius:6px;background:rgba(120,160,255,.10);margin-top:9px"></div></div></div>').join('');
+  if (!AUTOS && !silencioso) c.innerHTML = Array.from({ length: 5 }, () => '<div class="auto-c sk"><div class="ph"></div><div class="tx"><div class="l1"></div><div class="l2"></div></div></div>').join('');
   return correr('autos_mios', async () => {
     const r = await apiGet('autos_mios', {});
     if (!r.ok) { if (!silencioso) c.innerHTML = '<div class="vacio"><b>No pude cargar tus autos</b>' + esc(r.error || '') + '<br><button class="masbtn" onclick="cargarAutos()">Reintentar</button></div>'; return; }
     AUTOS = r.autos || []; pintarAutos();
   });
 }
+const AUTO_ESTADO = { activo: 'Activo', revision: 'En revisión', vendido: 'Vendido' };
+// row de 72: foto 64×48 · nombre 15/600 · año 13 · precio 14/600 verde · chip de estado (Activo / En revisión / Vendido)
+function autoFilaHTML(a, extra){
+  const est = AUTO_ESTADO[a.estado] ? a.estado : 'revision';
+  return '<div class="auto-c' + (extra ? ' ' + extra : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : ico('car')) + '</div>' +
+    '<div class="tx"><div class="nm">' + esc(nombreSinAnio(a) || 'Auto') + '</div><div class="y">' + esc([anioDe(a), a.km ? Number(a.km).toLocaleString('es-MX') + ' km' : ''].filter(Boolean).join(' · ')) + '</div></div>' +
+    '<div class="der"><span class="pr">' + esc(precioFmt(a.precio)) + '</span><span class="est ' + esc(est) + '">' + AUTO_ESTADO[est] + '</span></div></div>';
+}
 function pintarAutos(){
   const c = $('autos-lista'); if (!AUTOS) return;
-  if (!AUTOS.length) { c.innerHTML = '<div class="vacio"><b>Aún no tienes autos</b>Toca (+) para subir el primero.</div>'; return; }
-  c.innerHTML = AUTOS.map(a => '<div class="auto-c" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy">' : '🚗') + '</div><div style="flex:1;min-width:0"><div class="nm">' + esc(a.nombre || [a.marca, a.modelo, a.anio].filter(Boolean).join(' ')) + '</div><div class="pr">' + esc(precioFmt(a.precio)) + '</div><div class="km">' + (a.km ? esc(Number(a.km).toLocaleString('es-MX')) + ' km' : '') + (a.fotos ? (a.km ? ' · ' : '') + esc(a.fotos) + ' fotos' : '') + '</div></div><span class="est ' + esc(a.estado || 'activo') + '">' + ({ activo: 'Activo', revision: 'En revisión', vendido: 'Vendido' }[a.estado] || esc(a.estado || '')) + '</span></div>').join('');
+  if (!AUTOS.length) { c.innerHTML = '<div class="vacio"><div class="vic">' + ico('car') + '</div><b>Aún no tienes autos</b>Sube el primero con sus fotos y su precio.<br><button type="button" class="btn-c" onclick="abrirSubirAuto()">' + ico('imgplus') + 'Subir auto</button></div>'; return; }
+  c.innerHTML = AUTOS.map(a => autoFilaHTML(a, a._nuevo ? 'nuevo' : '')).join('');
+  AUTOS.forEach(a => { delete a._nuevo; });
 }
 // ══════════ CITAS (citas_mias) — cache por pestaña, refetch al abrir, refresco por timbre `cambio:cita` ══════════
 const CITAS = { estado: 'proximas', cache: { proximas: null, pasadas: null } };
 const REC_TIPO = { vispera: 'Víspera', dia: 'Día de la cita', dia_cita: 'Día de la cita', dia_de_la_cita: 'Día de la cita', hora_antes: '1 h antes', '1h': '1 h antes', '1h_antes': '1 h antes', una_hora: '1 h antes', en_camino: 'En camino', camino: 'En camino' };
 const REC_ESTADO = { enviada: 'Enviado', pendiente: 'Pendiente', cancelada: 'Cancelado', saltada: 'Saltado', pausada: 'Pausado' };
-const REC_ICONO = { enviada: '✓✓', pendiente: '🕓', cancelada: '⊘', saltada: '⊘', pausada: '⏸' };
+const REC_ICONO = { enviada: 'checks', pendiente: 'clock', cancelada: 'xcircle', saltada: 'xcircle', pausada: 'pause' };
 const CITA_ESTADO = { match: 'Match', confirmada: 'Confirmada', realizada: 'Realizada', cancelada: 'Cancelada', pasada: 'Pasada' };
 function citasInvalidar(){ CITAS.cache.proximas = null; CITAS.cache.pasadas = null; if (TAB === 'citas') cargarCitas({ silencioso: true }); }
 function onCitaTimbre(){ citasInvalidar(); }
@@ -1522,7 +1572,7 @@ function recHTML(r){
   const est = REC_ESTADO[r.estado] ? r.estado : 'pendiente';
   const tipo = REC_TIPO[String(r.tipo || '').toLowerCase()] || String(r.tipo || 'Recordatorio').replace(/_/g, ' ').replace(/^\w/, ch => ch.toUpperCase());
   const f = recFecha(r);
-  return '<div class="r ' + esc(est) + '" title="' + esc(r.texto || '') + '"><span class="ic">' + (REC_ICONO[est] || '') + '</span><span class="t"><b>' + esc(tipo) + '</b>' + (f ? ' · ' + esc(f) : '') + (r.para === 'vendedor' ? ' · para ti' : '') + '</span><span class="e">' + esc(REC_ESTADO[est]) + '</span></div>';
+  return '<div class="r ' + esc(est) + '" title="' + esc(r.texto || '') + '">' + ico(REC_ICONO[est] || 'clock') + '<span class="t"><b>' + esc(tipo) + '</b>' + (f ? ' · ' + esc(f) : '') + (r.para === 'vendedor' ? ' · para ti' : '') + '</span><span class="e">' + esc(REC_ESTADO[est]) + '</span></div>';
 }
 function citaHTML(ci){
   const d = citaFecha(ci); const comp = ci.comprador || {}; const auto = ci.auto || null;
@@ -1533,7 +1583,7 @@ function citaHTML(ci){
     '<div class="top">' +
       '<div class="dia-b">' + (d ? '<small>' + esc(mesCorto(d)) + '</small><b>' + d.getDate() + '</b><i>' + esc(diaSemana(d)) + '</i>' : '<small>—</small><b>?</b>') + '</div>' +
       '<div class="info"><div class="hora">' + esc(citaHora(ci, d) || 'Sin hora') + '</div><div class="nom">' + esc(nombre) + '</div>' +
-        (auto ? '<span class="auto-ch"><span class="ph">' + (auto.portada ? '<img src="' + esc(auto.portada) + '" alt="" loading="lazy">' : '🚗') + '</span><span>' + esc(auto.nombre || '') + '</span></span>' : '') +
+        (auto ? '<span class="auto-ch"><span class="ph">' + (auto.portada ? '<img src="' + esc(auto.portada) + '" alt="" loading="lazy">' : ico('car')) + '</span><span>' + esc(auto.nombre || '') + '</span></span>' : '') +
       '</div>' +
       '<span class="est ' + esc(est) + '">' + esc(CITA_ESTADO[est]) + '</span>' +
     '</div>' +
@@ -1542,7 +1592,7 @@ function citaHTML(ci){
 }
 function pintarCitas(){
   const c = $('citas-lista'); const l = CITAS.cache[CITAS.estado]; if (!l) return;
-  if (!l.length) { c.innerHTML = '<div class="vacio"><b>' + (CITAS.estado === 'pasadas' ? 'Sin citas pasadas' : 'Aún no tienes citas') + '</b>' + (CITAS.estado === 'pasadas' ? 'Aquí quedarán las que ya pasaron.' : 'Se agendan desde el chat con un toque.') + '</div>'; return; }
+  if (!l.length) { c.innerHTML = '<div class="vacio"><div class="vic">' + ico(CITAS.estado === 'pasadas' ? 'calendar' : 'calcheck') + '</div><b>' + (CITAS.estado === 'pasadas' ? 'Sin citas pasadas' : 'Aún no tienes citas') + '</b>' + (CITAS.estado === 'pasadas' ? 'Aquí quedarán las que ya pasaron.' : 'Se agendan desde el chat con un toque.') + '</div>'; return; }
   c.innerHTML = l.map(citaHTML).join('');
 }
 $('citas-lista').addEventListener('click', (e) => { const b = e.target.closest('.cita'); if (!b || b.classList.contains('sk')) return; const id = b.dataset.chat; if (id) abrirChat(id); else avisoError('Esta cita no tiene conversación ligada.'); });
@@ -1673,7 +1723,7 @@ async function onCambioTimbre(d){
 // ══════════ PRIMERA VEZ: "Agrégalo a tu inicio" ══════════
 function tutoPlataforma(pl){
   document.querySelectorAll('#tuto .pl .c').forEach(b => b.classList.toggle('on', b.dataset.pl === pl));
-  const P = { ios: ['Abre este link en <b>Safari</b>.', 'Toca <b>Compartir</b> (el cuadrito con la flecha, abajo).', 'Elige <b>“Añadir a pantalla de inicio”</b> y confirma.'], android: ['Abre este link en <b>Chrome</b>.', 'Toca el menú <b>⋮</b> (arriba a la derecha).', 'Elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar app”</b>.'], pc: ['Abre este link en <b>Chrome</b> o <b>Edge</b>.', 'En la barra de dirección toca el ícono de <b>instalar</b> (o menú ⋮ → “Instalar FyraChat”).', 'Queda como una app en tu escritorio.'] };
+  const P = { ios: ['Abre este link en <b>Safari</b>.', 'Toca <b>Compartir</b> (el cuadrito con la flecha, abajo).', 'Elige <b>“Añadir a pantalla de inicio”</b> y confirma.'], android: ['Abre este link en <b>Chrome</b>.', 'Toca el menú de <b>tres puntos</b> (arriba a la derecha).', 'Elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar app”</b>.'], pc: ['Abre este link en <b>Chrome</b> o <b>Edge</b>.', 'En la barra de dirección toca el ícono de <b>instalar</b> (o menú de tres puntos y luego “Instalar FyraChat”).', 'Queda como una app en tu escritorio.'] };
   $('tuto-pasos').innerHTML = (P[pl] || P.pc).map((t, i) => '<div class="paso-i"><span class="n">' + (i + 1) + '</span><div>' + t + '</div></div>').join('');
 }
 function tutoMostrar(){
