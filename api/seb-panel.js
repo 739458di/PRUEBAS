@@ -206,17 +206,21 @@ module.exports = async function handler(req, res) {
 
         let VEND_PARAM = String((req.query && req.query.vendedor) || (req.body && req.body.vendedor) || '').trim();
         const pidioT0 = VEND_PARAM === '0';
-        // 'vendedor=0' = FyraChat de Fyradrive (tenant 0 clásico): la maestra, STAFF o la key pueden pedirlo así
-        if (pidioT0 && (conPuente || conPanel || MAESTRA || esStaff)) VEND_PARAM = '';
+        // UNIVERSO 0 = UN LOTE MÁS (orden owner 2026-09-12): quien entra con el número principal (56 5942 3834) es el dueño de ese universo,
+        // igual que cualquier vendedor con el suyo. Sin trato especial: código → contraseña → su FyraChat.
+        const duenoT0 = !!(SES && Number(SES.tenant_id) === 0);
+        // 'vendedor=0' = FyraChat de Fyradrive (tenant 0 clásico): su dueño, la maestra, STAFF o la key pueden pedirlo así
+        if (pidioT0 && (conPuente || conPanel || MAESTRA || esStaff || duenoT0)) VEND_PARAM = '';
         if (SES && !MAESTRA) {
-            if (esStaff && pidioT0) { /* STAFF en tenant 0 */ }
+            if (duenoT0) VEND_PARAM = '';   // el dueño del número principal opera SU universo (el 0), como cualquier vendedor el suyo
+            else if (esStaff && pidioT0) { /* STAFF en tenant 0 */ }
             else if (esStaff && VEND_PARAM && VEND_PARAM !== String(SES.tenant_id)) return res.status(403).json({ ok: false, error: 'Ese universo no es tuyo' });
             else VEND_PARAM = String(SES.tenant_id);   // toda sesión de vendedor abre SU universo
         } else if (MAESTRA && !VEND_PARAM && !pidioT0) VEND_PARAM = String(SES.tenant_id);   // la maestra sin ?vendedor= abre su universo; con ?vendedor= el que pida
 
         // ══════════ REGLA ÚNICA DE AUTORIZACIÓN (antes de cualquier acción) ══════════
         const t0 = !VEND_PARAM;
-        const mandaEnT0 = !!(SES && (MAESTRA || esStaff));
+        const mandaEnT0 = !!(SES && (MAESTRA || esStaff || duenoT0));
         const SIN_SESION = { ok: false, error: 'Entra con el código que te llega a tu WhatsApp', login: true };
         if (!ACC_PUBLICAS.has(action)) {
             if (ACC_PUENTE.has(action)) {

@@ -803,11 +803,12 @@ async function cargarTenant(){
   }
   if (!SESION) { mostrarAcceso(qs.get('aviso') || ''); return false; }          // SIN SESIÓN NO HAY UNIVERSO
   if (SESION.contrasena_pendiente) { contrasenaPendiente(); return false; }   // ALTA: primero la contraseña (orden owner 2026-09-12)
-  if (VEND === '0' && (SESION.maestra || SESION.staff)) { VEND = ''; T0 = true; }   // maestra / STAFF pidiendo el FyraChat de Fyradrive (clásico)
+  const duenoT0 = !!(SESION.tenant && Number(SESION.tenant.id) === 0);   // entró con el número principal: el universo 0 es SU lote (orden owner 2026-09-12)
+  if (duenoT0 || (VEND === '0' && (SESION.maestra || SESION.staff))) { VEND = ''; T0 = true; }   // dueño / maestra / STAFF en el FyraChat de Fyradrive (clásico)
   else if (!SESION.maestra || !VEND) VEND = String(SESION.tenant.id);          // toda sesión abre SU universo (la maestra puede pedir otro con ?vendedor=)
   // tenant provisional desde la sesión (pinta el header al instante); tenant_info lo completa con autos
   TENANT = Object.assign({ id: 0, nombre: '', telefono: '', demo: false, autos: [] }, SESION.tenant || {});
-  if (T0) TENANT = { id: 0, nombre: 'Fyradrive', telefono: '', demo: false, autos: [] };
+  if (T0) TENANT = Object.assign({ id: 0, nombre: 'Fyradrive', telefono: '', demo: false, autos: [] }, duenoT0 ? SESION.tenant : {});
   pintarUniverso();
   BIENVENIDA = qs.get('bienvenida') === '1';   // se captura ANTES de limpiar la URL (regla de primera vez)
   if (qs.get('bienvenida')) history.replaceState(null, '', location.pathname + (qs.get('demo') === '1' ? '?demo=1' : ''));
