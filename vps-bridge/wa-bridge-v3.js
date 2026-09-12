@@ -646,7 +646,7 @@ async function conectar() {
         logger,
         printQRInTerminal: false,
         syncFullHistory: false,
-        browser: tenant.id === 0 ? ['Fyradrive', 'Chrome', '120.0.0'] : baileys.Browsers.ubuntu('Chrome'),   // código de vinculación: WhatsApp exige identidad estándar
+        browser: baileys.Browsers.ubuntu('Chrome'),   // código de vinculación: WhatsApp exige identidad estándar — TODOS los universos, incluido el 0 (orden owner 2026-09-12: Fyradrive es un lote más)
         shouldSyncHistoryMessage: () => false,   // Ley 2: nada de historial
         markOnlineOnConnect: true,
         msgRetryCounterCache,
@@ -724,7 +724,7 @@ async function conectar() {
             if (vinculacionFallida) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }
             // 401 estando vinculado = el vendedor quitó el dispositivo desde su WhatsApp: las llaves viejas ya no sirven.
             // Se limpian aquí para que pueda volver a vincular (antes quedaba creds.registered=true → "ya está vinculado" eterno). 2026-09-10
-            if (code === DisconnectReason.loggedOut && registrado && tenant.id !== 0) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }
+            if (code === DisconnectReason.loggedOut && registrado) { limpiarAuth(tenant); U.ultimoQR = null; U.ultimoCodigo = null; }   // también el universo 0 (un lote más)
             // CUOTA: un universo SIN vincular que agota su set de QR cierra y reabre cada ~1 min; ese 'reconectando'
             // dura segundos y volvía a escribir wa_sessions en cada ciclo → se omite (sigue 'esperando_qr', que es la verdad útil).
             const cicloQR = reconectar && !vinculacionFallida && !registrado && U.estado === 'esperando_qr';
