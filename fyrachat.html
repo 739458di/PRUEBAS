@@ -1100,13 +1100,27 @@ const keyDe = (m) => m.id != null && m.id !== '' ? 'id:' + m.id : (m.msg_id ? 'm
 const normTxt = (t) => String(t || '').replace(/^\s*\[prueba\]\s*/i, '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 160);
 function textoDe(m){ if (m.texto) return m.texto; if (m.media) return m.media.tipo === 'imagen' ? 'Foto' : m.media.tipo === 'ubicacion' ? 'Ubicación' : m.media.tipo === 'audio' ? 'Audio' : 'Archivo'; return ''; }
 function mezclar(h, mensajes){
+  // DEDUP (bug duplicados 2026-09-15): un mismo mensaje llega por varias vías con llaves distintas —
+  //   · timbre (id null, msg_id X) y luego el hilo (id N, msg_id X)  → se FUNDE por msg_id
+  //   · optimista mío (local) y luego el eco del servidor            → se FUNDE por texto+tiempo
+  //   · misma dirección + mismo texto + <3 s (sin ids que casen)     → se ignora
+  // La burbuja del DOM conserva la llave con la que nació (m._kDom) para poder actualizarse en vez de pintarse dos veces.
   const nuevos = [];
+  h.porMid = h.porMid || new Map();
+  const fundir = (ya, m) => { Object.assign(ya, { id: m.id != null && m.id !== '' ? m.id : ya.id, msg_id: m.msg_id || ya.msg_id, estado: (m.estado && m.estado !== 'enviando') ? m.estado : (ya.estado === 'enviando' ? 'enviado' : ya.estado), media: m.media || ya.media, texto: m.texto || ya.texto, ts: ya.ts || m.ts }); if (!ya._kDom) ya._kDom = keyDe(ya); h.keys.add(keyDe(ya)); if (ya.msg_id) h.porMid.set(ya.msg_id, ya); ya._eco = true; nuevos.push(ya); };
   for (const m of (mensajes || [])) {
     const k = keyDe(m);
-    if (h.keys.has(k)) { if (m.dir === 'out' && m.emisor !== 'sistema') { const ya = h.msgs.find(x => keyDe(x) === k || (m.id != null && x.id === m.id)); if (ya && ya.estado !== 'entregado' && ya.estado !== 'error') { ya.estado = 'entregado'; nuevos.push(Object.assign(ya, { _eco: true })); } } continue; }
-    // ECO de un optimista mío (mismo texto saliente, <60 s): adopta el id del servidor en vez de duplicar
-    if (m.dir === 'out' && m.emisor !== 'sistema') { const op = h.msgs.find(x => x.local && x.estado !== 'error' && normTxt(x.texto) === normTxt(m.texto) && Math.abs(ms(m.ts) - ms(x.ts)) < 120000 && !x.id); if (op) { op.id = m.id; op.msg_id = m.msg_id; op.estado = 'entregado'; h.keys.add(k); nuevos.push(Object.assign(op, { _eco: true })); continue; } }
-    h.keys.add(k); h.msgs.push(m); nuevos.push(m);
+    if (m.msg_id && h.porMid.has(m.msg_id)) { const ya = h.porMid.get(m.msg_id); if (keyDe(ya) !== k || ya.estado !== m.estado || (!ya.media && m.media)) fundir(ya, m); continue; }
+    if (h.keys.has(k)) { if (m.dir === 'out' && m.emisor !== 'sistema') { const ya = h.msgs.find(x => keyDe(x) === k || (m.id != null && x.id === m.id)); if (ya && ya.estado !== 'entregado' && ya.estado !== 'error') { fundir(ya, m); } } continue; }
+    if (m.emisor !== 'sistema') {
+      // ECO de un optimista mío (mismo texto saliente, <2 min): adopta el id del servidor en vez de duplicar
+      if (m.dir === 'out') { const op = h.msgs.find(x => x.local && x.estado !== 'error' && !x.id && normTxt(x.texto) === normTxt(m.texto) && Math.abs(ms(m.ts) - ms(x.ts)) < 120000); if (op) { op._kDom = op._kDom || ('l:' + op.local); fundir(op, m); h.keys.add(k); continue; } }
+      // misma dirección + mismo texto + casi mismo instante (sin ids que casen) → es el mismo renglón por otra vía
+      const gem = h.msgs.find(x => x.dir === m.dir && normTxt(x.texto) === normTxt(m.texto) && String(x.texto || '').trim() && Math.abs(ms(m.ts) - ms(x.ts)) < 3000 && (!x.msg_id || !m.msg_id));
+      if (gem) { fundir(gem, m); h.keys.add(k); continue; }
+    }
+    m._kDom = k;
+    h.keys.add(k); if (m.msg_id) h.porMid.set(m.msg_id, m); h.msgs.push(m); nuevos.push(m);
     if (ms(m.ts) > h.ult_ts) h.ult_ts = ms(m.ts);
   }
   h.msgs.sort((a, b) => ms(a.ts) - ms(b.ts));
@@ -1231,7 +1245,7 @@ function burbujaHTML(m){
 function pintarMensajes(h){
   const box = $('msgs'); let html = '', dia = '';
   if (h.hay_mas) html += '<div class="cargando" id="mas-arriba">Desliza arriba para ver anteriores</div>';
-  for (const m of h.msgs) { const d = diaDe(m.ts); if (d !== dia) { dia = d; html += '<div class="dia">' + esc(d) + '</div>'; } html += burbujaHTML(m); }
+  for (const m of h.msgs) { m._kDom = keyDe(m); const d = diaDe(m.ts); if (d !== dia) { dia = d; html += '<div class="dia">' + esc(d) + '</div>'; } html += burbujaHTML(m); }
   box.innerHTML = html; irAlFondo(false);
   anclarImagenes(box);
 }
@@ -1242,6 +1256,7 @@ function irAlFondo(suave){ const b = $('msgs'); b.scrollTo({ top: b.scrollHeight
 $('msgs').addEventListener('scroll', () => { if (enElFondo()) $('nuevos').classList.remove('on'); if ($('msgs').scrollTop < 80) cargarAnteriores(); }, { passive: true });
 function insertarBurbuja(m, { auto } = {}){
   const box = $('msgs'); const abajo = enElFondo();
+  { const ya = box.querySelector('[data-k="' + CSS.escape(m._kDom || keyDe(m)) + '"]') || box.querySelector('[data-k="' + CSS.escape(keyDe(m)) + '"]'); if (ya) { const tmp0 = document.createElement('div'); tmp0.innerHTML = burbujaHTML(m); const n0 = tmp0.firstElementChild; n0.dataset.k = keyDe(m); m._kDom = keyDe(m); ya.replaceWith(n0); anclarImagenes(n0); return; } }
   const v = box.querySelector('.vacio, .cargando:not(#mas-arriba)'); if (v) v.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = burbujaHTML(m); const el = tmp.firstElementChild;
   const ts = ms(m.ts) || Date.now();
@@ -1253,9 +1268,10 @@ function insertarBurbuja(m, { auto } = {}){
   if (abajo || m.dir === 'out' || !auto) irAlFondo(true); else $('nuevos').classList.add('on');
 }
 function actualizarBurbuja(m){
-  const box = $('msgs'); const el = box.querySelector('[data-k="' + CSS.escape(m.local ? 'l:' + m.local : keyDe(m)) + '"]') || box.querySelector('[data-k="' + CSS.escape(keyDe(m)) + '"]');
+  const box = $('msgs'); const q = (k) => k ? box.querySelector('[data-k="' + CSS.escape(k) + '"]') : null;
+  const el = q(m._kDom) || q(m.local ? 'l:' + m.local : null) || q(keyDe(m)) || (m.msg_id ? q('mid:' + m.msg_id) : null);
   if (!el) { insertarBurbuja(m, { auto: true }); return; }
-  const tmp = document.createElement('div'); tmp.innerHTML = burbujaHTML(m); const nuevo = tmp.firstElementChild; nuevo.dataset.k = el.dataset.k; el.replaceWith(nuevo);
+  const tmp = document.createElement('div'); tmp.innerHTML = burbujaHTML(m); const nuevo = tmp.firstElementChild; nuevo.dataset.k = keyDe(m); m._kDom = keyDe(m); el.replaceWith(nuevo); anclarImagenes(nuevo);
 }
 async function cargarAnteriores(){
   const id = CHAT_ID; if (!id || CARGANDO_ANTES) return; const h = hiloDe(id); if (!h.cargado || !h.hay_mas || !h.msgs.length) return;
