@@ -30,6 +30,7 @@ const AUTOBOTON = require('../lib/seb/auto-boton.js');   // LA IA APRIETA LOS BO
 const VIDEO_TENANT_ID = Number(process.env.VIDEO_TENANT_ID || 2);
 const VIDEO_VENDEDOR = process.env.VIDEO_VENDEDOR || 'Juan';
 const VIDEO_COLONIA = process.env.VIDEO_COLONIA || 'Del Valle, San Pedro';
+const VIDEO_FOTO_VENDEDOR = process.env.VIDEO_FOTO_VENDEDOR || 'https://n29hevuhphbhhtlb.public.blob.vercel-storage.com/vehiculos/agencia-1789461566400-vendedor-fulano.png';
 // SIMULADOR (orden owner 2026-09-15): el flujo EXACTO dictado, paso por paso (la UI avanza con las pausas; cada paso = una llamada corta)
 const VIDEO_PASOS = (autoNombre) => [
     { q: 'bot', t: 'Hola Sebastián, soy ' + VIDEO_VENDEDOR + ' vendedor de autos MTY, de Facebook.', pausa: 1800 },
@@ -61,7 +62,30 @@ const VIDEO_PASOS = (autoNombre) => [
     { q: 'bot', t: '__CITA__', pausa: 1800 },
     { q: 'bot', t: '¿Correcto?', pausa: 3000 },
     { q: 'comprador', t: 'sí', pausa: 2000 },
-    { q: 'bot', t: 'Perfecto, cita confirmada. Te voy avisando cualquier cosa.', pausa: 0 }
+    { q: 'bot', t: 'Perfecto, cita confirmada. Te voy avisando cualquier cosa.', pausa: 2600 },
+    // ── PARTE 3 (orden owner 2026-09-15): a partir de la cita agendada — recordatorios, vendedor verificado, camino y llegada ──
+    { q: 'tiempo', t: '2 días antes de la cita', pausa: 2600, desfase_ms: 4 * 86400000, parte: 3 },
+    { q: 'bot', t: '¡Qué tal Sebastián! Listo para tu cita, es en dos días.', pausa: 3000 },
+    { q: 'comprador', t: 'Sí amigo, pendiente.', pausa: 2600 },
+    { q: 'tiempo', t: 'La noche antes de la cita', pausa: 2600, desfase_ms: 86400000 },
+    { q: 'bot', t: 'Sebastián, te saluda tu amigo ' + VIDEO_VENDEDOR + '.', pausa: 1600 },
+    { q: 'bot', t: 'Te recuerdo que mañana tenemos la cita de tu Volkswagen Tiguan 2021.', pausa: 3000 },
+    { q: 'comprador', t: 'ok', pausa: 2600 },
+    { q: 'tiempo', t: 'Día de la cita', pausa: 2600, desfase_ms: 12 * 3600000 },
+    { q: 'bot', t: '¡Qué tal Sebastián, buen día! Nos vemos hoy a las 12 para que manejes la Tiguan. Me avisas cuando vengas en camino para que te atienda tu vendedor Fulano Pérez.', pausa: 2200 },
+    { q: 'foto', url: VIDEO_FOTO_VENDEDOR, pausa: 2600 },
+    { q: 'bot', t: 'Él será tu vendedor verificado.', pausa: 3200 },
+    { q: 'comprador', t: 'Muy bien, qué formalidad, gracias.', pausa: 2600 },
+    { q: 'tiempo', t: '1 hora después', pausa: 2600, desfase_ms: 3600000 },
+    { q: 'comprador', t: 'Ya voy en camino', pausa: 1800 },
+    { q: 'comprador', t: '¿Me pueden volver a enviar la ubicación?', pausa: 2600 },
+    { q: 'bot', t: 'Claro, te la comparto', pausa: 1800 },
+    { q: 'accion', a: 'ubicacion', pausa: 2600 },
+    { q: 'bot', t: 'Muy bien, aquí te esperamos.', pausa: 3200 },
+    { q: 'tiempo', t: '30 minutos después', pausa: 2600, desfase_ms: 30 * 60000 },
+    { q: 'comprador', t: 'Ya llegué, ¿dónde mero es?', pausa: 2600 },
+    { q: 'bot', t: 'Te marca tu vendedor.', pausa: 2600 },
+    { q: 'comprador', t: 'Perfecto.', pausa: 0 }
 ];
 // próximo martes (estricto) en hora de Monterrey → "Martes 22 de septiembre · 12:00 pm"
 function citaTextoVideo(autoNombre) {
@@ -2974,11 +2998,11 @@ module.exports = async function handler(req, res) {
                 if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
                 const telV = String(tV.telefono || '').replace(/\D/g, '');
                 const paso = Number(req.body.paso) || 0;
-                if (paso === 0 && Number(req.body.parte) === 2) {   // continuar sobre el chat que ya existe, desde el reloj
+                if (paso === 0 && [2, 3].includes(Number(req.body.parte))) {   // continuar sobre el chat que ya existe, desde el reloj de esa parte
                     const cAct = (await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []))[0];
                     if (!cAct) return err(404, 'primero corre el simulador completo (no hay chat contigo mismo)');
-                    const idx = VIDEO_PASOS('x').findIndex(x => x.parte === 2);
-                    return okJ({ chat_id: Number(cAct.id), total: VIDEO_PASOS('x').length, siguiente: idx + 1, pausa: 1200, parte: 2 });
+                    const idx = VIDEO_PASOS('x').findIndex(x => x.parte === Number(req.body.parte));
+                    return okJ({ chat_id: Number(cAct.id), total: VIDEO_PASOS('x').length, siguiente: idx + 1, pausa: 1200, parte: Number(req.body.parte) });
                 }
                 if (paso === 0) {
                     const prev = await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []);
@@ -3009,6 +3033,10 @@ module.exports = async function handler(req, res) {
                 if (P.q === 'bot') {
                     const texto = P.t === '__CITA__' ? citaTextoVideo(nomA) : P.t;
                     const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
+                    out = { ok: !!env.ok, error: env.error || null };
+                }
+                else if (P.q === 'foto') {
+                    const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, fotos: [P.url], manual: true, sesionId: SID, accion: 'manual' });
                     out = { ok: !!env.ok, error: env.error || null };
                 }
                 else if (P.q === 'tiempo') {

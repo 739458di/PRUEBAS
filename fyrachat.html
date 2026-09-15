@@ -933,7 +933,7 @@ function pintarMas(){
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
       masRow('settings', 'Ajustes', 'Preferencias de la app', "abrirPronto('Ajustes', 'Las preferencias de la app llegan en una próxima versión.')") +
     '</div>' +
-    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('bot', 'Simulador', 'Reinicia tu chat contigo mismo y corre solo el flujo completo de Juan (partes 1 y 2)', 'simuladorVideo()') + masRow('clock', 'Simulador · parte 2', 'Continúa sobre el chat actual: horas después, prueba de manejo y cita', 'simuladorVideo(2)') + masRow('refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
+    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('bot', 'Simulador', 'Reinicia tu chat contigo mismo y corre solo el flujo completo de Juan (partes 1 y 2)', 'simuladorVideo()') + masRow('clock', 'Simulador · parte 2', 'Continúa sobre el chat actual: horas después, prueba de manejo y cita', 'simuladorVideo(2)') + masRow('calendar', 'Simulador · parte 3', 'A partir de la cita agendada: recordatorios, vendedor verificado, en camino y llegada', 'simuladorVideo(3)') + masRow('refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
 }
 // SIMULADOR (orden owner 2026-09-15): reinicia el chat contigo mismo y corre el flujo exacto paso a paso (la UI marca el ritmo)
@@ -942,9 +942,9 @@ async function simuladorVideo(parte){
   const corrida = uuid(); SIM_CORRIDA = corrida;
   const viva = () => SIM_CORRIDA === corrida;
   try {
-    const r0 = await apiPost('video_simulador', parte === 2 ? { paso: 0, parte: 2 } : { paso: 0 });
+    const r0 = await apiPost('video_simulador', (parte === 2 || parte === 3) ? { paso: 0, parte } : { paso: 0 });
     if (!r0.ok || !r0.chat_id) { if (viva()) SIM_CORRIDA = null; return avisoError(r0.error || 'No se pudo reiniciar'); }
-    const id = r0.chat_id; if (parte !== 2) { HILOS.delete(id); await cargarInbox({ reset: true }); } irTab('inicio'); if (CHAT_ID !== id) abrirChat(id);
+    const id = r0.chat_id; if (parte !== 2 && parte !== 3) { HILOS.delete(id); await cargarInbox({ reset: true }); } irTab('inicio'); if (CHAT_ID !== id) abrirChat(id);
     let paso = r0.siguiente || 1, pausa = r0.pausa || 1500;
     while (paso && viva()) {
       await new Promise(x => setTimeout(x, pausa)); if (!viva()) break;
@@ -1468,7 +1468,7 @@ function abrirMasAcciones(){
     fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
     '</div>' +
-    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('simulador', 'bot', 'Simulador', 'Reinicia este chat y corre solo el flujo completo de Juan (partes 1 y 2).') + fila('simulador2', 'clock', 'Simulador · parte 2', 'Continúa desde "déjame checarlo": horas después, prueba de manejo y cita.') + fila('video', 'refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan.') + '</div>' : '') +
+    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('simulador', 'bot', 'Simulador', 'Reinicia este chat y corre solo el flujo completo de Juan (partes 1 y 2).') + fila('simulador2', 'clock', 'Simulador · parte 2', 'Continúa desde "déjame checarlo": horas después, prueba de manejo y cita.') + fila('simulador3', 'calendar', 'Simulador · parte 3', 'A partir de la cita agendada: recordatorios, vendedor verificado, en camino y llegada.') + fila('video', 'refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan.') + '</div>' : '') +
     '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + fila('borrar', 'x', 'Borrar chat', 'Se borra de tu FyraChat (WhatsApp no se toca).', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
@@ -1478,6 +1478,7 @@ function abrirMasAcciones(){
     if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
     if (a === 'simulador') { s.cerrar(); return simuladorVideo(); }
     if (a === 'simulador2') { s.cerrar(); return simuladorVideo(2); }
+    if (a === 'simulador3') { s.cerrar(); return simuladorVideo(3); }
     if (a === 'borrar') { s.cerrar(); return borrarChat(id); }
     if (a === 'seleccionar') { s.cerrar(); return modoSeleccion(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
