@@ -932,8 +932,29 @@ function pintarMas(){
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
       masRow('settings', 'Ajustes', 'Preferencias de la app', "abrirPronto('Ajustes', 'Las preferencias de la app llegan en una próxima versión.')") +
     '</div>' +
-    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('refresh', 'Reiniciar video', 'Borra tu chat contigo mismo y te vuelve a agregar con el guion de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
+    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('bot', 'Simulador', 'Reinicia tu chat contigo mismo y corre solo el flujo completo de Juan', 'simuladorVideo()') + masRow('refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
+}
+// SIMULADOR (orden owner 2026-09-15): reinicia el chat contigo mismo y corre el flujo exacto paso a paso (la UI marca el ritmo)
+let SIM_CORRIENDO = false;
+async function simuladorVideo(){
+  if (SIM_CORRIENDO) return avisoError('El simulador ya está corriendo.');
+  SIM_CORRIENDO = true;
+  try {
+    const r0 = await apiPost('video_simulador', { paso: 0 });
+    if (!r0.ok || !r0.chat_id) { SIM_CORRIENDO = false; return avisoError(r0.error || 'No se pudo reiniciar'); }
+    const id = r0.chat_id; HILOS.delete(id); await cargarInbox({ reset: true }); irTab('inicio'); abrirChat(id);
+    const corrida = uuid(); let paso = r0.siguiente || 1, pausa = r0.pausa || 1500;
+    while (paso) {
+      await new Promise(x => setTimeout(x, pausa));
+      const r = await apiPost('video_simulador', { paso, chat_id: id, corrida });
+      if (!r.ok && !r.fin) { avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
+      // refresco del hilo (el timbre casi siempre llega antes; el dedup evita dobles)
+      try { const x = await cargarHilo(id); if (x && x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); } catch (e) {}
+      if (r.fin || !r.siguiente) break;
+      paso = r.siguiente; pausa = r.pausa || 1500;
+    }
+  } finally { SIM_CORRIENDO = false; }
 }
 // MODO VIDEO desde Más (cuando ya no existe el chat): elige el auto y arranca el guion
 async function reiniciarVideoDesdeMas(){
@@ -1444,7 +1465,7 @@ function abrirMasAcciones(){
     fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
     '</div>' +
-    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('video', 'refresh', 'Reiniciar video', 'Borra este chat y vuelve a agregarte con el guion de Juan.') + '</div>' : '') +
+    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('simulador', 'bot', 'Simulador', 'Reinicia este chat y corre solo el flujo completo de Juan.') + fila('video', 'refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan.') + '</div>' : '') +
     '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + fila('borrar', 'x', 'Borrar chat', 'Se borra de tu FyraChat (WhatsApp no se toca).', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
@@ -1452,6 +1473,7 @@ function abrirMasAcciones(){
     if (a === 'sim') { s.cerrar(); return abrirSimular(); }
     if (a === 'soltar') { s.cerrar(); return soltarChat(); }
     if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
+    if (a === 'simulador') { s.cerrar(); return simuladorVideo(); }
     if (a === 'borrar') { s.cerrar(); return borrarChat(id); }
     if (a === 'seleccionar') { s.cerrar(); return modoSeleccion(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
