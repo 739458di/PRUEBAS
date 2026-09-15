@@ -1239,7 +1239,8 @@ function burbujaHTML(m){
   } else if (m.media && !m.texto) med = esc(textoDe(m));
   const quien = out ? (m.emisor === 'bot' || m.emisor === 'asistente' ? 'Seb' : '') : '';
   const hora = new Date(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const txtB = (med && /^\[(captura del punto|ubicaci[oó]n|imagen)\]?/i.test(String(m.texto || ''))) ? '' : linkify(m.texto || '');   // la imagen / la tarjeta ya lo dicen
+  const tRaw = String(m.texto || '').trim();
+  const txtB = (med && (/^\[(captura del punto|ubicaci[oó]n|imagen)\]?/i.test(tRaw) || /^https?:\/\/\S+$/.test(tRaw))) ? '' : linkify(m.texto || '');   // la imagen / la tarjeta ya lo dicen
   return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + ts + '">' + med + txtB + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
 }
 function pintarMensajes(h){
