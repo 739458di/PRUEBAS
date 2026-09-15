@@ -1402,12 +1402,15 @@ function abrirMasAcciones(){
     fila('primer_mensaje', 'chat', 'Primer mensaje', 'Hola, mi nombre es (tú), del (auto). ¿Te interesaba comprar el auto?') +
     fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
-    '</div><div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + '</div>' });
+    '</div>' +
+    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('video', 'refresh', 'Reiniciar video', 'Borra este chat y vuelve a agregarte con el guion de Juan.') + '</div>' : '') +
+    '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
     if (a === 'recordatorio') { s.cerrar(); return abrirRecordatorio(); }
     if (a === 'sim') { s.cerrar(); return abrirSimular(); }
     if (a === 'soltar') { s.cerrar(); return soltarChat(); }
+    if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
     const r = await accionSimple(id, a);
     s.cerrar();
@@ -1451,6 +1454,17 @@ function abrirRecordatorio(){
     try { const l = recPendientes(id); l.push(cuando); localStorage.setItem(recKey(id), JSON.stringify(l)); } catch(e){}
     s.cerrar(); notaLocal(id, 'Recordatorio programado · ' + fechaCorta(cuando) + '\n«' + t + '»');
   };
+}
+// MODO VIDEO (owner 2026-09-15): borrar el chat consigo mismo y volver a agregarse con el guion de entrada
+async function reiniciarVideo(id){
+  const h = hiloDe(id); const auto = h.chat && h.chat.auto;
+  const ok = await confirmar({ titulo: 'Reiniciar video', texto: 'Se borra todo este chat (mensajes, cita, delegación) y te vuelves a agregar con el guion de Juan' + (auto ? ' para el ' + auto.nombre : '') + '.', ok: 'Borrar y volver a agregar', peligro: true });
+  if (!ok) return;
+  const r = await apiPost('video_reiniciar', { chat_id: id, auto_id: auto ? auto.id : undefined });
+  if (!r.ok) return avisoError(r.error || 'No se pudo reiniciar');
+  HILOS.delete(id); INBOX.rows.delete(id); cerrarChat();
+  await cargarInbox({ reset: true });
+  if (r.chat_id) abrirChat(r.chat_id);
 }
 async function soltarChat(){
   const id = CHAT_ID; if (!id) return;

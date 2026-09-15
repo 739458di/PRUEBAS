@@ -836,15 +836,26 @@ async function conectar() {
                 if (!chatD) continue;                                              // lo no delegado NO EXISTE
                 const mkD = Object.keys(m.message || {});
                 if (!m.message || esInvisible(m.message)) continue;               // protocolo/llaves/reacciones: sin burbuja
-                const fromMeD = !!m.key.fromMe;
+                let fromMeD = !!m.key.fromMe;
                 if (fromMeD && U.enviadosPorPanel.has(m.key.id)) { U.enviadosPorPanel.delete(m.key.id); continue; }   // eco de lo que mandó el puente
+                // CHAT CONSIGO MISMO (modo video del owner, 2026-09-15): en el chat del propio número TODO lo tecleado a mano es del "comprador"
+                // (WhatsApp lo marca fromMe porque es el mismo teléfono); lo que mandó el panel ya se filtró arriba como eco.
+                const propioD = telD && String(telD) === String(tenant.telefono || '').replace(/\D/g, '');
+                if (fromMeD && propioD) fromMeD = false;
                 const textoD = textoDeMensaje(m.message);
                 const tsD = (() => { const t = m.messageTimestamp; const n = (t && typeof t.toNumber === 'function') ? t.toNumber() : Number(t); return (isFinite(n) && n > 1e9) ? n * 1000 : Date.now(); })();
                 if (fromMeD) chatD.ultimo_from_me = tsD; else chatD.ultimo_entrante = tsD;
                 if (chatD.ca_id) db.execute({ sql: 'UPDATE chats_activos SET ' + (fromMeD ? 'ultimo_from_me' : 'ultimo_entrante') + '=? WHERE id=?', args: [tsD, chatD.ca_id] }).catch(() => {});   // dual-write (Etapa 2); conversaciones.ult_msg_ts/ult_dir ya lo llevan
                 // TIMBRE con dirección (contrato v2): el chat_id sale del MISMO upsert que persiste el renglón (cero lecturas extra)
                 guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id })
-                    .then(cid => emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), ai: 0, nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null) })))
+                    .then(cid => {
+                        emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), ai: 0, nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null) }));
+                        // ENTRANTE → fyrachat (2026-09-15): aviso del mensaje del comprador. Hoy solo el chat del propio número (modo video del owner).
+                        if (!fromMeD && textoD && propioD && cid) setTimeout(() => {
+                            fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'entrante_v2', tenant_id: tenant.id, chat_id: cid, msg_id: m.key.id, texto: textoD }) })
+                                .then(r => r.json().catch(() => ({}))).then(j => console.log('[entrante_v2] t' + tenant.id + ' → ' + JSON.stringify(j).slice(0, 160))).catch(e => console.error('[entrante_v2]', e.message));
+                        }, 500);
+                    })
                     .catch(() => {});
                 console.log('[t' + tenant.id + '] ' + (fromMeD ? 'salida dueño' : 'entrada') + ' · chat ' + jidHash(telD) + ' · ' + tipoDeMsg(m.message));
                 // ══ CITAS POR UNIVERSO (orden owner 2026-09-08): un ENTRANTE de un chat delegado toca la MISMA máquina
