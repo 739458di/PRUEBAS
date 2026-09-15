@@ -287,6 +287,10 @@ a{color:var(--pri2)}
 .msg.in .lnk{color:#9fd0ff}
 .msg .med small{word-break:break-all}
 .msg.sel{outline:3px solid var(--pos);outline-offset:2px}
+.run-bar{position:absolute;left:0;right:0;bottom:0;z-index:31;display:flex;align-items:center;gap:6px;padding:8px 10px calc(8px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
+.run-bar button{width:44px;height:44px;border-radius:14px;background:var(--s2);color:#fff;display:grid;place-items:center;font-size:18px;font-weight:700}
+.run-bar button.on{background:var(--pri)}.run-bar button.fin{background:rgba(255,92,108,.18);color:#ffb3bb}.run-bar button:disabled{opacity:.35}
+.run-bar .st{flex:1;min-width:0;font-size:12px;line-height:15px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.run-bar .st b{display:block;font-size:13px;color:#fff}
 .sel-bar{position:absolute;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 16px calc(10px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
 .sel-bar b{flex:1;font-size:15px}
 .sel-bar .cta{width:auto;min-width:0;height:44px;padding:0 16px;margin:0}
@@ -937,47 +941,63 @@ function pintarMas(){
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
 }
 // SIMULADOR (orden owner 2026-09-15): reinicia el chat contigo mismo y corre el flujo exacto paso a paso (la UI marca el ritmo)
-let SIM_CORRIDA = null;   // id de la corrida viva; una nueva la cancela (tocar Simulador otra vez = empezar de cero)
-async function simuladorVideo(parte){
-  const corrida = uuid(); SIM_CORRIDA = corrida;
-  const viva = () => SIM_CORRIDA === corrida;
-  try {
-    const r0 = await apiPost('video_simulador', (parte === 2 || parte === 3) ? { paso: 0, parte } : { paso: 0 });
-    if (!r0.ok || !r0.chat_id) { if (viva()) SIM_CORRIDA = null; return avisoError(r0.error || 'No se pudo reiniciar'); }
-    const id = r0.chat_id; if (parte !== 2 && parte !== 3) { HILOS.delete(id); await cargarInbox({ reset: true }); } irTab('inicio'); if (CHAT_ID !== id) abrirChat(id);
-    let paso = r0.siguiente || 1, pausa = r0.pausa || 1500;
-    while (paso && viva()) {
-      await new Promise(x => setTimeout(x, pausa)); if (!viva()) break;
-      const r = await apiPost('video_simulador', { paso, chat_id: id, corrida });
-      if (!viva()) break;
-      if (!r.ok && !r.fin) { if (/inexistente/i.test(String(r.error || ''))) break; avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
-      // refresco del hilo completo y repintado ordenado por fecha (el paso "horas después" corre lo anterior 2 h atrás)
-      try { const h = hiloDe(id); h.cargado = false; h.ult_ts = 0; h.msgs = []; h.keys = new Set(); h.porMid = new Map(); await cargarHilo(id); if (CHAT_ID === id) { pintarMensajes(hiloDe(id)); irAlFondo(true); } } catch (e) {}
-      if (r.fin || !r.siguiente) break;
-      paso = r.siguiente; pausa = r.pausa || 1500;
-    }
-  } finally { if (viva()) SIM_CORRIDA = null; }
+let SIM_CORRIDA = null;   // compat: id de la corrida viva
+// ══ RUNNER DE TOMAS con controles (orden owner 2026-09-15): ⏮ atrás (deshace el último paso en FyraChat) · ⏯ pausa/continuar · ⏭ adelante · ✕ terminar
+let RUN = null;
+function runBarra(){
+  let bar = document.getElementById('run-bar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'run-bar'; bar.className = 'run-bar'; bar.innerHTML = '<button type="button" id="rb-atras" aria-label="Atrás">⏮</button><button type="button" id="rb-pausa" aria-label="Pausa">⏸</button><button type="button" id="rb-sig" aria-label="Adelante">⏭</button><div class="st"><b id="rb-t"></b><span id="rb-s"></span></div><button type="button" class="fin" id="rb-fin" aria-label="Terminar">✕</button>'; $('scr-chat').appendChild(bar);
+    bar.querySelector('#rb-atras').onclick = () => runAtras(); bar.querySelector('#rb-pausa').onclick = () => runPausa(); bar.querySelector('#rb-sig').onclick = () => runAdelante(); bar.querySelector('#rb-fin').onclick = () => runTerminar(); }
+  return bar;
 }
-// TOMAS DE VIDEO (orden owner 2026-09-15): escenas con guion exacto; el runner abre el chat que toque en cada paso
-async function correrEscena(escena){
-  const corrida = uuid(); SIM_CORRIDA = corrida; const viva = () => SIM_CORRIDA === corrida;
-  try {
-    const r0 = await apiPost('video_escena', { escena, paso: 0 });
-    if (!r0.ok) { if (viva()) SIM_CORRIDA = null; return avisoError(r0.error || 'No se pudo preparar la toma'); }
-    HILOS.clear(); await cargarInbox({ reset: true }); irTab('inicio');
-    let actual = r0.chat_id || null; if (actual) abrirChat(actual);
-    let paso = r0.siguiente || null, pausa = r0.pausa || 1500;
-    while (paso && viva()) {
-      await new Promise(x => setTimeout(x, pausa)); if (!viva()) break;
-      const r = await apiPost('video_escena', { escena, paso, chat_id: actual, corrida }); if (!viva()) break;
-      if (!r.ok && !r.fin) { if (/inexistente|no existe/i.test(String(r.error || ''))) break; avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
-      if (r.chat_id && r.chat_id !== actual) { actual = r.chat_id; if (CHAT_ID) cerrarChat(); await new Promise(x => setTimeout(x, 350)); abrirChat(actual); await new Promise(x => setTimeout(x, 900)); }
-      try { const h = hiloDe(actual); h.cargado = false; h.ult_ts = 0; h.msgs = []; h.keys = new Set(); h.porMid = new Map(); await cargarHilo(actual); if (CHAT_ID === actual) { pintarMensajes(hiloDe(actual)); irAlFondo(true); } } catch (e) {}
-      if (r.fin || !r.siguiente) break;
-      paso = r.siguiente; pausa = r.pausa || 1500;
-    }
-  } finally { if (viva()) SIM_CORRIDA = null; }
+function runPintar(){
+  if (!RUN) return; const bar = runBarra();
+  const hechos = RUN.log.length, total = RUN.total || '?';
+  bar.querySelector('#rb-t').textContent = RUN.titulo || RUN.escena;
+  bar.querySelector('#rb-s').textContent = (RUN.fin ? 'Terminada · ' : (RUN.pausado ? 'En pausa · ' : 'Corriendo · ')) + 'paso ' + hechos + ' de ' + total + (RUN.ultimo ? ' · ' + RUN.ultimo : '');
+  bar.querySelector('#rb-pausa').textContent = RUN.pausado || RUN.fin ? '▶' : '⏸'; bar.querySelector('#rb-pausa').classList.toggle('on', !!RUN.pausado && !RUN.fin);
+  bar.querySelector('#rb-atras').disabled = !hechos || RUN.ocupado; bar.querySelector('#rb-sig').disabled = RUN.fin || RUN.ocupado; bar.querySelector('#rb-pausa').disabled = RUN.fin;
 }
+async function runRefrescar(id){ try { const h = hiloDe(id); h.cargado = false; h.ult_ts = 0; h.msgs = []; h.keys = new Set(); h.porMid = new Map(); await cargarHilo(id); if (CHAT_ID === id) { pintarMensajes(hiloDe(id)); irAlFondo(true); } } catch (e) {} }
+function runProgramar(){ if (!RUN || RUN.pausado || RUN.fin || RUN.ocupado) return; clearTimeout(RUN.timer); RUN.timer = setTimeout(() => runPaso(), RUN.pausa || 1500); }
+async function runPaso(){
+  if (!RUN || RUN.fin || RUN.ocupado) return; RUN.ocupado = true; clearTimeout(RUN.timer); runPintar();
+  const R = RUN; const paso = R.siguiente;
+  try {
+    const r = await apiPost(R.action, Object.assign({}, R.base, { paso, chat_id: R.actual, corrida: R.corrida }));
+    if (R !== RUN) return;
+    if (!r.ok && !r.fin) { if (/inexistente|no existe/i.test(String(r.error || ''))) { R.fin = true; runPintar(); return; } avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
+    if (r.chat_id && r.chat_id !== R.actual) { R.actual = r.chat_id; if (CHAT_ID) cerrarChat(); await new Promise(x => setTimeout(x, 350)); abrirChat(R.actual); await new Promise(x => setTimeout(x, 900)); }
+    if (!r.fin || r.quien) R.log.push({ paso, chat_id: r.chat_id || R.actual, ini: r.ini, fin: r.fin_ts, quien: r.quien });
+    R.ultimo = (r.quien ? r.quien + ': ' : '') + String(r.texto || '').slice(0, 40);
+    R.total = r.de || R.total;
+    await runRefrescar(R.actual);
+    if (r.fin || !r.siguiente) { R.fin = true; } else { R.siguiente = r.siguiente; R.pausa = r.pausa || 1500; }
+  } finally { if (R === RUN) { R.ocupado = false; runPintar(); runProgramar(); } }
+}
+function runPausa(){ if (!RUN || RUN.fin) return; RUN.pausado = !RUN.pausado; clearTimeout(RUN.timer); runPintar(); runProgramar(); }
+async function runAdelante(){ if (!RUN || RUN.fin || RUN.ocupado) return; const p = RUN.pausado; RUN.pausado = true; clearTimeout(RUN.timer); await runPaso(); if (RUN) { RUN.pausado = p; runPintar(); runProgramar(); } }
+async function runAtras(){
+  if (!RUN || RUN.ocupado || !RUN.log.length) return; RUN.ocupado = true; const fueP = RUN.pausado; RUN.pausado = true; clearTimeout(RUN.timer); runPintar();
+  const R = RUN; const u = R.log.pop();
+  try {
+    const r = await apiPost(R.action, Object.assign({}, R.base, { paso: u.paso, chat_id: u.chat_id, corrida: R.corrida, deshacer: true, ini: u.ini, fin: u.fin }));
+    if (!r.ok) { R.log.push(u); avisoError(r.error || 'No se pudo deshacer'); }
+    else { R.siguiente = u.paso; R.fin = false; R.ultimo = 'deshecho: ' + (u.quien || ''); if (u.chat_id !== R.actual) { R.actual = u.chat_id; if (CHAT_ID) cerrarChat(); await new Promise(x => setTimeout(x, 350)); abrirChat(R.actual); await new Promise(x => setTimeout(x, 700)); } await runRefrescar(R.actual); }
+  } finally { if (R === RUN) { R.ocupado = false; R.pausado = fueP; runPintar(); runProgramar(); } }
+}
+function runTerminar(){ if (RUN) clearTimeout(RUN.timer); RUN = null; SIM_CORRIDA = null; const bar = document.getElementById('run-bar'); if (bar) bar.remove(); }
+async function iniciarCorrida({ action, base, titulo, reset }){
+  runTerminar(); const corrida = uuid(); SIM_CORRIDA = corrida;
+  const r0 = await apiPost(action, Object.assign({}, base, { paso: 0 }));
+  if (!r0.ok) { SIM_CORRIDA = null; return avisoError(r0.error || 'No se pudo preparar la toma'); }
+  if (reset !== false) { HILOS.clear(); await cargarInbox({ reset: true }); }
+  irTab('inicio'); const actual = r0.chat_id || null; if (actual && CHAT_ID !== actual) abrirChat(actual);
+  RUN = { action, base, corrida, titulo: r0.titulo || titulo, actual, siguiente: r0.siguiente || null, pausa: r0.pausa || 1500, total: r0.total || null, log: [], pausado: false, fin: !r0.siguiente, ocupado: false, ultimo: '' };
+  runPintar(); runProgramar();
+}
+async function simuladorVideo(parte){ return iniciarCorrida({ action: 'video_simulador', base: (parte === 2 || parte === 3) ? { parte } : {}, titulo: 'Simulador' + (parte ? ' · parte ' + parte : ''), reset: !(parte === 2 || parte === 3) }); }
+async function correrEscena(escena){ return iniciarCorrida({ action: 'video_escena', base: { escena }, titulo: escena }); }
 function abrirTomas(){
   const f = (a, i, t, sub, rojo) => '<button type="button" class="row op' + (rojo ? ' rojo' : '') + '" data-a="' + a + '"><div class="sq">' + ico(i) + '</div><div class="tx"><div class="t">' + esc(t) + '</div><div class="s">' + esc(sub) + '</div></div>' + ico('chev') + '</button>';
   const s = sheet({ titulo: 'Tomas de video', html: '<div class="grupo">' +
@@ -1568,7 +1588,7 @@ function abrirRecordatorio(){
 }
 // BORRAR (orden owner 2026-09-15): chat completo o mensaje suelto — solo en FyraChat, WhatsApp no se toca
 async function borrarChat(id){
-  SIM_CORRIDA = null;   // si el simulador estaba corriendo, se detiene
+  runTerminar();   // si una toma estaba corriendo, se detiene
   const c = INBOX.rows.get(id) || {}; const nom = c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''));
   const ok = await confirmar({ titulo: 'Borrar chat', texto: 'Se borra la conversación con ' + nom + ' de tu FyraChat: mensajes, cita y delegación. En WhatsApp no cambia nada.', ok: 'Borrar chat', peligro: true });
   if (!ok) return;

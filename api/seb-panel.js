@@ -3027,6 +3027,8 @@ module.exports = async function handler(req, res) {
                 const nomA = autoV ? [autoV.marca, autoV.modelo, autoV.anio].filter(Boolean).join(' ') : 'auto';
                 const pasos = VIDEO_PASOS(nomA); const P = pasos[paso - 1];
                 if (!P) return okJ({ fin: true, chat_id: Number(c.id) });
+                if (req.body.deshacer === true) return okJ(Object.assign({ chat_id: Number(c.id), paso, deshecho: true }, await deshacerPaso(Number(c.id), req.body.ini, req.body.fin, P)));
+                const iniP = Date.now();
                 const clave = 'sim:' + Number(c.id) + ':' + paso + ':' + (req.body.corrida || 'x');
                 // "HORAS DESPUÉS" sin fechar nada en el futuro (bug 2026-09-15: lo escrito después quedaba arriba): el paso 'tiempo'
                 // corre TODO lo anterior del hilo 2 h hacia ATRÁS y el reloj queda en el ahora; lo que sigue va en tiempo real.
@@ -3058,10 +3060,19 @@ module.exports = async function handler(req, res) {
                     const rA = await ejecutarAccion(tV, telV, P.a, { enganche: eng, plazo_meses: 48, clave, via: 'video' });
                     out = { ok: !!(rA.out && rA.out.ok), error: (rA.out && rA.out.error) || null };
                 }
-                return okJ(Object.assign({ chat_id: Number(c.id), paso, de: pasos.length, quien: P.q, texto: P.t || P.a, siguiente: paso + 1 <= pasos.length ? paso + 1 : null, pausa: P.pausa, fin: paso >= pasos.length }, out));
+                return okJ(Object.assign({ chat_id: Number(c.id), paso, de: pasos.length, quien: P.q, texto: P.t || P.a, siguiente: paso + 1 <= pasos.length ? paso + 1 : null, pausa: P.pausa, fin: paso >= pasos.length, ini: iniP, fin_ts: Date.now() }, out));
             }
             // ══ TOMAS DE VIDEO (orden owner 2026-09-15): escenas con guion exacto. Propias = chat del owner consigo mismo (Juan manda por WhatsApp);
             //    sintéticas = chats que solo viven en FyraChat (teléfonos de prueba), con contexto previo fechado atrás y pasos "en vivo".
+            // DESHACER UN PASO (orden owner 2026-09-15, "atrasar"): borra lo que ese paso dejó en el hilo (por ventana de inserción) y,
+            // si fue un reloj, regresa las fechas que corrió. WhatsApp no se toca (lo ya mandado allá se queda).
+            const deshacerPaso = async (cid, ini, fin, P) => {
+                const r0 = await run('DELETE FROM mensajes WHERE conversacion_id = ? AND created_at >= ? AND created_at <= ?', [cid, Number(ini) - 300, Number(fin) + 4000]).catch(() => ({ rowsAffected: 0 }));
+                if (P && P.q === 'tiempo' && Number(P.desfase_ms)) await run('UPDATE mensajes SET ts = ts + ? WHERE conversacion_id = ? AND created_at < ?', [Number(P.desfase_ms), cid, Number(ini) - 300]).catch(() => { });
+                const ult = (await query('SELECT texto, direccion, ts, tipo FROM mensajes WHERE conversacion_id = ? ORDER BY ts DESC, id DESC LIMIT 1', [cid]).catch(() => []))[0];
+                if (ult) await run('UPDATE conversaciones SET ult_texto = ?, ult_dir = ?, ult_msg_ts = ? WHERE id = ?', [String(ult.tipo === 'image' ? '📷 imagen' : ult.tipo === 'location' ? '📍 ubicación' : (ult.texto || '')).slice(0, 120), ult.direccion, Number(ult.ts) || Date.now(), cid]).catch(() => { });
+                return { borrados: Number(r0.rowsAffected) || 0 };
+            };
             if (action === 'video_limpiar' && req.method === 'POST') {
                 if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
                 const rows = await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono LIKE ?", [TV, ESC.TELS_SINTETICOS]).catch(() => []);
@@ -3123,13 +3134,15 @@ module.exports = async function handler(req, res) {
                     const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
                     if (String(c.telefono || '').replace(/\D/g, '') !== telV) return err(403, 'esta escena solo corre en tu chat contigo mismo');
                     const P = E.pasos[paso - 1]; if (!P) return okJ({ fin: true, chat_id: Number(c.id) });
+                    if (req.body.deshacer === true) return okJ(Object.assign({ chat_id: Number(c.id), paso, deshecho: true }, await deshacerPaso(Number(c.id), req.body.ini, req.body.fin, P)));
                     const clave = 'esc:' + String(req.body.escena) + ':' + Number(c.id) + ':' + paso + ':' + (req.body.corrida || 'x');
+                    const iniP = Date.now();
                     let out = { ok: true };
                     if (P.q === 'bot') { const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto: fill(P.t, a), manual: true, sesionId: SID, accion: 'manual' }); out = { ok: !!env.ok, error: env.error || null }; }
                     else if (P.q === 'foto') { const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, fotos: [P.url], manual: true, sesionId: SID, accion: 'manual' }); out = { ok: !!env.ok, error: env.error || null }; }
                     else if (P.q === 'fotos_auto' || P.q === 'ubicacion') { const rA = await ejecutarAccion(tV, telV, P.q === 'fotos_auto' ? 'fotos' : 'ubicacion', { clave, via: 'video' }); out = { ok: !!(rA.out && rA.out.ok), error: (rA.out && rA.out.error) || null }; }
                     else await pasoDirecto(Number(c.id), c.telefono, a, P, Date.now(), true);
-                    return okJ(Object.assign({ chat_id: Number(c.id), paso, de: E.pasos.length, quien: P.q, texto: P.t || P.q, siguiente: paso + 1 <= E.pasos.length ? paso + 1 : null, pausa: pausaDe(P), fin: paso >= E.pasos.length }, out));
+                    return okJ(Object.assign({ chat_id: Number(c.id), paso, de: E.pasos.length, quien: P.q, texto: P.t || P.q, siguiente: paso + 1 <= E.pasos.length ? paso + 1 : null, pausa: pausaDe(P), fin: paso >= E.pasos.length, ini: iniP, fin_ts: Date.now() }, out));
                 }
                 // ── SINTÉTICA ──
                 const flat = []; E.chats.forEach((ch, i) => (ch.vivo || []).forEach(P => flat.push(Object.assign({ chat_i: i }, P))));
@@ -3150,8 +3163,10 @@ module.exports = async function handler(req, res) {
                 }
                 const P = flat[paso - 1]; if (!P) return okJ({ fin: true });
                 const ch = E.chats[P.chat_i]; const a = autoDe(ch.auto_id); const c = await chatPorTel(ch.tel); if (!c) return err(404, 'el chat de ' + ch.nombre + ' no existe (corre el paso 0)');
+                if (req.body.deshacer === true) return okJ(Object.assign({ chat_id: Number(c.id), paso, deshecho: true }, await deshacerPaso(Number(c.id), req.body.ini, req.body.fin, P)));
+                const iniP = Date.now();
                 await pasoDirecto(Number(c.id), ch.tel, a, P, Date.now(), true);
-                return okJ({ chat_id: Number(c.id), nombre: ch.nombre, paso, de: flat.length, quien: P.q, texto: P.t || P.q, siguiente: paso + 1 <= flat.length ? paso + 1 : null, pausa: pausaDe(P), fin: paso >= flat.length });
+                return okJ({ chat_id: Number(c.id), nombre: ch.nombre, paso, de: flat.length, quien: P.q, texto: P.t || P.q, siguiente: paso + 1 <= flat.length ? paso + 1 : null, pausa: pausaDe(P), fin: paso >= flat.length, ini: iniP, fin_ts: Date.now() });
             }
             // ══ MODO VIDEO: borrar el chat del owner consigo mismo y volver a agregarlo con el guion de entrada (Juan → cotización → ¿qué te parece?)
             if (action === 'video_reiniciar' && req.method === 'POST') {
