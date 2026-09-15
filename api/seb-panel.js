@@ -31,7 +31,7 @@ const VIDEO_TENANT_ID = Number(process.env.VIDEO_TENANT_ID || 2);
 const VIDEO_VENDEDOR = process.env.VIDEO_VENDEDOR || 'Juan';
 const VIDEO_GUION = {
     enganche_pct: 0.35, pausa_ms: 1300, sin_dedupe: true,
-    antes: { ubicacion: ['Sí, déjame te la mando'], fotos: ['Va, aquí están'], info: ['Claro, te paso toda la info'] },
+    antes: { ubicacion: ['Sí, déjame te comparto ubicación'], fotos: ['Va, aquí están'], info: ['Claro, te paso toda la info'] },
     despues: { ubicacion: ['Aquí lo tenemos Sebastián, tú mandas 🙌', 'Te agendo una cita a que vengas y lo manejes?'], fotos: ['¿Qué te parece?', 'Como nuevo 😎'], cotizar: ['¿Qué te parece?'] }
 };
 const esChatVideo = (t, chat) => !!(t && chat && Number(t.id) === VIDEO_TENANT_ID && String(chat.telefono || '').replace(/\D/g, '') === String(t.telefono || '').replace(/\D/g, ''));   // SUBIR AUTO POR CHAT (2026-09-12): alta conversacional + consignación virtual    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
@@ -2178,14 +2178,16 @@ module.exports = async function handler(req, res) {
                     const u = await H.ubicacion({ auto_id: inv.id });
                     if (!u.ok) return R(200, { ok: false, error: u.error === 'sin_punto_asignado' ? ('el ' + nombreAuto + ' NO tiene punto de venta asignado (configúralo en puntos.html)') : u.error });
                     const punto = (u.placeholders && u.placeholders.punto_nombre) || 'nuestro punto Fyradrive';
-                    const pe = await query('SELECT image_b64, lat, lng, name FROM punto_envio WHERE auto_id = ?', [inv.id]);
+                    const pe = await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [inv.id]);
                     const cap = pe.length ? pe[0] : {};
-                    const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes';
+                    // LINK VISIBLE (orden owner 2026-09-15): en universos de vendedor el texto lleva el link de Maps (además del pin nativo)
+                    const linkMaps = (cap.maps_link && /^https?:/.test(String(cap.maps_link))) ? String(cap.maps_link) : ((cap.lat != null && cap.lng != null) ? 'https://maps.google.com/?q=' + cap.lat + ',' + cap.lng : '');
+                    const texto = 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes' + (TID && linkMaps ? '\n' + linkMaps : '');
                     // el paquete: captura + texto + pin (el puente los manda en ese orden en UNA llamada) y, solo en t0, la pregunta de cita
                     const env = await mandar({
                         segmentos: TID ? [texto] : [texto, '¿Qué día te queda bien para venir a verlo y manejarlo? Te agendo de una vez'],
                         imagen: cap.image_b64 || null, imagen_ref: cap.image_b64 ? 'ubic-img:' + inv.id : null,
-                        location: (cap.lat != null && cap.lng != null) ? { lat: cap.lat, lng: cap.lng, name: cap.name || punto } : null,
+                        location: (cap.lat != null && cap.lng != null) ? { lat: cap.lat, lng: cap.lng, name: cap.name || punto, maps_link: linkMaps || undefined } : null,
                         meta: { auto: nombreAuto, punto }
                     });
                     if (!env.ok) return R(200, { ok: false, error: env.error || 'el puente no pudo mandar la ubicación', auto: nombreAuto });

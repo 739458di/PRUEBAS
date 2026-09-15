@@ -283,6 +283,13 @@ a{color:var(--pri2)}
 .msg .st.entregado{color:#dff5ff}
 .msg .st.error{color:#ffd0d5;cursor:pointer;font-weight:600}
 /* media dentro de la burbuja: imagen r14 · ubicación / archivo como mini card con icono · audio con icono */
+.msg .lnk{color:#dff5ff;text-decoration:underline;text-underline-offset:3px;word-break:break-all}
+.msg.in .lnk{color:#9fd0ff}
+.msg .med small{word-break:break-all}
+.msg.sel{outline:3px solid var(--pos);outline-offset:2px}
+.sel-bar{position:absolute;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 16px calc(10px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
+.sel-bar b{flex:1;font-size:15px}
+.sel-bar .cta{width:auto;min-width:0;height:44px;padding:0 16px;margin:0}
 .msg .med-img{display:block;max-width:min(100%,260px);border-radius:14px;margin:2px 0 6px;overflow:hidden}
 .msg .med-img img{display:block;width:100%;max-height:320px;object-fit:cover}
 .msg .med{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;background:rgba(0,0,0,.18);border-radius:14px;padding:10px 12px;margin:2px 0 6px;min-width:180px}
@@ -1149,6 +1156,7 @@ function abrirChat(id){
   });
 }
 function cerrarChat(){
+  if (SELECCION) { try { SELECCION.bar.querySelector('#sel-x').click(); } catch (e) {} }
   if (!CHAT_ID) return;
   CHAT_ID = null; $('scr-chat').classList.remove('on'); $('tabbar').classList.remove('hide'); $('nuevos').classList.remove('on');
   if (HIST) { HIST = false; try { history.back(); } catch(e){} }
@@ -1201,6 +1209,8 @@ function estadoHTML(m){
   if (e === 'entregado') return '<span class="st entregado" title="Entregado">' + ico('checks') + '</span>';
   return '<span class="st" title="Enviado">' + ico('check') + '</span>';
 }
+// URLs dentro del texto → links tocables (el texto ya va escapado)
+function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s<]+)/g, (u) => '<a class="lnk" href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'); }
 function burbujaHTML(m){
   const k = keyDe(m), ts = ms(m.ts) || 0;
   if (m.emisor === 'sistema') return '<div class="sis" data-k="' + esc(k) + '" data-ts="' + ts + '">' + esc(m.texto || textoDe(m)) + ' <i>' + ico('eye') + 'Solo tú lo ves</i></div>';
@@ -1209,13 +1219,13 @@ function burbujaHTML(m){
   if (m.media && m.media.url) {
     const u = esc(m.media.url), tipo = m.media.tipo;
     if (tipo === 'imagen') med = '<a class="med-img" href="' + u + '" target="_blank" rel="noopener"><img src="' + u + '" alt="" loading="lazy"></a>';
-    else if (tipo === 'ubicacion') med = '<a class="med" href="' + u + '" target="_blank" rel="noopener"><span class="sq">' + ico('map') + '</span><span><b>Ubicación</b><small>Abrir en Maps</small></span></a>';
+    else if (tipo === 'ubicacion') med = '<a class="med" href="' + u + '" target="_blank" rel="noopener"><span class="sq">' + ico('map') + '</span><span><b>Ubicación' + (m.media.nombre ? ' · ' + esc(m.media.nombre) : '') + '</b><small>' + esc(String(m.media.url || '').replace(/^https?:\/\//, '')) + '</small></span></a>';
     else if (tipo === 'audio') med = '<div class="med"><span class="sq">' + ico('mic') + '</span><audio controls preload="none" src="' + u + '"></audio></div>';
     else med = '<a class="med" href="' + u + '" target="_blank" rel="noopener"><span class="sq">' + ico('file') + '</span><span><b>' + esc(m.media.nombre || 'Archivo') + '</b><small>Abrir</small></span></a>';
   } else if (m.media && !m.texto) med = esc(textoDe(m));
   const quien = out ? (m.emisor === 'bot' || m.emisor === 'asistente' ? 'Seb' : '') : '';
   const hora = new Date(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-  return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + ts + '">' + med + esc(m.texto || '') + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
+  return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + ts + '">' + med + linkify(m.texto || '') + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
 }
 function pintarMensajes(h){
   const box = $('msgs'); let html = '', dia = '';
@@ -1412,6 +1422,7 @@ function abrirMasAcciones(){
     fila('ubicacion', 'map', 'Ubicación', 'Texto, captura y pin de Maps.') +
     fila('info', 'info', 'Información', 'La ficha completa del auto.') +
     fila('primer_mensaje', 'chat', 'Primer mensaje', 'Hola, mi nombre es (tú), del (auto). ¿Te interesaba comprar el auto?') +
+    fila('seleccionar', 'checks', 'Borrar mensajes', 'Toca los mensajes que quieras quitar (también los del comprador).') +
     fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
     '</div>' +
@@ -1424,6 +1435,7 @@ function abrirMasAcciones(){
     if (a === 'soltar') { s.cerrar(); return soltarChat(); }
     if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
     if (a === 'borrar') { s.cerrar(); return borrarChat(id); }
+    if (a === 'seleccionar') { s.cerrar(); return modoSeleccion(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
     const r = await accionSimple(id, a);
     s.cerrar();
@@ -1487,6 +1499,27 @@ async function borrarMensaje(id, mid, el){
   const h = hiloDe(id); h.msgs = h.msgs.filter(m => Number(m.id) !== Number(mid)); h.keys.delete('id:' + mid);
   if (el) el.remove();
   const row = INBOX.rows.get(id); if (row) { const u = h.msgs[h.msgs.length - 1]; row.ult_texto = u ? textoDe(u) : ''; if (u) { row.ult_dir = u.dir; row.ult_emisor = u.emisor; row.ult_ts = u.ts; } pintarFila(row); }
+}
+// MODO SELECCIÓN (orden owner 2026-09-15): tocar burbujas → "Borrar (n)" → se quitan del FyraChat (comprador incluido)
+let SELECCION = null;
+function modoSeleccion(id){
+  if (SELECCION) return;
+  const bar = document.createElement('div'); bar.className = 'sel-bar'; bar.innerHTML = '<b id="sel-n">Toca los mensajes a borrar</b><button type="button" class="cta sec" id="sel-x">Cancelar</button><button type="button" class="cta rojo" id="sel-go" disabled>Borrar</button>';
+  $('scr-chat').appendChild(bar);
+  SELECCION = { id, ids: new Set(), bar };
+  const onTap = (e) => { const el = e.target.closest('.msg, .sis'); if (!el || !SELECCION) return; const mm = /^id:(\d+)$/.exec(String(el.dataset.k || '')); if (!mm) return avisoError('Este mensaje aún no se guarda en el servidor.'); e.preventDefault(); e.stopPropagation(); const mid = Number(mm[1]); if (SELECCION.ids.has(mid)) { SELECCION.ids.delete(mid); el.classList.remove('sel'); } else { SELECCION.ids.add(mid); el.classList.add('sel'); } const n = SELECCION.ids.size; $('sel-n').textContent = n ? n + (n === 1 ? ' mensaje' : ' mensajes') : 'Toca los mensajes a borrar'; $('sel-go').disabled = !n; $('sel-go').textContent = n ? 'Borrar (' + n + ')' : 'Borrar'; };
+  $('msgs').addEventListener('click', onTap, true);
+  const salir = () => { $('msgs').removeEventListener('click', onTap, true); $('msgs').querySelectorAll('.sel').forEach(x => x.classList.remove('sel')); bar.remove(); SELECCION = null; };
+  bar.querySelector('#sel-x').onclick = salir;
+  bar.querySelector('#sel-go').onclick = async () => {
+    const ids = [...SELECCION.ids]; if (!ids.length) return;
+    const ok = await confirmar({ titulo: 'Borrar mensajes', texto: 'Se quitan ' + ids.length + ' mensaje(s) de tu FyraChat. En WhatsApp no cambia nada.', ok: 'Borrar', peligro: true }); if (!ok) return;
+    bloquear(bar.querySelector('#sel-go'), true);
+    const h = hiloDe(id); let borrados = 0;
+    for (const mid of ids) { const r = await apiPost('mensaje_borrar', { chat_id: id, id: mid }); if (r.ok) { borrados++; h.msgs = h.msgs.filter(m => Number(m.id) !== mid); h.keys.delete('id:' + mid); const el = $('msgs').querySelector('[data-k="id:' + mid + '"]'); if (el) el.remove(); } }
+    const row = INBOX.rows.get(id); if (row) { const u = h.msgs[h.msgs.length - 1]; row.ult_texto = u ? textoDe(u) : ''; if (u) { row.ult_dir = u.dir; row.ult_emisor = u.emisor; row.ult_ts = u.ts; } pintarFila(row); }
+    salir(); if (borrados < ids.length) avisoError('Se borraron ' + borrados + ' de ' + ids.length);
+  };
 }
 // mantener presionado (600 ms) una burbuja → borrar ese mensaje; una fila de la lista → borrar ese chat
 function mantener(root, sel, fn){
