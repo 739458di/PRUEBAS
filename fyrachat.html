@@ -925,7 +925,19 @@ function pintarMas(){
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
       masRow('settings', 'Ajustes', 'Preferencias de la app', "abrirPronto('Ajustes', 'Las preferencias de la app llegan en una próxima versión.')") +
     '</div>' +
+    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('refresh', 'Reiniciar video', 'Borra tu chat contigo mismo y te vuelve a agregar con el guion de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
+}
+// MODO VIDEO desde Más (cuando ya no existe el chat): elige el auto y arranca el guion
+async function reiniciarVideoDesdeMas(){
+  await cargarAutos({ silencioso: true });
+  const autos = (AUTOS || []).filter(a => a.estado !== 'vendido');
+  if (!autos.length) return avisoError('No tienes autos para el video.');
+  selectorAutos({ autos, titulo: 'Auto para el video', alElegir: async (a) => {
+    const r = await apiPost('video_reiniciar', { auto_id: a.id });
+    if (!r.ok) return avisoError(r.error || 'No se pudo');
+    await cargarInbox({ reset: true }); irTab('inicio'); if (r.chat_id) abrirChat(r.chat_id);
+  } });
 }
 // Tu cuenta: universo, teléfono, estado de WhatsApp; "Reiniciar prueba" solo en demo
 function abrirCuenta(){
