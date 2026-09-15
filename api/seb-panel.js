@@ -2394,7 +2394,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'video_reiniciar',
+        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'video_reiniciar', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -2893,6 +2893,39 @@ module.exports = async function handler(req, res) {
             };
 
             // ══ SUBIR AUTO POR CHAT (orden owner 2026-09-12) ══
+            // ══ BORRAR (orden owner 2026-09-15): un chat completo o un mensaje suelto, SOLO en FyraChat (WhatsApp no se toca)
+            const borrarChatCore = async (cid) => {
+                const borrado = {};
+                for (const [k, sql, args] of [
+                    ['casillas', 'DELETE FROM cita_casillas WHERE cita_match_id IN (SELECT id FROM citas_match WHERE chat_id = ?)', [cid]],
+                    ['citas_match', 'DELETE FROM citas_match WHERE chat_id = ?', [cid]],
+                    ['citas', 'DELETE FROM citas WHERE tenant_id = ? AND chat_id = ?', [TV, cid]],
+                    ['acciones', 'DELETE FROM acciones WHERE chat_id = ?', [cid]],
+                    ['auto_boton_log', 'DELETE FROM auto_boton_log WHERE chat_id = ?', [cid]],
+                    ['programados', 'DELETE FROM mensajes_programados WHERE tenant_id = ? AND chat_id = ?', [TV, cid]],
+                    ['delegaciones', 'DELETE FROM delegaciones WHERE chat_id = ?', [cid]],
+                    ['mensajes', 'DELETE FROM mensajes WHERE conversacion_id = ?', [cid]],
+                    ['conversacion', 'DELETE FROM conversaciones WHERE id = ?', [cid]]]) {
+                    try { const r0 = await run(sql, args); borrado[k] = (borrado[k] || 0) + (Number(r0.rowsAffected) || 0); } catch (e) { borrado[k] = 'n/a'; }
+                }
+                return borrado;
+            };
+            if (action === 'chat_borrar' && req.method === 'POST') {
+                const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
+                try { await soltarCore(tV, c.telefono, { sesionId: SID }); } catch (e) { }   // el puente deja de leerlo
+                const borrado = await borrarChatCore(Number(c.id));
+                return okJ({ chat_id: Number(c.id), borrado });
+            }
+            if (action === 'mensaje_borrar' && req.method === 'POST') {
+                const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
+                const mid = Number(req.body.id); if (!mid) return err(400, 'id requerido');
+                const r0 = await run('DELETE FROM mensajes WHERE id = ? AND conversacion_id = ?', [mid, Number(c.id)]).catch(() => ({ rowsAffected: 0 }));
+                // la portada de la lista se recalcula con el último mensaje que quede
+                const ult = (await query('SELECT texto, direccion, ts, tipo FROM mensajes WHERE conversacion_id = ? ORDER BY ts DESC, id DESC LIMIT 1', [Number(c.id)]).catch(() => []))[0];
+                if (ult) await run('UPDATE conversaciones SET ult_texto = ?, ult_dir = ?, ult_msg_ts = ? WHERE id = ?', [String(ult.tipo === 'image' ? '📷 imagen' : ult.tipo === 'location' ? '📍 ubicación' : (ult.texto || '')).slice(0, 120), ult.direccion, Number(ult.ts) || Date.now(), Number(c.id)]).catch(() => { });
+                else await run("UPDATE conversaciones SET ult_texto = '' WHERE id = ?", [Number(c.id)]).catch(() => { });
+                return okJ({ chat_id: Number(c.id), id: mid, borrado: Number(r0.rowsAffected) || 0 });
+            }
             // ══ MODO VIDEO: borrar el chat del owner consigo mismo y volver a agregarlo con el guion de entrada (Juan → cotización → ¿qué te parece?)
             if (action === 'video_reiniciar' && req.method === 'POST') {
                 if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
@@ -2903,21 +2936,7 @@ module.exports = async function handler(req, res) {
                 // 1) soltar en el puente + borrar TODO el rastro del chat (mensajes, delegaciones, citas, acciones, bitácora, conversación)
                 try { await soltarCore(tV, telV, { sesionId: SID }); } catch (e) { }
                 const borrado = {};
-                for (const c of prev) {
-                    const cid = Number(c.id);
-                    for (const [k, sql, args] of [
-                        ['casillas', 'DELETE FROM cita_casillas WHERE cita_match_id IN (SELECT id FROM citas_match WHERE chat_id = ?)', [cid]],
-                        ['citas_match', 'DELETE FROM citas_match WHERE chat_id = ?', [cid]],
-                        ['citas', 'DELETE FROM citas WHERE tenant_id = ? AND chat_id = ?', [TV, cid]],
-                        ['acciones', 'DELETE FROM acciones WHERE chat_id = ?', [cid]],
-                        ['auto_boton_log', 'DELETE FROM auto_boton_log WHERE chat_id = ?', [cid]],
-                        ['programados', 'DELETE FROM mensajes_programados WHERE tenant_id = ? AND chat_id = ?', [TV, cid]],
-                        ['delegaciones', 'DELETE FROM delegaciones WHERE chat_id = ?', [cid]],
-                        ['mensajes', 'DELETE FROM mensajes WHERE conversacion_id = ?', [cid]],
-                        ['conversacion', 'DELETE FROM conversaciones WHERE id = ?', [cid]]]) {
-                        try { const r0 = await run(sql, args); borrado[k] = (borrado[k] || 0) + (Number(r0.rowsAffected) || 0); } catch (e) { borrado[k] = 'n/a'; }
-                    }
-                }
+                for (const c of prev) { const b0 = await borrarChatCore(Number(c.id)); for (const k of Object.keys(b0)) borrado[k] = (Number(borrado[k]) || 0) + (Number(b0[k]) || 0); }
                 if (req.body.solo_borrar) return okJ({ borrado, chat_id: null });
                 // 2) volver a agregar (en silencio) y soltar el guion de entrada
                 if (!autoId) return err(400, 'falta auto_id para volver a agregar', { borrado });

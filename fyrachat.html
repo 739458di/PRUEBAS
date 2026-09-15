@@ -1416,13 +1416,14 @@ function abrirMasAcciones(){
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
     '</div>' +
     ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('video', 'refresh', 'Reiniciar video', 'Borra este chat y vuelve a agregarte con el guion de Juan.') + '</div>' : '') +
-    '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + '</div>' });
+    '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + fila('borrar', 'x', 'Borrar chat', 'Se borra de tu FyraChat (WhatsApp no se toca).', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
     if (a === 'recordatorio') { s.cerrar(); return abrirRecordatorio(); }
     if (a === 'sim') { s.cerrar(); return abrirSimular(); }
     if (a === 'soltar') { s.cerrar(); return soltarChat(); }
     if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
+    if (a === 'borrar') { s.cerrar(); return borrarChat(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
     const r = await accionSimple(id, a);
     s.cerrar();
@@ -1467,6 +1468,36 @@ function abrirRecordatorio(){
     s.cerrar(); notaLocal(id, 'Recordatorio programado · ' + fechaCorta(cuando) + '\n«' + t + '»');
   };
 }
+// BORRAR (orden owner 2026-09-15): chat completo o mensaje suelto — solo en FyraChat, WhatsApp no se toca
+async function borrarChat(id){
+  const c = INBOX.rows.get(id) || {}; const nom = c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''));
+  const ok = await confirmar({ titulo: 'Borrar chat', texto: 'Se borra la conversación con ' + nom + ' de tu FyraChat: mensajes, cita y delegación. En WhatsApp no cambia nada.', ok: 'Borrar chat', peligro: true });
+  if (!ok) return;
+  const r = await apiPost('chat_borrar', { chat_id: id });
+  if (!r.ok) return avisoError(r.error || 'No se pudo borrar');
+  HILOS.delete(id); INBOX.rows.delete(id); const el = $('lista').querySelector('.fila[data-id="' + CSS.escape(String(id)) + '"]'); if (el) el.remove();
+  if (CHAT_ID === id) cerrarChat(); pintarBell();
+  if (!$('lista').querySelector('.fila')) cargarInbox({ reset: true });
+}
+async function borrarMensaje(id, mid, el){
+  const ok = await confirmar({ titulo: 'Borrar mensaje', texto: 'Se quita este mensaje de tu FyraChat. En WhatsApp no cambia nada.', ok: 'Borrar mensaje', peligro: true });
+  if (!ok) return;
+  const r = await apiPost('mensaje_borrar', { chat_id: id, id: mid });
+  if (!r.ok) return avisoError(r.error || 'No se pudo borrar');
+  const h = hiloDe(id); h.msgs = h.msgs.filter(m => Number(m.id) !== Number(mid)); h.keys.delete('id:' + mid);
+  if (el) el.remove();
+  const row = INBOX.rows.get(id); if (row) { const u = h.msgs[h.msgs.length - 1]; row.ult_texto = u ? textoDe(u) : ''; if (u) { row.ult_dir = u.dir; row.ult_emisor = u.emisor; row.ult_ts = u.ts; } pintarFila(row); }
+}
+// mantener presionado (600 ms) una burbuja → borrar ese mensaje; una fila de la lista → borrar ese chat
+function mantener(root, sel, fn){
+  let t = null, el = null;
+  const start = (e) => { el = e.target.closest(sel); if (!el) return; clearTimeout(t); t = setTimeout(() => { t = null; if (navigator.vibrate) navigator.vibrate(15); fn(el, e); }, 600); };
+  const stop = () => { if (t) { clearTimeout(t); t = null; } };
+  root.addEventListener('pointerdown', start); root.addEventListener('pointerup', stop); root.addEventListener('pointercancel', stop); root.addEventListener('pointermove', (e) => { if (t && el && !el.contains(e.target)) stop(); });
+  root.addEventListener('contextmenu', (e) => { const x = e.target.closest(sel); if (x) { e.preventDefault(); stop(); fn(x, e); } });
+}
+mantener($('msgs'), '.msg, .sis', (el) => { const k = String(el.dataset.k || ''); const m = /^id:(\d+)$/.exec(k); if (!m || !CHAT_ID) return avisoError('Este mensaje aún no se guarda en el servidor.'); borrarMensaje(CHAT_ID, Number(m[1]), el); });
+mantener($('lista'), '.fila', (el) => { const id = Number(el.dataset.id); if (id) borrarChat(id); });
 // MODO VIDEO (owner 2026-09-15): borrar el chat consigo mismo y volver a agregarse con el guion de entrada
 async function reiniciarVideo(id){
   const h = hiloDe(id); const auto = h.chat && h.chat.auto;
