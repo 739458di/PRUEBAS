@@ -3003,23 +3003,23 @@ module.exports = async function handler(req, res) {
                 const pasos = VIDEO_PASOS(nomA); const P = pasos[paso - 1];
                 if (!P) return okJ({ fin: true, chat_id: Number(c.id) });
                 const clave = 'sim:' + Number(c.id) + ':' + paso + ':' + (req.body.corrida || 'x');
-                // desfase acumulado: todo lo que va después de un paso 'tiempo' se fecha en el futuro (así el hilo muestra "horas después")
-                const desfase = pasos.slice(0, paso).reduce((a, x) => a + (Number(x.desfase_ms) || 0), 0);
-                const fechar = async (msgId, ts) => { if (!desfase || !msgId) return; await new Promise(r => setTimeout(r, 700)); await run('UPDATE mensajes SET ts = ? WHERE conversacion_id = ? AND msg_id = ?', [ts, Number(c.id), msgId]).catch(() => { }); await run('UPDATE conversaciones SET ult_msg_ts = MAX(COALESCE(ult_msg_ts,0), ?) WHERE id = ?', [ts, Number(c.id)]).catch(() => { }); };
+                // "HORAS DESPUÉS" sin fechar nada en el futuro (bug 2026-09-15: lo escrito después quedaba arriba): el paso 'tiempo'
+                // corre TODO lo anterior del hilo 2 h hacia ATRÁS y el reloj queda en el ahora; lo que sigue va en tiempo real.
                 let out = { ok: true };
                 if (P.q === 'bot') {
                     const texto = P.t === '__CITA__' ? citaTextoVideo(nomA) : P.t;
                     const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
                     out = { ok: !!env.ok, error: env.error || null };
-                    if (env.ok && desfase) await fechar(env.msg_id, Date.now() + desfase);
                 }
                 else if (P.q === 'tiempo') {
-                    const ts = Date.now() + (Number(P.desfase_ms) || 0) - 1000, msgId = 'sim-t:' + clave;
+                    const ahora = Date.now(), atras = Number(P.desfase_ms) || 0;
+                    await run('UPDATE mensajes SET ts = ts - ? WHERE conversacion_id = ? AND ts <= ?', [atras, Number(c.id), ahora]).catch(() => { });
+                    const ts = ahora, msgId = 'sim-t:' + clave;
                     await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(c.id), msgId, ts, 'out', 'sistema', '⏳ ' + P.t, 'text', 1, Date.now()]);
                     try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: Number(c.id), telefono: c.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'out', emisor: 'sistema', texto: '⏳ ' + P.t, ts, media: null, estado: 'enviado' } }); } catch (e) { }
                 }
                 else if (P.q === 'comprador') {
-                    const ts = Date.now() + desfase, msgId = 'sim-in:' + clave;
+                    const ts = Date.now(), msgId = 'sim-in:' + clave;
                     await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(c.id), msgId, ts, 'in', 'comprador', P.t, 'text', 0, ts]);
                     await run("UPDATE conversaciones SET ult_texto = ?, ult_dir = 'in', ult_msg_ts = ? WHERE id = ?", [P.t.slice(0, 120), ts, Number(c.id)]).catch(() => { });
                     try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: Number(c.id), telefono: c.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'in', emisor: 'comprador', texto: P.t, ts, media: null, estado: 'enviado' } }); } catch (e) { }

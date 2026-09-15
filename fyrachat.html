@@ -937,25 +937,26 @@ function pintarMas(){
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
 }
 // SIMULADOR (orden owner 2026-09-15): reinicia el chat contigo mismo y corre el flujo exacto paso a paso (la UI marca el ritmo)
-let SIM_CORRIENDO = false;
+let SIM_CORRIDA = null;   // id de la corrida viva; una nueva la cancela (tocar Simulador otra vez = empezar de cero)
 async function simuladorVideo(parte){
-  if (SIM_CORRIENDO) return avisoError('El simulador ya está corriendo.');
-  SIM_CORRIENDO = true;
+  const corrida = uuid(); SIM_CORRIDA = corrida;
+  const viva = () => SIM_CORRIDA === corrida;
   try {
     const r0 = await apiPost('video_simulador', parte === 2 ? { paso: 0, parte: 2 } : { paso: 0 });
-    if (!r0.ok || !r0.chat_id) { SIM_CORRIENDO = false; return avisoError(r0.error || 'No se pudo reiniciar'); }
+    if (!r0.ok || !r0.chat_id) { if (viva()) SIM_CORRIDA = null; return avisoError(r0.error || 'No se pudo reiniciar'); }
     const id = r0.chat_id; if (parte !== 2) { HILOS.delete(id); await cargarInbox({ reset: true }); } irTab('inicio'); if (CHAT_ID !== id) abrirChat(id);
-    const corrida = uuid(); let paso = r0.siguiente || 1, pausa = r0.pausa || 1500;
-    while (paso) {
-      await new Promise(x => setTimeout(x, pausa));
+    let paso = r0.siguiente || 1, pausa = r0.pausa || 1500;
+    while (paso && viva()) {
+      await new Promise(x => setTimeout(x, pausa)); if (!viva()) break;
       const r = await apiPost('video_simulador', { paso, chat_id: id, corrida });
-      if (!r.ok && !r.fin) { avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
-      // refresco del hilo completo y repintado ordenado por fecha (los pasos "horas después" van fechados en el futuro)
-      try { await cargarHilo(id); if (CHAT_ID === id) { pintarMensajes(hiloDe(id)); irAlFondo(true); } } catch (e) {}
+      if (!viva()) break;
+      if (!r.ok && !r.fin) { if (/inexistente/i.test(String(r.error || ''))) break; avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
+      // refresco del hilo completo y repintado ordenado por fecha (el paso "horas después" corre lo anterior 2 h atrás)
+      try { const h = hiloDe(id); h.cargado = false; h.ult_ts = 0; h.msgs = []; h.keys = new Set(); h.porMid = new Map(); await cargarHilo(id); if (CHAT_ID === id) { pintarMensajes(hiloDe(id)); irAlFondo(true); } } catch (e) {}
       if (r.fin || !r.siguiente) break;
       paso = r.siguiente; pausa = r.pausa || 1500;
     }
-  } finally { SIM_CORRIENDO = false; }
+  } finally { if (viva()) SIM_CORRIDA = null; }
 }
 // MODO VIDEO desde Más (cuando ya no existe el chat): elige el auto y arranca el guion
 async function reiniciarVideoDesdeMas(){
@@ -1525,6 +1526,7 @@ function abrirRecordatorio(){
 }
 // BORRAR (orden owner 2026-09-15): chat completo o mensaje suelto — solo en FyraChat, WhatsApp no se toca
 async function borrarChat(id){
+  SIM_CORRIDA = null;   // si el simulador estaba corriendo, se detiene
   const c = INBOX.rows.get(id) || {}; const nom = c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''));
   const ok = await confirmar({ titulo: 'Borrar chat', texto: 'Se borra la conversación con ' + nom + ' de tu FyraChat: mensajes, cita y delegación. En WhatsApp no cambia nada.', ok: 'Borrar chat', peligro: true });
   if (!ok) return;
