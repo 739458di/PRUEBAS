@@ -49,8 +49,27 @@ const VIDEO_PASOS = (autoNombre) => [
     { q: 'bot', t: 'Impecable, como nuevo', pausa: 3400 },
     { q: 'comprador', t: 'qué factura tiene?', pausa: 2600 },
     { q: 'bot', t: 'Factura de agencia, único dueño, todo en regla de papelería, a prueba de mecánico si gustas.', pausa: 3400 },
-    { q: 'comprador', t: 'déjame checarlo', pausa: 0 }
+    { q: 'comprador', t: 'déjame checarlo', pausa: 2600 },
+    // ── PARTE 2 (orden owner 2026-09-15): el reloj marca "horas después" y todo lo que sigue queda fechado +2 h ──
+    { q: 'tiempo', t: '2 horas después', pausa: 2600, desfase_ms: 2 * 3600000, parte: 2 },
+    { q: 'bot', t: 'Qué tal Sebastián, ¿qué has pensado? ¿Te reservo un horario para prueba de manejo?', pausa: 3200 },
+    { q: 'comprador', t: 'sí por favor', pausa: 2200 },
+    { q: 'bot', t: 'Excelente', pausa: 1400 },
+    { q: 'bot', t: '¿Qué día y hora te viene bien?', pausa: 3200 },
+    { q: 'comprador', t: 'martes a medio día', pausa: 2400 },
+    { q: 'bot', t: 'Okey, muy bien, entonces te confirmo:', pausa: 1600 },
+    { q: 'bot', t: '__CITA__', pausa: 1800 },
+    { q: 'bot', t: '¿Correcto?', pausa: 3000 },
+    { q: 'comprador', t: 'sí', pausa: 2000 },
+    { q: 'bot', t: 'Perfecto, cita confirmada. Te voy avisando cualquier cosa.', pausa: 0 }
 ];
+// próximo martes (estricto) en hora de Monterrey → "Martes 22 de septiembre · 12:00 pm"
+function citaTextoVideo(autoNombre) {
+    const hoy = new Date(Date.now() - 6 * 3600000); let d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
+    do { d = new Date(d.getTime() + 86400000); } while (d.getUTCDay() !== 2);
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    return 'Cita · ' + autoNombre + '\nMartes ' + d.getUTCDate() + ' de ' + meses[d.getUTCMonth()] + ' · 12:00 pm\nPlaza Tribeca, San Pedro';
+}
 const VIDEO_GUION = {
     enganche_pct: 0.35, pausa_ms: 1300, sin_dedupe: true,
     antes: { ubicacion: ['Sí, déjame te comparto ubicación'], fotos: ['Va, aquí están'], info: ['Claro, te paso toda la info'] },
@@ -2955,6 +2974,12 @@ module.exports = async function handler(req, res) {
                 if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
                 const telV = String(tV.telefono || '').replace(/\D/g, '');
                 const paso = Number(req.body.paso) || 0;
+                if (paso === 0 && Number(req.body.parte) === 2) {   // continuar sobre el chat que ya existe, desde el reloj
+                    const cAct = (await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []))[0];
+                    if (!cAct) return err(404, 'primero corre el simulador completo (no hay chat contigo mismo)');
+                    const idx = VIDEO_PASOS('x').findIndex(x => x.parte === 2);
+                    return okJ({ chat_id: Number(cAct.id), total: VIDEO_PASOS('x').length, siguiente: idx + 1, pausa: 1200, parte: 2 });
+                }
                 if (paso === 0) {
                     const prev = await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []);
                     let autoId = Number(req.body.auto_id) || null;
@@ -2978,10 +3003,23 @@ module.exports = async function handler(req, res) {
                 const pasos = VIDEO_PASOS(nomA); const P = pasos[paso - 1];
                 if (!P) return okJ({ fin: true, chat_id: Number(c.id) });
                 const clave = 'sim:' + Number(c.id) + ':' + paso + ':' + (req.body.corrida || 'x');
+                // desfase acumulado: todo lo que va después de un paso 'tiempo' se fecha en el futuro (así el hilo muestra "horas después")
+                const desfase = pasos.slice(0, paso).reduce((a, x) => a + (Number(x.desfase_ms) || 0), 0);
+                const fechar = async (msgId, ts) => { if (!desfase || !msgId) return; await new Promise(r => setTimeout(r, 700)); await run('UPDATE mensajes SET ts = ? WHERE conversacion_id = ? AND msg_id = ?', [ts, Number(c.id), msgId]).catch(() => { }); await run('UPDATE conversaciones SET ult_msg_ts = MAX(COALESCE(ult_msg_ts,0), ?) WHERE id = ?', [ts, Number(c.id)]).catch(() => { }); };
                 let out = { ok: true };
-                if (P.q === 'bot') { const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto: P.t, manual: true, sesionId: SID, accion: 'manual' }); out = { ok: !!env.ok, error: env.error || null }; }
+                if (P.q === 'bot') {
+                    const texto = P.t === '__CITA__' ? citaTextoVideo(nomA) : P.t;
+                    const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
+                    out = { ok: !!env.ok, error: env.error || null };
+                    if (env.ok && desfase) await fechar(env.msg_id, Date.now() + desfase);
+                }
+                else if (P.q === 'tiempo') {
+                    const ts = Date.now() + (Number(P.desfase_ms) || 0) - 1000, msgId = 'sim-t:' + clave;
+                    await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(c.id), msgId, ts, 'out', 'sistema', '⏳ ' + P.t, 'text', 1, Date.now()]);
+                    try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: Number(c.id), telefono: c.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'out', emisor: 'sistema', texto: '⏳ ' + P.t, ts, media: null, estado: 'enviado' } }); } catch (e) { }
+                }
                 else if (P.q === 'comprador') {
-                    const ts = Date.now(), msgId = 'sim-in:' + clave;
+                    const ts = Date.now() + desfase, msgId = 'sim-in:' + clave;
                     await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(c.id), msgId, ts, 'in', 'comprador', P.t, 'text', 0, ts]);
                     await run("UPDATE conversaciones SET ult_texto = ?, ult_dir = 'in', ult_msg_ts = ? WHERE id = ?", [P.t.slice(0, 120), ts, Number(c.id)]).catch(() => { });
                     try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: Number(c.id), telefono: c.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'in', emisor: 'comprador', texto: P.t, ts, media: null, estado: 'enviado' } }); } catch (e) { }

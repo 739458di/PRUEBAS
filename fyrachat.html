@@ -298,6 +298,7 @@ a{color:var(--pri2)}
 .msg .med b{display:block;font-size:14px;line-height:18px;font-weight:600}
 .msg .med small{display:block;font-size:12px;line-height:16px;opacity:.75}
 .msg .med audio{width:200px;max-width:100%;height:32px}
+.sis.tiempo{padding:12px 0;margin:8px 0}.sis.tiempo span{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;background:var(--s1);border:1px solid var(--border);color:#fff;font-size:13px;font-weight:600;letter-spacing:.02em}.sis.tiempo svg{width:16px;height:16px}
 .sis{align-self:center;max-width:88%;text-align:center;font-size:12px;line-height:16px;color:var(--muted);padding:4px 12px;margin:4px 0;white-space:pre-wrap}
 .sis i{display:inline-flex;align-items:center;gap:4px;font-style:normal;font-size:11px;color:var(--muted);margin-top:2px;opacity:.8}
 .sis i .ic{width:12px;height:12px}
@@ -932,25 +933,25 @@ function pintarMas(){
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
       masRow('settings', 'Ajustes', 'Preferencias de la app', "abrirPronto('Ajustes', 'Las preferencias de la app llegan en una próxima versión.')") +
     '</div>' +
-    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('bot', 'Simulador', 'Reinicia tu chat contigo mismo y corre solo el flujo completo de Juan', 'simuladorVideo()') + masRow('refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
+    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('bot', 'Simulador', 'Reinicia tu chat contigo mismo y corre solo el flujo completo de Juan (partes 1 y 2)', 'simuladorVideo()') + masRow('clock', 'Simulador · parte 2', 'Continúa sobre el chat actual: horas después, prueba de manejo y cita', 'simuladorVideo(2)') + masRow('refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan', 'reiniciarVideoDesdeMas()') + '</div>' : '') +
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
 }
 // SIMULADOR (orden owner 2026-09-15): reinicia el chat contigo mismo y corre el flujo exacto paso a paso (la UI marca el ritmo)
 let SIM_CORRIENDO = false;
-async function simuladorVideo(){
+async function simuladorVideo(parte){
   if (SIM_CORRIENDO) return avisoError('El simulador ya está corriendo.');
   SIM_CORRIENDO = true;
   try {
-    const r0 = await apiPost('video_simulador', { paso: 0 });
+    const r0 = await apiPost('video_simulador', parte === 2 ? { paso: 0, parte: 2 } : { paso: 0 });
     if (!r0.ok || !r0.chat_id) { SIM_CORRIENDO = false; return avisoError(r0.error || 'No se pudo reiniciar'); }
-    const id = r0.chat_id; HILOS.delete(id); await cargarInbox({ reset: true }); irTab('inicio'); abrirChat(id);
+    const id = r0.chat_id; if (parte !== 2) { HILOS.delete(id); await cargarInbox({ reset: true }); } irTab('inicio'); if (CHAT_ID !== id) abrirChat(id);
     const corrida = uuid(); let paso = r0.siguiente || 1, pausa = r0.pausa || 1500;
     while (paso) {
       await new Promise(x => setTimeout(x, pausa));
       const r = await apiPost('video_simulador', { paso, chat_id: id, corrida });
       if (!r.ok && !r.fin) { avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
-      // refresco del hilo (el timbre casi siempre llega antes; el dedup evita dobles)
-      try { const x = await cargarHilo(id); if (x && x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); } catch (e) {}
+      // refresco del hilo completo y repintado ordenado por fecha (los pasos "horas después" van fechados en el futuro)
+      try { await cargarHilo(id); if (CHAT_ID === id) { pintarMensajes(hiloDe(id)); irAlFondo(true); } } catch (e) {}
       if (r.fin || !r.siguiente) break;
       paso = r.siguiente; pausa = r.pausa || 1500;
     }
@@ -1128,7 +1129,7 @@ function mezclar(h, mensajes){
   // La burbuja del DOM conserva la llave con la que nació (m._kDom) para poder actualizarse en vez de pintarse dos veces.
   const nuevos = [];
   h.porMid = h.porMid || new Map();
-  const fundir = (ya, m) => { Object.assign(ya, { id: m.id != null && m.id !== '' ? m.id : ya.id, msg_id: m.msg_id || ya.msg_id, estado: (m.estado && m.estado !== 'enviando') ? m.estado : (ya.estado === 'enviando' ? 'enviado' : ya.estado), media: m.media || ya.media, texto: m.texto || ya.texto, ts: ya.ts || m.ts }); if (!ya._kDom) ya._kDom = keyDe(ya); h.keys.add(keyDe(ya)); if (ya.msg_id) h.porMid.set(ya.msg_id, ya); ya._eco = true; nuevos.push(ya); };
+  const fundir = (ya, m) => { Object.assign(ya, { id: m.id != null && m.id !== '' ? m.id : ya.id, msg_id: m.msg_id || ya.msg_id, estado: (m.estado && m.estado !== 'enviando') ? m.estado : (ya.estado === 'enviando' ? 'enviado' : ya.estado), media: m.media || ya.media, texto: m.texto || ya.texto, ts: (m.id != null && m.id !== '' && m.ts) ? m.ts : (ya.ts || m.ts) }); if (!ya._kDom) ya._kDom = keyDe(ya); h.keys.add(keyDe(ya)); if (ya.msg_id) h.porMid.set(ya.msg_id, ya); ya._eco = true; nuevos.push(ya); };
   for (const m of (mensajes || [])) {
     const k = keyDe(m);
     if (m.msg_id && h.porMid.has(m.msg_id)) { const ya = h.porMid.get(m.msg_id); if (keyDe(ya) !== k || ya.estado !== m.estado || (!ya.media && m.media)) fundir(ya, m); continue; }
@@ -1248,6 +1249,7 @@ function estadoHTML(m){
 function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s<]+)/g, (u) => '<a class="lnk" href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'); }
 function burbujaHTML(m){
   const k = keyDe(m), ts = ms(m.ts) || 0;
+  if (m.emisor === 'sistema' && /^⏳/.test(String(m.texto || ''))) return '<div class="sis tiempo" data-k="' + esc(k) + '" data-ts="' + ts + '"><span>' + ico('clock') + esc(String(m.texto).replace(/^⏳\s*/, '')) + '</span></div>';
   if (m.emisor === 'sistema') return '<div class="sis" data-k="' + esc(k) + '" data-ts="' + ts + '">' + esc(m.texto || textoDe(m)) + ' <i>' + ico('eye') + 'Solo tú lo ves</i></div>';
   const out = m.dir === 'out';
   let med = '';
@@ -1465,7 +1467,7 @@ function abrirMasAcciones(){
     fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
     '</div>' +
-    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('simulador', 'bot', 'Simulador', 'Reinicia este chat y corre solo el flujo completo de Juan.') + fila('video', 'refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan.') + '</div>' : '') +
+    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('simulador', 'bot', 'Simulador', 'Reinicia este chat y corre solo el flujo completo de Juan (partes 1 y 2).') + fila('simulador2', 'clock', 'Simulador · parte 2', 'Continúa desde "déjame checarlo": horas después, prueba de manejo y cita.') + fila('video', 'refresh', 'Reiniciar video', 'Solo borra y te vuelve a agregar con la entrada de Juan.') + '</div>' : '') +
     '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + fila('borrar', 'x', 'Borrar chat', 'Se borra de tu FyraChat (WhatsApp no se toca).', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
@@ -1474,6 +1476,7 @@ function abrirMasAcciones(){
     if (a === 'soltar') { s.cerrar(); return soltarChat(); }
     if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
     if (a === 'simulador') { s.cerrar(); return simuladorVideo(); }
+    if (a === 'simulador2') { s.cerrar(); return simuladorVideo(2); }
     if (a === 'borrar') { s.cerrar(); return borrarChat(id); }
     if (a === 'seleccionar') { s.cerrar(); return modoSeleccion(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
