@@ -1665,12 +1665,13 @@ function abrirNuevoComprador(){
 
   // ── PASO 2: ¿cómo entra? (8 modos en dos superficies; cotizar/cita/texto despliegan debajo de su row) ──
   const paso2 = () => {
-    setBack(paso1); s.setTitulo('¿Cómo entra?'); arriba();
+    const TE = !!(TENANT && TENANT.todo_entra);   // número dedicado: delegar = primer mensaje, sí o sí
+    setBack(paso1); s.setTitulo(TE ? 'Primer mensaje' : '¿Cómo entra?'); arriba();
     const rowOp = (o) => '<button type="button" class="row op" data-m="' + o.m + '"><div class="sq">' + ico(o.ico) + '</div><div class="tx"><div class="t">' + esc(o.t) + '</div><div class="s">' + esc(o.s) + '</div></div>' + ico('chev', 'chev') + '</button>';
     box.innerHTML = pasos(2) + '<p class="sub">' + esc(nombreSinAnio(st.auto) + (anioDe(st.auto) ? ' ' + anioDe(st.auto) : '')) + ' · +52 ' + esc(telFmt10(st.tel)) + '</p>' +
-      ((TENANT && TENANT.demo) ? '<span class="lbl">El comprador escribe primero</span><div class="grupo">' + rowOp({ m: 'entrante', ico: 'chat', t: 'Recibo yo el mensaje', s: 'Entra un mensaje del comprador (lo tecleas tú) y Seb responde solo.' }) + '</div>' : '') +
-      '<span class="lbl">Ejecuta una acción</span><div class="grupo">' + NC_ACCION.map(rowOp).join('') + '</div>' +
-      '<span class="lbl">Solo un mensaje / nada</span><div class="grupo">' + NC_MENSAJE.map(rowOp).join('') + '</div>';
+      '<span class="lbl">' + (TE ? 'Tu primer mensaje · elige la herramienta' : 'Ejecuta una acción') + '</span><div class="grupo">' + NC_ACCION.map(rowOp).join('') + '</div>' +
+      '<span class="lbl">' + (TE ? 'O un mensaje' : 'Solo un mensaje / nada') + '</span><div class="grupo">' + NC_MENSAJE.filter(o => !(TE && o.m === 'silencio')).map(rowOp).join('') + '</div>' +
+      ((TENANT && TENANT.demo) ? '<span class="lbl">Sandbox · simular que el comprador escribió primero</span><div class="grupo">' + rowOp({ m: 'entrante', ico: 'chat', t: 'Recibo yo el mensaje', s: 'No es delegar: entra un mensaje del comprador (lo tecleas tú) y Seb responde solo.' }) + '</div>' : '');
     s.setPie('<button class="cta" id="nc-go" disabled>Delegar</button><div class="g-err" id="nc-gerr"></div>');
     const go = s.pie.querySelector('#nc-go'), gerr = s.pie.querySelector('#nc-gerr'); let ciSt = null, desp = null;
     const elegir = (b) => {
@@ -1700,7 +1701,7 @@ function abrirNuevoComprador(){
       if (st.modo === 'texto') { const t = (desp.querySelector('#nc-tx').value || '').trim(); if (!t) { desp.querySelector('#nc-txerr').textContent = 'Escribe el mensaje.'; desp.querySelector('#nc-tx').focus(); return; } entrada.texto = t; }
       // ENTRANTE (sandbox/prueba): el comprador escribe primero → el chat nace callado y su mensaje entra al hilo; Seb decide solo
       let textoEntrante = null;
-      if (st.modo === 'entrante') { textoEntrante = (desp.querySelector('#nc-in').value || '').trim(); if (!textoEntrante) { desp.querySelector('#nc-inerr').textContent = 'Escribe lo que dice el comprador.'; desp.querySelector('#nc-in').focus(); return; } entrada.modo = 'silencio'; }
+      if (st.modo === 'entrante') { textoEntrante = (desp.querySelector('#nc-in').value || '').trim(); if (!textoEntrante) { desp.querySelector('#nc-inerr').textContent = 'Escribe lo que dice el comprador.'; desp.querySelector('#nc-in').focus(); return; } entrada.modo = 'silencio'; entrada.entrante = true; }
       bloquear(go, true);
       const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, auto_id: st.auto.id, entrada, clave: cl }));
       bloquear(go, false); go.textContent = NC_CTA[st.modo] || 'Delegar';

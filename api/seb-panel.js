@@ -862,7 +862,7 @@ module.exports = async function handler(req, res) {
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, sandbox: DEMO.esSandbox(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
@@ -2617,6 +2617,9 @@ module.exports = async function handler(req, res) {
             if (action === 'delegar_v2' && req.method === 'POST') {
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
                 const E = (req.body.entrada && typeof req.body.entrada === 'object') ? req.body.entrada : {};
+                // NÚMERO DEDICADO (orden owner 2026-09-18, TERRA MOTORS): con config.todo_entra=1 todo lo que ENTRA ya es del giro, así que
+                // DELEGAR = el PRIMER MENSAJE del lote al comprador, sí o sí. No existe "entrar callado" (salvo la simulación de entrante del sandbox).
+                if (tV.config && Number(tV.config.todo_entra) === 1 && (E.modo || 'silencio') === 'silencio' && E.entrante !== true) return err(400, 'En este universo agregar un comprador es mandarle el primer mensaje: elige qué le mandas.', { necesita: 'modo' });
                 const body = { telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
                 const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'delegar_v2', sesionId: SID }, async () => {
                     const rD = await delegarCore(tV, body, { sesionId: SID, clave });
