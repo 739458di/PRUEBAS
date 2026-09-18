@@ -1288,6 +1288,7 @@ TX.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && 
 // SANDBOX / PRUEBA: el composer puede hablar como el VENDEDOR (sale por la puerta de siempre, simulado) o como el COMPRADOR (entra al hilo y la IA decide)
 let QUIEN = 'vendedor';
 function pintarQuien(){ const b = $('quien'); if (!b) return; const on = !!(TENANT && TENANT.demo); b.hidden = !on; if (!on) return; const nom = (TENANT.nombre || 'Vendedor').split(/\s+/)[0]; b.textContent = QUIEN === 'comprador' ? 'Comprador' : nom; b.classList.toggle('comp', QUIEN === 'comprador'); TX.placeholder = QUIEN === 'comprador' ? 'Escribe como el comprador…' : 'Escribe un mensaje...'; }
+function pintarPensando(on){ const e = $('ch-estado'); if (!e) return; if (on) { e.dataset.prev = e.textContent; e.textContent = 'Seb está pensando…'; e.classList.add('ok'); } else if (e.dataset.prev != null) { e.textContent = e.dataset.prev; delete e.dataset.prev; pintarCabecera((hiloDe(CHAT_ID) || {}).chat || INBOX.rows.get(CHAT_ID)); } }
 function toggleQuien(){ QUIEN = QUIEN === 'comprador' ? 'vendedor' : 'comprador'; pintarQuien(); TX.focus(); }
 async function enviarComoComprador(id, texto){
   const h = hiloDe(id); const local = clave('comp', id);
@@ -1298,6 +1299,9 @@ async function enviarComoComprador(id, texto){
   if (!r.ok) return avisoError(r.error || 'No se pudo');
   // la burbuja local adopta el folio del servidor → al recargar el hilo se FUNDE con su renglón (jamás doble, aunque el reloj del teléfono difiera)
   if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) m.ts = r.ts; h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); }
+  const refrescarYa = () => { if (CHAT_ID !== id) return Promise.resolve(); return cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
+  // SEB AUTÓNOMO (universos con seb_auto): tras registrar el entrante se pide el turno completo del cerebro (opener → continuación → etapa 3)
+  if (r.seb_auto) { pintarPensando(true); try { await apiPost('seb_turno', { chat_id: id }); } finally { pintarPensando(false); } await refrescarYa(); return; }
   const refrescar = () => { if (CHAT_ID !== id) return; cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
   setTimeout(refrescar, 700); setTimeout(refrescar, 3500);
 }
@@ -1715,6 +1719,7 @@ function abrirNuevoComprador(){
         const rIn = await apiPost('demo_responder', { chat_id: id, texto: textoEntrante });
         if (!rIn.ok) { gerr.textContent = rIn.error || 'No pude registrar el mensaje del comprador'; return; }
         HILOS.delete(id); s.cerrar(); irTab('inicio'); QUIEN = 'comprador'; pintarQuien(); abrirChat(id);
+        if (rIn.seb_auto) { pintarPensando(true); apiPost('seb_turno', { chat_id: id }).finally(() => { pintarPensando(false); if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); cargarInbox({ reset: true }); }); return; }
         setTimeout(() => { if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }, 2500);
         cargarInbox({ reset: true });
         return;

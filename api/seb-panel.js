@@ -25,6 +25,7 @@ const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
 const AUTOBOTON = require('../lib/seb/auto-boton.js');
+const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
 // aprobada, botones, opener de delegar en t0, programados, rescates) sale por lib/seb/mensajeria.js: resuelve chat →
 // teléfono real → delegación viva → carril de pruebas → idempotencia por `clave` (tabla envios) → puente → recibo.
@@ -257,6 +258,8 @@ module.exports = async function handler(req, res) {
             // ══ AUTO-BOTÓN (orden owner 2026-09-12, SOLO PRUEBAS#): la IA decide si un humano apretaría un botón con este mensaje y lo aprieta
             //    por la MISMA puerta que la UI (accion_v2 / cotizar_v2 / cita_v2 con K_PANEL + vendedor=demo). Sin gancho, sin maquillaje.
             let autoBoton = null;
+            const sebAuto = !!(tDm.config && Number(tDm.config.seb_auto) === 1);
+            if (sebAuto && r.ok) return res.status(200).json(Object.assign({ simulado: true, chat_id: Number(r.chat_id), seb_auto: true }, r));   // el cerebro completo corre en `seb_turno`
             if (r.ok && r.chat_id && process.env.K_PANEL && req.body.sin_auto_boton !== true) {
                 try {
                     const chatAB = await U.chatPorId(Number(r.chat_id));
@@ -287,6 +290,41 @@ module.exports = async function handler(req, res) {
             try { rE = await AUTOBOTON.correr({ tenant: tE, chat: chE, texto: req.body.texto, msgId: req.body.msg_id, puerta: puertaE, rastro: rastroE, dry: req.body.dry === true }); }
             catch (e) { rE = { resultado: 'error', error: e.message }; }
             return res.status(200).json({ ok: true, auto_boton: rE });
+        }
+        if (action === 'seb_turno' && req.method === 'POST') {
+            const tS = await tenantDeParam(VEND_PARAM || String(req.body.tenant_id || '') || String(SES ? SES.tenant_id : ''));
+            if (!tS || !Number(tS.id) || !(tS.config && Number(tS.config.seb_auto) === 1)) return res.status(403).json({ ok: false, error: 'Seb autónomo no está encendido en este universo' });
+            if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tS.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
+            const chS = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chS || Number(chS.tenant_id) !== Number(tS.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
+            const telS = String(chS.telefono);
+            // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
+            try {
+                const nIn = (await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id = ? AND direccion = 'in'", [Number(chS.id)]))[0].n;
+                const dl = (await query('SELECT auto_id FROM delegaciones WHERE chat_id = ? AND hasta IS NULL ORDER BY id DESC LIMIT 1', [Number(chS.id)]).catch(() => []))[0];
+                if (Number(nIn) <= 1 && dl && dl.auto_id) { const a = (await query('SELECT marca, modelo, anio, precio FROM inventario_autos WHERE id = ? OR fyradrive_web_id = ? LIMIT 1', [Number(dl.auto_id), Number(dl.auto_id)]))[0]; if (a) await run("INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at", [telS, 'Fyradrive | 🚘 ' + String(a.marca || '').toUpperCase() + ' ' + String(a.modelo || '').toUpperCase() + ' ' + a.anio + '\n💵 $' + Number(a.precio || 0).toLocaleString('en-US'), Date.now()]).catch(() => { }); }
+            } catch (e) { }
+            // correr el MISMO opener_auto del número principal, dentro del universo ambiente (memoria, chat y catálogo de ESTE universo)
+            const catalogo = (await autosDeTenant(tS)).map(a => Number(a.id));
+            let out = null, status = 200;
+            const resFalso = { _h: {}, setHeader() { }, status(c) { status = c; return this; }, json(j) { out = j; return this; }, end() { return this; } };
+            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
+            try { await CTX.correr(Number(tS.id), catalogo, () => module.exports(reqFalso, resFalso)); } catch (e) { out = { ok: false, motivo: 'error: ' + e.message }; }
+            out = out || { ok: false, motivo: 'sin respuesta' };
+            // ── ENVIAR lo que el cerebro decidió, por la PUERTA DE MENSAJES de este universo (sandbox → se pinta en el hilo; real → WhatsApp) ──
+            const base = 'seb:' + Number(chS.id) + ':' + Date.now(); let n = 0; const enviados = [];
+            const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno' }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
+            const pin = async () => { if (!out.ubicacion_auto_id) return; const pe = (await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [Number(out.ubicacion_auto_id)]).catch(() => []))[0]; if (!pe) return; await mandarS({ imagen: pe.image_b64 || null, imagen_ref: pe.image_b64 ? 'ubic-img:' + Number(out.ubicacion_auto_id) : null, location: (pe.lat != null && pe.lng != null) ? { lat: pe.lat, lng: pe.lng, name: pe.name || '', maps_link: pe.maps_link || undefined } : null }); };
+            if (out.ok && Array.isArray(out.segmentos)) {
+                const segs = out.segmentos.map(x => String(x || '').trim()).filter(Boolean); const fotos = Array.isArray(out.fotos) ? out.fotos : [];
+                const fi = out.fotos_after_index == null ? segs.length - 1 : Number(out.fotos_after_index); const pi = out.pin_after_index == null ? segs.length - 1 : Number(out.pin_after_index);
+                if (out.pin_primero) await pin();
+                for (let i = 0; i < segs.length; i++) { await mandarS({ texto: segs[i] }); if (fotos.length && i === fi) await mandarS({ fotos }); if (!out.pin_primero && i === pi) await pin(); }
+                if (!segs.length) { if (fotos.length) await mandarS({ fotos }); if (!out.pin_primero) await pin(); }
+            }
+            // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
+            const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : ''));
+            try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
+            return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             const tDr = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDr || !tDr.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });
@@ -1028,11 +1066,14 @@ module.exports = async function handler(req, res) {
         if (action === 'opener_auto' && req.method === 'POST') {
             const tel = String(req.body.telefono || '');
             if (!tel) return res.status(400).json({ ok: false, error: 'telefono requerido' });
+            // UNIVERSO AMBIENTE (TERRA MOTORS, 2026-09-18): si este turno corre dentro de CTX.correr(9, …) TODO el cerebro trabaja sobre ese
+            // universo (memoria, chat, catálogo). Las compuertas que solo existen para el número principal se saltan.
+            const TSEB = CTX.tenant();
             // ══ PRIMERA COMPUERTA — "CERRAR" (bloque 5, 2026-09-10): si el teléfono es dueño de un universo y su último
             // entrante es exactamente CERRAR, se cierran TODAS sus sesiones de FyraChat y se le confirma por WhatsApp.
             // Determinista (regex exacta), jamás despierta al bot.
             try {
-                const tCz = await ACC.tenantPorTelefono(tel);
+                const tCz = TSEB ? null : await ACC.tenantPorTelefono(tel);
                 if (tCz) {
                     const cvZ = await query("SELECT id FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel.replace(/\D/g, '')]);
                     const mZ = cvZ.length ? await query("SELECT texto FROM mensajes WHERE conversacion_id=? AND direccion='in' ORDER BY ts DESC, id DESC LIMIT 1", [cvZ[0].id]) : [];
@@ -1055,7 +1096,7 @@ module.exports = async function handler(req, res) {
                 compradorTest = ct.length > 0;
             } catch (e) { }
             const duenos = await telefonosDueno();
-            if (!compradorTest && duenos.has(tel.replace(/\D/g, '').slice(-10))) {
+            if (!TSEB && !compradorTest && duenos.has(tel.replace(/\D/g, '').slice(-10))) {
                 // ══ LADO VENDEDOR REAL: si este dueño tiene una SOLICITUD DE CITA viva,
                 // su respuesta entra a la máquina del match (idéntica al sandbox).
                 try {
@@ -1074,7 +1115,7 @@ module.exports = async function handler(req, res) {
                 return res.status(200).json({ ok: false, motivo: 'dueno' });
             }
 
-            const convRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel]);
+            const convRow = await query("SELECT id, nombre FROM conversaciones WHERE channel_thread_id = ? LIMIT 1", ['whatsapp:' + tel + (TSEB ? '#t' + TSEB : '')]);
             const convId = convRow.length ? convRow[0].id : null;
             const nombreChat = convRow.length ? convRow[0].nombre : null;
             // MODO PRUEBA: respeta el reinicio — todo lo ANTERIOR al reset se ignora, así
@@ -1094,7 +1135,7 @@ module.exports = async function handler(req, res) {
             // silla de vendedor viva, su mensaje entra a ESA máquina (sí→confirma, no→
             // escala, resto→escala) — jamás al flujo de comprador.
             try {
-                const segsSt = await citasVivas.manejarMensajeStaff(tel, entrantes[entrantes.length - 1].mensaje, convId);   // por chat (idx_cv_chat)
+                const segsSt = TSEB ? null : await citasVivas.manejarMensajeStaff(tel, entrantes[entrantes.length - 1].mensaje, convId);   // por chat (idx_cv_chat)
                 if (segsSt !== null) {
                     if (segsSt && segsSt.length) return res.status(200).json({ ok: true, modo: 'staff', tipo: 'cita_staff', segmentos: segsSt });
                     return res.status(200).json({ ok: false, motivo: 'staff — escalado al owner' });
@@ -1107,7 +1148,7 @@ module.exports = async function handler(req, res) {
                 // llega en RÁFAGA — se evalúa la ráfaga entrante COMPLETA, no solo la última burbuja.
                 let lastOutIdxC = -1; mensajes.forEach((m, i) => { if (m.direccion === 'out') lastOutIdxC = i; });
                 const rafagaIn = (lastOutIdxC >= 0 ? mensajes.slice(lastOutIdxC + 1) : mensajes).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes[entrantes.length - 1].mensaje || '');
-                const segsM = await citasVivas.manejarMensajeComprador(tel, rafagaIn, 0, convId);   // por dirección (0, chat) → 1 lectura
+                const segsM = await citasVivas.manejarMensajeComprador(tel, rafagaIn, TSEB, convId);   // por dirección (0, chat) → 1 lectura
                 if (segsM && segsM.length) return res.status(200).json({ ok: true, modo: 'cita_match', tipo: 'cita_comprador', segmentos: segsM });
             } catch (e) { console.error('[citas-vivas] comprador:', e.message); }
 
@@ -1117,7 +1158,7 @@ module.exports = async function handler(req, res) {
             // mano en ese chat (manual ai=0 posterior al candado, o eco del teléfono).
             try {
                 const camp = require('../lib/seb/campana.js');
-                const mudo = await camp.esMudo(tel);
+                const mudo = TSEB ? null : await camp.esMudo(tel);
                 if (mudo) {
                     const manualDespues = mensajes.some(m => m.direccion === 'out' && !m.ai && Number(m.ts) > Number(mudo.ts));
                     if (manualDespues) {
@@ -1140,7 +1181,7 @@ module.exports = async function handler(req, res) {
             try {
                 const cm = require('../lib/seb/canal-messenger.js');
                 const telCM = tel.replace(/\D/g, '');
-                const conClave = cm.tieneClave(mensajes);
+                const conClave = TSEB ? false : cm.tieneClave(mensajes);
                 // ARRANQUE ATÍPICO: solo cuenta si el lead NO viene de un anuncio
                 // (un lead de anuncio con "si me interesa" corto es NORMAL, no atípico)
                 let atipico = false;
@@ -1218,7 +1259,7 @@ module.exports = async function handler(req, res) {
             // El trade-in a media compra NO despierta (sigue escalando como siempre).
             // Interruptor global: IGNACIO_RECEPCION=0. Cerebro: lib/seb/recepcion.js (paridad sandbox).
             try {
-                if (process.env.IGNACIO_RECEPCION !== '0') {
+                if (process.env.IGNACIO_RECEPCION !== '0' && !TSEB) {
                     const recepcion = require('../lib/seb/recepcion.js');
                     // ══ FUENTE ÚNICA (orden owner 2026-07-16): el turno COMPLETO de Ignacio
                     // (ráfaga, historial, último manual, compuerta de despertar) vive en
@@ -1367,8 +1408,8 @@ module.exports = async function handler(req, res) {
                 if (cont && cont.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
                 if (cont && cont.segmentos && cont.segmentos.length) {
                     if (cont.cita_confirmada && cont.cita_datos) {
-                        await regCanonica(tel, cont);
-                        try { await citasVivas.intentarMatchDirecto(tel, cont.cita_datos.fecha, cont.cita_datos.hora, 0); } catch (e) { }   // opener_auto = universo 0
+                        await regCanonica(tel, cont, TSEB);
+                        try { await citasVivas.intentarMatchDirecto(tel, cont.cita_datos.fecha, cont.cita_datos.hora, TSEB); } catch (e) { }   // opener_auto = universo 0
                     }
                     return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cont_' + cont.universo, segmentos: cont.segmentos, ubicacion_auto_id: cont.ubicacion_auto_id || null, pin_primero: !!cont.pin_primero, pin_after_index: (cont.pin_after_index != null ? cont.pin_after_index : null), fotos: cont.fotos || null, fotos_after_index: (cont.fotos_after_index != null ? cont.fotos_after_index : null) });
                 }
@@ -1453,8 +1494,8 @@ module.exports = async function handler(req, res) {
                     // MATCH DIRECTO real: si esta confirmación empata con la CONTRAPROPUESTA
                     // viva del dueño → match sin re-preguntarle (se le avisa "confirmó ✅").
                     if (e3.cita_confirmada && e3.cita_datos) {
-                        await regCanonica(tel, e3);
-                        try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora, 0); } catch (e) { }   // opener_auto = universo 0
+                        await regCanonica(tel, e3, TSEB);
+                        try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora, TSEB); } catch (e) { }   // opener_auto = universo 0
                     }
                     return res.status(200).json({ ok: true, modo: 'etapa3', tipo: 'e3_' + (e3.universo || ''), segmentos: e3.segmentos, ubicacion_auto_id: e3.ubicacion_auto_id || null, pin_primero: !!e3.pin_primero, pin_after_index: (e3.pin_after_index != null ? e3.pin_after_index : (e3.ubicacion_auto_id ? 0 : null)), fotos: e3.fotos || null, fotos_after_index: (e3.fotos_after_index != null ? e3.fotos_after_index : 0) });
                 }
