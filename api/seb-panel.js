@@ -25,82 +25,6 @@ const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
 const AUTOBOTON = require('../lib/seb/auto-boton.js');
-const ESC = require('../lib/seb/video-escenas.js');   // TOMAS DE VIDEO (2026-09-15): guiones exactos del owner   // LA IA APRIETA LOS BOTONES (2026-09-12): solo PRUEBAS# por ahora
-// ══ MODO VIDEO (orden owner 2026-09-15): ÚNICAMENTE el chat del owner consigo mismo en su universo personal (tenant 2, tel = el del universo).
-//    La IA aprieta los botones y suelta las burbujas "humanas" dictadas por el owner (gancho incluido). Nada de esto aplica a otro chat.
-const VIDEO_TENANT_ID = Number(process.env.VIDEO_TENANT_ID || 2);
-const VIDEO_VENDEDOR = process.env.VIDEO_VENDEDOR || 'Juan';
-const VIDEO_COLONIA = process.env.VIDEO_COLONIA || 'Del Valle, San Pedro';
-const VIDEO_FOTO_VENDEDOR = process.env.VIDEO_FOTO_VENDEDOR || 'https://n29hevuhphbhhtlb.public.blob.vercel-storage.com/vehiculos/agencia-1789461566400-vendedor-fulano.png';
-// SIMULADOR (orden owner 2026-09-15): el flujo EXACTO dictado, paso por paso (la UI avanza con las pausas; cada paso = una llamada corta)
-const VIDEO_PASOS = (autoNombre) => [
-    { q: 'bot', t: 'Hola Sebastián, soy ' + VIDEO_VENDEDOR + ' vendedor de autos MTY, de Facebook.', pausa: 1800 },
-    { q: 'bot', t: 'Te mando la cotización de tu próximo auto, ' + autoNombre + '.', pausa: 1800 },
-    { q: 'accion', a: 'cotizar', pausa: 2400 },
-    { q: 'bot', t: 'Quedan bien los números, ¿qué te parece?', pausa: 3200 },
-    { q: 'comprador', t: 'ok', pausa: 1400 },
-    { q: 'comprador', t: 'muy bien', pausa: 1600 },
-    { q: 'comprador', t: 'dónde lo puedo ver?', pausa: 2600 },
-    { q: 'bot', t: 'Déjame te comparto ubicación', pausa: 1800 },
-    { q: 'accion', a: 'ubicacion', pausa: 2600 },
-    { q: 'bot', t: 'En la colonia ' + VIDEO_COLONIA, pausa: 1800 },
-    { q: 'bot', t: '¿Te voy agendando cita?', pausa: 3400 },
-    { q: 'comprador', t: 'quiero ver más fotos', pausa: 2600 },
-    { q: 'bot', t: 'Claro, aquí las tienes', pausa: 1600 },
-    { q: 'accion', a: 'fotos', pausa: 3600 },
-    { q: 'bot', t: 'Impecable, como nuevo', pausa: 3400 },
-    { q: 'comprador', t: 'qué factura tiene?', pausa: 2600 },
-    { q: 'bot', t: 'Factura de agencia, único dueño, todo en regla de papelería, a prueba de mecánico si gustas.', pausa: 3400 },
-    { q: 'comprador', t: 'déjame checarlo', pausa: 2600 },
-    // ── PARTE 2 (orden owner 2026-09-15): el reloj marca "horas después" y todo lo que sigue queda fechado +2 h ──
-    { q: 'tiempo', t: '2 horas después', pausa: 2600, desfase_ms: 2 * 3600000, parte: 2 },
-    { q: 'bot', t: 'Qué tal Sebastián, ¿qué has pensado? ¿Te reservo un horario para prueba de manejo?', pausa: 3200 },
-    { q: 'comprador', t: 'sí por favor', pausa: 2200 },
-    { q: 'bot', t: 'Excelente', pausa: 1400 },
-    { q: 'bot', t: '¿Qué día y hora te viene bien?', pausa: 3200 },
-    { q: 'comprador', t: 'martes a medio día', pausa: 2400 },
-    { q: 'bot', t: 'Okey, muy bien, entonces te confirmo:', pausa: 1600 },
-    { q: 'bot', t: '__CITA__', pausa: 1800 },
-    { q: 'bot', t: '¿Correcto?', pausa: 3000 },
-    { q: 'comprador', t: 'sí', pausa: 2000 },
-    { q: 'bot', t: 'Perfecto, cita confirmada. Te voy avisando cualquier cosa.', pausa: 2600 },
-    // ── PARTE 3 (orden owner 2026-09-15): a partir de la cita agendada — recordatorios, vendedor verificado, camino y llegada ──
-    { q: 'tiempo', t: '2 días antes de la cita', pausa: 2600, desfase_ms: 4 * 86400000, parte: 3 },
-    { q: 'bot', t: '¡Qué tal Sebastián! Listo para tu cita, es en dos días.', pausa: 3000 },
-    { q: 'comprador', t: 'Sí amigo, pendiente.', pausa: 2600 },
-    { q: 'tiempo', t: 'La noche antes de la cita', pausa: 2600, desfase_ms: 86400000 },
-    { q: 'bot', t: 'Sebastián, te saluda tu amigo ' + VIDEO_VENDEDOR + '.', pausa: 1600 },
-    { q: 'bot', t: 'Te recuerdo que mañana tenemos la cita de tu Volkswagen Tiguan 2021.', pausa: 3000 },
-    { q: 'comprador', t: 'ok', pausa: 2600 },
-    { q: 'tiempo', t: 'Día de la cita', pausa: 2600, desfase_ms: 12 * 3600000 },
-    { q: 'bot', t: '¡Qué tal Sebastián, buen día! Nos vemos hoy a las 12 para que manejes la Tiguan. Me avisas cuando vengas en camino para que te atienda tu vendedor Fulano Pérez.', pausa: 2200 },
-    { q: 'foto', url: VIDEO_FOTO_VENDEDOR, pausa: 2600 },
-    { q: 'bot', t: 'Él será tu vendedor verificado.', pausa: 3200 },
-    { q: 'comprador', t: 'Muy bien, qué formalidad, gracias.', pausa: 2600 },
-    { q: 'tiempo', t: '1 hora después', pausa: 2600, desfase_ms: 3600000 },
-    { q: 'comprador', t: 'Ya voy en camino', pausa: 1800 },
-    { q: 'comprador', t: '¿Me pueden volver a enviar la ubicación?', pausa: 2600 },
-    { q: 'bot', t: 'Claro, te la comparto', pausa: 1800 },
-    { q: 'accion', a: 'ubicacion', pausa: 2600 },
-    { q: 'bot', t: 'Muy bien, aquí te esperamos.', pausa: 3200 },
-    { q: 'tiempo', t: '30 minutos después', pausa: 2600, desfase_ms: 30 * 60000 },
-    { q: 'comprador', t: 'Ya llegué, ¿dónde mero es?', pausa: 2600 },
-    { q: 'bot', t: 'Te marca tu vendedor.', pausa: 2600 },
-    { q: 'comprador', t: 'Perfecto.', pausa: 0 }
-];
-// próximo martes (estricto) en hora de Monterrey → "Martes 22 de septiembre · 12:00 pm"
-function citaTextoVideo(autoNombre) {
-    const hoy = new Date(Date.now() - 6 * 3600000); let d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
-    do { d = new Date(d.getTime() + 86400000); } while (d.getUTCDay() !== 2);
-    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    return 'Cita · ' + autoNombre + '\nMartes ' + d.getUTCDate() + ' de ' + meses[d.getUTCMonth()] + ' · 12:00 pm\nPlaza Tribeca, San Pedro';
-}
-const VIDEO_GUION = {
-    enganche_pct: 0.35, pausa_ms: 1300, sin_dedupe: true,
-    antes: { ubicacion: ['Sí, déjame te comparto ubicación'], fotos: ['Va, aquí están'], info: ['Claro, te paso toda la info'] },
-    despues: { ubicacion: ['Aquí lo tenemos Sebastián, tú mandas 🙌', 'Te agendo una cita a que vengas y lo manejes?'], fotos: ['¿Qué te parece?', 'Como nuevo 😎'], cotizar: ['¿Qué te parece?'] }
-};
-const esChatVideo = (t, chat) => !!(t && chat && Number(t.id) === VIDEO_TENANT_ID && String(chat.telefono || '').replace(/\D/g, '') === String(t.telefono || '').replace(/\D/g, ''));   // SUBIR AUTO POR CHAT (2026-09-12): alta conversacional + consignación virtual    // FYRACHAT DE PRUEBA (2026-09-10): universo PRUEBAS# — nada llega a WhatsApp ni al puente
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
 // aprobada, botones, opener de delegar en t0, programados, rescates) sale por lib/seb/mensajeria.js: resuelve chat →
 // teléfono real → delegación viva → carril de pruebas → idempotencia por `clave` (tabla envios) → puente → recibo.
@@ -233,7 +157,7 @@ async function guardarOferta(telO, segs) {
 const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
 // CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
 const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
-const ACC_PUENTE = new Set(['entrante_v2', 'opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
+const ACC_PUENTE = new Set(['opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
 const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
     'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
     'flags_msgs', 'flags_msgs_done', 'citas_backfill', 'universo_backfill']);
@@ -342,19 +266,6 @@ module.exports = async function handler(req, res) {
                 } catch (e) { autoBoton = { resultado: 'error', error: e.message }; }
             }
             return res.status(r.ok ? 200 : 400).json(Object.assign({ simulado: true, chat_id: req.body.chat_id ? Number(req.body.chat_id) : undefined, auto_boton: autoBoton }, r));
-        }
-        // ══ ENTRANTE DE UNIVERSO (puente → aquí, 2026-09-15): el puente avisa cada mensaje del comprador en un chat delegado de tenant≠0.
-        //    Hoy SOLO actúa el MODO VIDEO (chat del owner consigo mismo). `dry:true` = solo la decisión, sin apretar nada.
-        if (action === 'entrante_v2' && req.method === 'POST') {
-            if (!conPuente && !conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
-            const tE = await tenantDeParam(String(req.body.tenant_id || '')); if (!tE || !Number(tE.id)) return res.status(404).json({ ok: false, error: 'universo inexistente' });
-            const chE = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chE || Number(chE.tenant_id) !== Number(tE.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en ese universo' });
-            if (!esChatVideo(tE, chE)) return res.status(200).json({ ok: true, ignorado: 'fuera del modo video' });
-            const puertaE = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tE.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tE.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
-            let rE = null;
-            try { rE = await AUTOBOTON.correr({ tenant: tE, chat: chE, texto: req.body.texto, msgId: req.body.msg_id, puerta: puertaE, guion: VIDEO_GUION, dry: req.body.dry === true }); }
-            catch (e) { rE = { resultado: 'error', error: e.message }; }
-            return res.status(200).json({ ok: true, modo: 'video', auto_boton: rE });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
@@ -2462,7 +2373,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'video_reiniciar', 'video_simulador', 'video_escena', 'video_limpiar', 'chat_borrar', 'mensaje_borrar',
+        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -2993,211 +2904,6 @@ module.exports = async function handler(req, res) {
                 if (ult) await run('UPDATE conversaciones SET ult_texto = ?, ult_dir = ?, ult_msg_ts = ? WHERE id = ?', [String(ult.tipo === 'image' ? '📷 imagen' : ult.tipo === 'location' ? '📍 ubicación' : (ult.texto || '')).slice(0, 120), ult.direccion, Number(ult.ts) || Date.now(), Number(c.id)]).catch(() => { });
                 else await run("UPDATE conversaciones SET ult_texto = '' WHERE id = ?", [Number(c.id)]).catch(() => { });
                 return okJ({ chat_id: Number(c.id), id: mid, borrado: Number(r0.rowsAffected) || 0 });
-            }
-            // ══ SIMULADOR (orden owner 2026-09-15): paso 0 = reinicia (borra + vuelve a agregar en silencio); paso n = ejecuta el paso n del guion
-            if (action === 'video_simulador' && req.method === 'POST') {
-                if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
-                const telV = String(tV.telefono || '').replace(/\D/g, '');
-                const paso = Number(req.body.paso) || 0;
-                if (paso === 0 && [2, 3].includes(Number(req.body.parte))) {   // continuar sobre el chat que ya existe, desde el reloj de esa parte
-                    const cAct = (await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []))[0];
-                    if (!cAct) return err(404, 'primero corre el simulador completo (no hay chat contigo mismo)');
-                    const idx = VIDEO_PASOS('x').findIndex(x => x.parte === Number(req.body.parte));
-                    return okJ({ chat_id: Number(cAct.id), total: VIDEO_PASOS('x').length, siguiente: idx + 1, pausa: 1200, parte: Number(req.body.parte) });
-                }
-                if (paso === 0) {
-                    const prev = await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []);
-                    let autoId = Number(req.body.auto_id) || null;
-                    if (!autoId && prev.length) { const dl = (await query('SELECT auto_id FROM delegaciones WHERE chat_id = ? ORDER BY id DESC LIMIT 1', [Number(prev[0].id)]).catch(() => []))[0]; if (dl) autoId = Number(dl.auto_id) || null; }
-                    if (!autoId) { const tg = (await autosDeTenant(tV)).find(a => /tiguan/i.test(String(a.modelo || ''))); if (tg) autoId = Number(tg.id); }
-                    if (!autoId) return err(400, 'falta auto_id');
-                    try { await soltarCore(tV, telV, { sesionId: SID }); } catch (e) { }
-                    for (const c of prev) await borrarChatCore(Number(c.id));
-                    const rD = await delegarCore(tV, { telefono: telV, nombre: 'Sebastián', auto_id: autoId, modo_entrada: 'silencio' }, { sesionId: SID, clave: 'sim:' + Date.now() });
-                    if (rD.status >= 400 || !rD.out || rD.out.ok === false) return res.status(rD.status || 500).json(Object.assign({ ok: false }, rD.out || {}));
-                    const nuevo = await U.chatDe(TV, telV);
-                    const autoV = (await autosDeTenant(tV)).find(a => Number(a.id) === autoId || Number(a.fyradrive_web_id) === autoId);
-                    const nomA = autoV ? [autoV.marca, autoV.modelo, autoV.anio].filter(Boolean).join(' ') : 'auto';
-                    return okJ({ chat_id: nuevo ? Number(nuevo.id) : null, auto_id: autoId, auto: nomA, total: VIDEO_PASOS(nomA).length, siguiente: 1, pausa: 1500 });
-                }
-                const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
-                if (String(c.telefono || '').replace(/\D/g, '') !== telV) return err(403, 'el simulador solo corre en tu chat contigo mismo');
-                const dl = (await query('SELECT auto_id FROM delegaciones WHERE chat_id = ? AND hasta IS NULL ORDER BY id DESC LIMIT 1', [Number(c.id)]).catch(() => []))[0];
-                const autoV = dl ? (await autosDeTenant(tV)).find(a => Number(a.id) === Number(dl.auto_id) || Number(a.fyradrive_web_id) === Number(dl.auto_id)) : null;
-                const nomA = autoV ? [autoV.marca, autoV.modelo, autoV.anio].filter(Boolean).join(' ') : 'auto';
-                const pasos = VIDEO_PASOS(nomA); const P = pasos[paso - 1];
-                if (!P) return okJ({ fin: true, chat_id: Number(c.id) });
-                if (req.body.deshacer === true) return okJ(Object.assign({ chat_id: Number(c.id), paso, deshecho: true }, await deshacerPaso(Number(c.id), req.body.ini, req.body.fin, P)));
-                const iniP = Date.now();
-                const clave = 'sim:' + Number(c.id) + ':' + paso + ':' + (req.body.corrida || 'x');
-                // "HORAS DESPUÉS" sin fechar nada en el futuro (bug 2026-09-15: lo escrito después quedaba arriba): el paso 'tiempo'
-                // corre TODO lo anterior del hilo 2 h hacia ATRÁS y el reloj queda en el ahora; lo que sigue va en tiempo real.
-                let out = { ok: true };
-                if (P.q === 'bot') {
-                    const texto = P.t === '__CITA__' ? citaTextoVideo(nomA) : P.t;
-                    const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
-                    out = { ok: !!env.ok, error: env.error || null };
-                }
-                else if (P.q === 'foto') {
-                    const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, fotos: [P.url], manual: true, sesionId: SID, accion: 'manual' });
-                    out = { ok: !!env.ok, error: env.error || null };
-                }
-                else if (P.q === 'tiempo') {
-                    const ahora = Date.now(), atras = Number(P.desfase_ms) || 0;
-                    await run('UPDATE mensajes SET ts = ts - ? WHERE conversacion_id = ? AND ts <= ?', [atras, Number(c.id), ahora]).catch(() => { });
-                    const ts = ahora, msgId = 'sim-t:' + clave;
-                    await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(c.id), msgId, ts, 'out', 'sistema', '⏳ ' + P.t, 'text', 1, Date.now()]);
-                    try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: Number(c.id), telefono: c.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'out', emisor: 'sistema', texto: '⏳ ' + P.t, ts, media: null, estado: 'enviado' } }); } catch (e) { }
-                }
-                else if (P.q === 'comprador') {
-                    const ts = Date.now(), msgId = 'sim-in:' + clave;
-                    await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(c.id), msgId, ts, 'in', 'comprador', P.t, 'text', 0, ts]);
-                    await run("UPDATE conversaciones SET ult_texto = ?, ult_dir = 'in', ult_msg_ts = ? WHERE id = ?", [P.t.slice(0, 120), ts, Number(c.id)]).catch(() => { });
-                    try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: Number(c.id), telefono: c.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'in', emisor: 'comprador', texto: P.t, ts, media: null, estado: 'enviado' } }); } catch (e) { }
-                }
-                else if (P.q === 'accion') {
-                    const eng = autoV && Number(autoV.precio) > 0 ? Math.round(Number(autoV.precio) * VIDEO_GUION.enganche_pct) : 100000;
-                    const rA = await ejecutarAccion(tV, telV, P.a, { enganche: eng, plazo_meses: 48, clave, via: 'video' });
-                    out = { ok: !!(rA.out && rA.out.ok), error: (rA.out && rA.out.error) || null };
-                }
-                return okJ(Object.assign({ chat_id: Number(c.id), paso, de: pasos.length, quien: P.q, texto: P.t || P.a, siguiente: paso + 1 <= pasos.length ? paso + 1 : null, pausa: P.pausa, fin: paso >= pasos.length, ini: iniP, fin_ts: Date.now() }, out));
-            }
-            // ══ TOMAS DE VIDEO (orden owner 2026-09-15): escenas con guion exacto. Propias = chat del owner consigo mismo (Juan manda por WhatsApp);
-            //    sintéticas = chats que solo viven en FyraChat (teléfonos de prueba), con contexto previo fechado atrás y pasos "en vivo".
-            // DESHACER UN PASO (orden owner 2026-09-15, "atrasar"): borra lo que ese paso dejó en el hilo (por ventana de inserción) y,
-            // si fue un reloj, regresa las fechas que corrió. WhatsApp no se toca (lo ya mandado allá se queda).
-            const deshacerPaso = async (cid, ini, fin, P) => {
-                const r0 = await run('DELETE FROM mensajes WHERE conversacion_id = ? AND created_at >= ? AND created_at <= ?', [cid, Number(ini) - 300, Number(fin) + 4000]).catch(() => ({ rowsAffected: 0 }));
-                if (P && P.q === 'tiempo' && Number(P.desfase_ms)) await run('UPDATE mensajes SET ts = ts + ? WHERE conversacion_id = ? AND created_at < ?', [Number(P.desfase_ms), cid, Number(ini) - 300]).catch(() => { });
-                const ult = (await query('SELECT texto, direccion, ts, tipo FROM mensajes WHERE conversacion_id = ? ORDER BY ts DESC, id DESC LIMIT 1', [cid]).catch(() => []))[0];
-                if (ult) await run('UPDATE conversaciones SET ult_texto = ?, ult_dir = ?, ult_msg_ts = ? WHERE id = ?', [String(ult.tipo === 'image' ? '📷 imagen' : ult.tipo === 'location' ? '📍 ubicación' : (ult.texto || '')).slice(0, 120), ult.direccion, Number(ult.ts) || Date.now(), cid]).catch(() => { });
-                return { borrados: Number(r0.rowsAffected) || 0 };
-            };
-            if (action === 'video_limpiar' && req.method === 'POST') {
-                if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
-                const rows = await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono LIKE ?", [TV, ESC.TELS_SINTETICOS]).catch(() => []);
-                let n = 0; for (const r0 of rows) { await borrarChatCore(Number(r0.id)); n++; }
-                return okJ({ borrados: n });
-            }
-            if (action === 'video_escena' && req.method === 'POST') {
-                if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
-                const mk = ESC.ESCENAS[String(req.body.escena || '')]; if (!mk) return err(400, 'escena desconocida');
-                const E = mk(); const paso = Number(req.body.paso) || 0; const telV = String(tV.telefono || '').replace(/\D/g, '');
-                const autosT = await autosDeTenant(tV);
-                const autoDe = id => autosT.find(a => Number(a.id) === Number(id) || Number(a.fyradrive_web_id) === Number(id)) || null;
-                const nomAuto = a => a ? [a.marca, a.modelo, a.anio].filter(Boolean).join(' ') : 'auto';
-                const fill = (t, a) => String(t || '').replace(/\{AUTO\}/g, nomAuto(a));
-                const pausaDe = P => Number(P.pausa) || 1500;
-                // renglón directo (solo FyraChat) + timbre opcional
-                const insertar = async (cid, tel, { dir, emisor, texto, tipo, ts, ai, timbre }) => {
-                    const msgId = 'vid:' + String(req.body.escena) + ':' + cid + ':' + ts + ':' + Math.random().toString(36).slice(2, 7);
-                    await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [cid, msgId, ts, dir, emisor, texto, tipo || 'text', ai ? 1 : 0, Date.now()]);
-                    const portada = tipo === 'image' ? '📷 imagen' : tipo === 'location' ? '📍 ubicación' : String(texto || '');
-                    await run("UPDATE conversaciones SET ult_texto = CASE WHEN ? >= COALESCE(ult_msg_ts,0) THEN ? ELSE ult_texto END, ult_dir = CASE WHEN ? >= COALESCE(ult_msg_ts,0) THEN ? ELSE ult_dir END, ult_msg_ts = MAX(?, COALESCE(ult_msg_ts,0)) WHERE id = ?", [ts, portada.slice(0, 120), ts, dir, ts, cid]).catch(() => { });
-                    if (timbre) { try { await MSJ.timbreMensaje({ tenant_id: TV, chat_id: cid, telefono: tel, simulado: false, mensaje: { id: null, msg_id: msgId, dir, emisor: MSJ.emisorNorm(dir, emisor, ai ? 1 : 0), texto: tipo === 'text' ? texto : (tipo === 'location' ? '[ubicación]' : ''), ts, media: tipo === 'image' ? { tipo: 'imagen', url: (String(texto).match(/https?:\/\/\S+/) || [])[0] || ('/api/seb-panel?action=ubic_img&auto_id=' + String(texto).slice(9)) } : null, estado: 'enviado' } }); } catch (e) { } }
-                };
-                const fotosDe = async (a) => a && a.fyradrive_web_id ? (await query('SELECT url_imagen FROM imagenes_autos WHERE auto_id = ? AND url_imagen IS NOT NULL ORDER BY es_principal DESC, COALESCE(orden_imagen, 99) ASC, id ASC LIMIT 6', [Number(a.fyradrive_web_id)]).catch(() => [])).map(r => r.url_imagen) : [];
-                const puntoDe = async (a) => a ? ((await query('SELECT name, lat, lng, maps_link, length(image_b64) img FROM punto_envio WHERE auto_id = ?', [Number(a.id)]).catch(() => []))[0] || null) : null;
-                // ejecuta un paso SOLO en FyraChat (chats sintéticos y lado "comprador" de las escenas propias)
-                const pasoDirecto = async (cid, tel, a, P, ts, timbre) => {
-                    if (P.q === 'bot') return insertar(cid, tel, { dir: 'out', emisor: 'dueno', texto: fill(P.t, a), tipo: 'text', ts, ai: 0, timbre });
-                    if (P.q === 'comprador') return insertar(cid, tel, { dir: 'in', emisor: 'comprador', texto: fill(P.t, a), tipo: 'text', ts, ai: 0, timbre });
-                    if (P.q === 'sistema') return insertar(cid, tel, { dir: 'out', emisor: 'sistema', texto: fill(P.t, a), tipo: 'text', ts, ai: 1, timbre });
-                    if (P.q === 'foto') return insertar(cid, tel, { dir: 'out', emisor: 'dueno', texto: '[imagen] ' + P.url, tipo: 'image', ts, ai: 0, timbre });
-                    if (P.q === 'foto_in') return insertar(cid, tel, { dir: 'in', emisor: 'comprador', texto: '[imagen] ' + P.url, tipo: 'image', ts, ai: 0, timbre });
-                    if (P.q === 'fotos_auto') { const fs = await fotosDe(a); for (let i = 0; i < fs.length; i++) await insertar(cid, tel, { dir: 'out', emisor: 'asistente', texto: '[imagen] ' + fs[i], tipo: 'image', ts: ts + i, ai: 1, timbre }); return; }
-                    if (P.q === 'ubicacion') {
-                        const pe = await puntoDe(a); const punto = (pe && pe.name) || 'nuestro punto de venta';
-                        const link = pe && pe.maps_link ? pe.maps_link : (pe && pe.lat != null ? 'https://maps.google.com/?q=' + pe.lat + ',' + pe.lng : '');
-                        await insertar(cid, tel, { dir: 'out', emisor: 'asistente', texto: 'Lo tenemos en ' + punto + ', para que lo veas cuando gustes' + (link ? '\n' + link : ''), tipo: 'text', ts, ai: 1, timbre });
-                        if (pe && pe.img) await insertar(cid, tel, { dir: 'out', emisor: 'asistente', texto: 'ubic-img:' + a.id, tipo: 'image', ts: ts + 1, ai: 1, timbre });
-                        if (pe && pe.lat != null) await insertar(cid, tel, { dir: 'out', emisor: 'asistente', texto: [punto, pe.lat, pe.lng, link].join('|||'), tipo: 'location', ts: ts + 2, ai: 1, timbre });
-                        return;
-                    }
-                    if (P.q === 'tiempo') {
-                        await run('UPDATE mensajes SET ts = ts - ? WHERE conversacion_id = ? AND ts <= ?', [Number(P.desfase_ms) || 0, cid, ts]).catch(() => { });
-                        return insertar(cid, tel, { dir: 'out', emisor: 'sistema', texto: '⏳ ' + P.t, tipo: 'text', ts, ai: 1, timbre });
-                    }
-                };
-                if (E.propio) {
-                    const a = autoDe(E.auto_id);
-                    if (paso === 0) {
-                        const prev = await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []);
-                        try { await soltarCore(tV, telV, { sesionId: SID }); } catch (e) { }
-                        for (const c0 of prev) await borrarChatCore(Number(c0.id));
-                        const rD = await delegarCore(tV, { telefono: telV, nombre: E.nombre, auto_id: E.auto_id, modo_entrada: 'silencio' }, { sesionId: SID, clave: 'esc:' + Date.now() });
-                        if (rD.status >= 400 || !rD.out || rD.out.ok === false) return res.status(rD.status || 500).json(Object.assign({ ok: false }, rD.out || {}));
-                        const nuevo = await U.chatDe(TV, telV);
-                        if (nuevo) await run('UPDATE conversaciones SET nombre = ? WHERE id = ?', [E.nombre, Number(nuevo.id)]).catch(() => { });
-                        return okJ({ chat_id: nuevo ? Number(nuevo.id) : null, auto: nomAuto(a), total: E.pasos.length, siguiente: 1, pausa: 1500, titulo: E.titulo });
-                    }
-                    const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
-                    if (String(c.telefono || '').replace(/\D/g, '') !== telV) return err(403, 'esta escena solo corre en tu chat contigo mismo');
-                    const P = E.pasos[paso - 1]; if (!P) return okJ({ fin: true, chat_id: Number(c.id) });
-                    if (req.body.deshacer === true) return okJ(Object.assign({ chat_id: Number(c.id), paso, deshecho: true }, await deshacerPaso(Number(c.id), req.body.ini, req.body.fin, P)));
-                    const clave = 'esc:' + String(req.body.escena) + ':' + Number(c.id) + ':' + paso + ':' + (req.body.corrida || 'x');
-                    const iniP = Date.now();
-                    let out = { ok: true };
-                    if (P.q === 'bot') { const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, texto: fill(P.t, a), manual: true, sesionId: SID, accion: 'manual' }); out = { ok: !!env.ok, error: env.error || null }; }
-                    else if (P.q === 'foto') { const env = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'manual', clave, fotos: [P.url], manual: true, sesionId: SID, accion: 'manual' }); out = { ok: !!env.ok, error: env.error || null }; }
-                    else if (P.q === 'fotos_auto' || P.q === 'ubicacion') { const rA = await ejecutarAccion(tV, telV, P.q === 'fotos_auto' ? 'fotos' : 'ubicacion', { clave, via: 'video' }); out = { ok: !!(rA.out && rA.out.ok), error: (rA.out && rA.out.error) || null }; }
-                    else await pasoDirecto(Number(c.id), c.telefono, a, P, Date.now(), true);
-                    return okJ(Object.assign({ chat_id: Number(c.id), paso, de: E.pasos.length, quien: P.q, texto: P.t || P.q, siguiente: paso + 1 <= E.pasos.length ? paso + 1 : null, pausa: pausaDe(P), fin: paso >= E.pasos.length, ini: iniP, fin_ts: Date.now() }, out));
-                }
-                // ── SINTÉTICA ──
-                const flat = []; E.chats.forEach((ch, i) => (ch.vivo || []).forEach(P => flat.push(Object.assign({ chat_i: i }, P))));
-                const chatPorTel = async (tel) => (await query("SELECT id, telefono FROM conversaciones WHERE tenant_id = ? AND telefono = ? LIMIT 1", [TV, tel]).catch(() => []))[0] || null;
-                if (paso === 0) {
-                    const creados = [];
-                    for (let i = 0; i < E.chats.length; i++) {
-                        const ch = E.chats[i]; const a = autoDe(ch.auto_id);
-                        const viejo = await chatPorTel(ch.tel); if (viejo) await borrarChatCore(Number(viejo.id));
-                        const now = Date.now(), base = now - 3 * 3600000 - i * 60000;
-                        await run("INSERT INTO conversaciones (channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, is_dueno_chat, source, created_at, tenant_id) VALUES (?,?,?,?,?,?,0,0,'whatsapp',?,?)", ['whatsapp:' + ch.tel + '#t' + TV, ch.tel, ch.nombre, '', 'in', base, base, TV]);
-                        const c = await chatPorTel(ch.tel); const cid = Number(c.id);
-                        await run("INSERT INTO delegaciones (chat_id, tenant_id, auto_id, auto_nombre, activado_por, desde, hasta, opener_pendiente, created) VALUES (?,?,?,?,?,?,NULL,0,?)", [cid, TV, a ? Number(a.id) : null, nomAuto(a), 'video', base, base]).catch(() => { });
-                        let t = base; for (const P of (ch.previo || [])) { await pasoDirecto(cid, ch.tel, a, P, t, false); t += 90000; }
-                        creados.push({ chat_id: cid, nombre: ch.nombre, auto: nomAuto(a) });
-                    }
-                    return okJ({ chats: creados, chat_id: creados.length ? creados[0].chat_id : null, total: flat.length, siguiente: flat.length ? 1 : null, pausa: 1800, titulo: E.titulo, fin: !flat.length });
-                }
-                const P = flat[paso - 1]; if (!P) return okJ({ fin: true });
-                const ch = E.chats[P.chat_i]; const a = autoDe(ch.auto_id); const c = await chatPorTel(ch.tel); if (!c) return err(404, 'el chat de ' + ch.nombre + ' no existe (corre el paso 0)');
-                if (req.body.deshacer === true) return okJ(Object.assign({ chat_id: Number(c.id), paso, deshecho: true }, await deshacerPaso(Number(c.id), req.body.ini, req.body.fin, P)));
-                const iniP = Date.now();
-                await pasoDirecto(Number(c.id), ch.tel, a, P, Date.now(), true);
-                return okJ({ chat_id: Number(c.id), nombre: ch.nombre, paso, de: flat.length, quien: P.q, texto: P.t || P.q, siguiente: paso + 1 <= flat.length ? paso + 1 : null, pausa: pausaDe(P), fin: paso >= flat.length, ini: iniP, fin_ts: Date.now() });
-            }
-            // ══ MODO VIDEO: borrar el chat del owner consigo mismo y volver a agregarlo con el guion de entrada (Juan → cotización → ¿qué te parece?)
-            if (action === 'video_reiniciar' && req.method === 'POST') {
-                if (Number(TV) !== VIDEO_TENANT_ID) return err(403, 'solo en el universo del owner');
-                const telV = String(tV.telefono || '').replace(/\D/g, '');
-                const prev = (await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?", [TV, telV]).catch(() => []));
-                let autoId = Number(req.body.auto_id) || null;
-                if (!autoId && prev.length) { const dl = (await query('SELECT auto_id FROM delegaciones WHERE chat_id = ? ORDER BY id DESC LIMIT 1', [Number(prev[0].id)]).catch(() => []))[0]; if (dl) autoId = Number(dl.auto_id) || null; }
-                // 1) soltar en el puente + borrar TODO el rastro del chat (mensajes, delegaciones, citas, acciones, bitácora, conversación)
-                try { await soltarCore(tV, telV, { sesionId: SID }); } catch (e) { }
-                const borrado = {};
-                for (const c of prev) { const b0 = await borrarChatCore(Number(c.id)); for (const k of Object.keys(b0)) borrado[k] = (Number(borrado[k]) || 0) + (Number(b0[k]) || 0); }
-                if (req.body.solo_borrar) return okJ({ borrado, chat_id: null });
-                // 2) volver a agregar (en silencio) y soltar el guion de entrada
-                if (!autoId) return err(400, 'falta auto_id para volver a agregar', { borrado });
-                const rD = await delegarCore(tV, { telefono: telV, nombre: 'Sebastián', auto_id: autoId, modo_entrada: 'silencio' }, { sesionId: SID, clave: 'video:' + Date.now() });
-                if (rD.status >= 400 || !rD.out || rD.out.ok === false) return res.status(rD.status || 500).json(Object.assign({ ok: false, borrado }, rD.out || {}));
-                const nuevo = await U.chatDe(TV, telV);
-                const cidN = nuevo ? Number(nuevo.id) : null;
-                const base = 'video:' + Date.now();
-                const pausa = ms => new Promise(x => setTimeout(x, ms));
-                await MSJ.enviar({ tenantId: TV, chatId: cidN, origen: 'manual', clave: base + ':1', texto: '¡Hola Sebastián! Soy ' + VIDEO_VENDEDOR + ', vendedor de autos MTY, de Facebook 👋', manual: true, sesionId: SID, accion: 'manual' });
-                await pausa(VIDEO_GUION.pausa_ms);
-                await MSJ.enviar({ tenantId: TV, chatId: cidN, origen: 'manual', clave: base + ':2', texto: 'Te mando tu cotización', manual: true, sesionId: SID, accion: 'manual' });
-                await pausa(VIDEO_GUION.pausa_ms);
-                const autoV = (await autosDeTenant(tV)).find(a => Number(a.id) === autoId || Number(a.fyradrive_web_id) === autoId);
-                const eng = autoV && Number(autoV.precio) > 0 ? Math.round(Number(autoV.precio) * VIDEO_GUION.enganche_pct) : 100000;
-                const rC = await ejecutarAccion(tV, telV, 'cotizar', { enganche: eng, plazo_meses: 48, clave: base + ':cot', via: 'video' });
-                await pausa(VIDEO_GUION.pausa_ms);
-                await MSJ.enviar({ tenantId: TV, chatId: cidN, origen: 'manual', clave: base + ':3', texto: '¿Qué te parece?', manual: true, sesionId: SID, accion: 'manual' });
-                return okJ({ borrado, chat_id: cidN, cotizacion: !!(rC.out && rC.out.ok), enganche: eng });
             }
             if (action === 'subir_chat_hilo') return okJ(await SUBIR.hilo(tV));
             if (action === 'subir_chat_msg' && req.method === 'POST') {

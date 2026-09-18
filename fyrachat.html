@@ -287,44 +287,6 @@ a{color:var(--pri2)}
 .msg.in .lnk{color:#9fd0ff}
 .msg .med small{word-break:break-all}
 .msg.sel{outline:3px solid var(--pos);outline-offset:2px}
-/* VENTAS TOMA (orden owner 2026-09-16): dinero sumándose, VENDIDO ✓ y bolsas de metas llenándose */
-.sh.venv{background:#F6F8FC!important;color:#0B1730}.sh.venv .sh-head{background:#fff;color:#0B1730;border-bottom:1px solid #E6EAF2}.sh.venv .sh-head b{color:#0B1730}.sh.venv .sh-head .x{background:#EEF2F8;color:#0B1730}
-.venv .tot{background:#fff;border:1px solid #E6EAF2;border-radius:20px;padding:16px 18px;box-shadow:0 8px 24px rgba(11,23,48,.06);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.venv .tot small{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;color:#5B6B8A;text-transform:uppercase}.venv .tot b{display:block;font-size:34px;font-weight:800;letter-spacing:-.03em;color:#0B1730;font-variant-numeric:tabular-nums;margin-top:2px}
-.venv .tot .n{background:#ECFDF5;color:#047857;border-radius:999px;padding:8px 12px;font-size:13px;font-weight:800;white-space:nowrap;transition:transform .2s}.venv .tot .n.bump{transform:scale(1.12)}
-.venv h3{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#5B6B8A;margin:16px 4px 8px}
-.venv .bolsas{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.venv .bolsas.uno{grid-template-columns:1fr}
-.venv .bcard{background:#fff;border:1px solid #E6EAF2;border-radius:18px;padding:12px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;animation:calpop .5s cubic-bezier(.2,.9,.3,1.3);box-shadow:0 6px 18px rgba(11,23,48,.05)}
-.venv .bcard.vacia{opacity:.85}.venv .bcard .nom{font-size:13px;font-weight:800;color:#0B1730;text-align:center}.venv .bcard .mon{font-size:15px;font-weight:800;color:#047857;font-variant-numeric:tabular-nums}.venv .bcard.vacia .mon{color:#8A97B1}.venv .bcard .sub{font-size:11px;color:#5B6B8A}
-.venv .bolsa{width:92px;height:104px;position:relative}.venv .bolsa .cuerpo{position:absolute;left:0;right:0;bottom:0;height:86px;border-radius:46px 46px 40px 40px;background:#fff;border:2px solid #D9E0EC;overflow:hidden}
-.venv .bolsa .liq{position:absolute;left:0;right:0;bottom:0;height:0%;background:linear-gradient(180deg,#34D399,#059669);transition:height .9s cubic-bezier(.2,.8,.2,1)}.venv .bolsa .liq:before{content:"";position:absolute;left:-10%;right:-10%;top:-6px;height:12px;border-radius:50%;background:#6EE7B7;opacity:.9}
-.venv .bolsa .nudo{position:absolute;top:6px;left:50%;width:40px;height:18px;margin-left:-20px;border-radius:9px;background:#D4A017;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}.venv .bolsa .nudo:after{content:"";position:absolute;left:8px;right:8px;top:14px;height:10px;background:#fff;border:2px solid #D9E0EC;border-bottom:0;border-radius:6px 6px 0 0}
-.venv .bolsa .sig{position:absolute;left:0;right:0;top:44px;text-align:center;font-size:30px;font-weight:900;color:rgba(11,23,48,.18);z-index:2}.venv .bolsa.llena .sig{color:rgba(255,255,255,.85)}.venv .bolsa .pct{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:11px;font-weight:800;color:#0B1730;z-index:2}
-.venv .ventas{display:flex;flex-direction:column;gap:8px;margin-top:4px}.venv .vt{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E6EAF2;border-radius:14px;padding:10px 12px;animation:calpop .45s cubic-bezier(.2,.9,.3,1.3)}
-.venv .vt .ph{width:44px;height:34px;border-radius:9px;background:#EEF2F8;overflow:hidden;flex:0 0 auto}.venv .vt .ph img{width:100%;height:100%;object-fit:cover}.venv .vt .tx{flex:1;min-width:0}.venv .vt .tx b{display:block;font-size:14px;font-weight:800;color:#0B1730;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.venv .vt .tx small{display:block;font-size:12px;color:#5B6B8A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.venv .vt .ph svg{width:22px;height:22px;color:#8A97B1;margin:6px 11px}
-.venv .vt .pr{font-size:14px;font-weight:800;color:#0B1730;font-variant-numeric:tabular-nums;white-space:nowrap}.venv .vt .ok{display:inline-flex;align-items:center;gap:4px;background:#ECFDF5;color:#047857;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.venv .vt .ok svg{width:12px;height:12px;stroke-width:3}
-.venv .acc{display:flex;gap:10px;margin-top:14px;width:100%}.venv .acc button{flex:1 1 0;min-width:0;width:auto;display:flex!important;align-items:center;justify-content:center;height:48px!important;min-height:48px;border-radius:14px;font-weight:700;font-size:15px;text-align:center;padding:0 12px}.venv .acc .rep{background:#1F6FFF;color:#fff}.venv .acc .lim{background:#EEF2F8;color:#0B1730}
-/* CALENDARIO TOMA (orden owner 2026-09-16): blanco, semana, se llena solo */
-.sh.calv{background:#F6F8FC!important;color:#0B1730}.sh.calv .sh-head{background:#fff;color:#0B1730;border-bottom:1px solid #E6EAF2}.sh.calv .sh-head b{color:#0B1730}.sh.calv .sh-head .x{background:#EEF2F8;color:#0B1730}
-.calv .top{display:flex;align-items:flex-end;justify-content:space-between;padding:6px 2px 10px}.calv .top h2{font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0;color:#0B1730}.calv .top small{display:block;font-size:13px;color:#5B6B8A;font-weight:500;margin-top:2px;text-transform:capitalize}
-.calv .cnt{background:#1F6FFF;color:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;min-width:84px;text-align:center;transition:transform .2s}.calv .cnt.bump{transform:scale(1.12)}
-.calv .grid{background:#fff;border:1px solid #E6EAF2;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(11,23,48,.06)}
-.calv .dias{display:grid;grid-template-columns:36px repeat(5,1fr);border-bottom:1px solid #E6EAF2}.calv .dias div{text-align:center;padding:8px 0 6px;font-size:11px;font-weight:700;color:#5B6B8A;text-transform:uppercase;letter-spacing:.04em}
-.calv .dias div b{display:block;width:24px;height:24px;line-height:24px;margin:3px auto 0;border-radius:50%;font-size:13px;color:#0B1730}.calv .dias div.hoy b{background:#1F6FFF;color:#fff}
-.calv .cuerpo{display:grid;grid-template-columns:36px repeat(5,1fr);position:relative}
-.calv .hrs{display:flex;flex-direction:column}.calv .hrs div{height:46px;font-size:9px;color:#8A97B1;text-align:right;padding-right:4px;transform:translateY(-6px)}
-.calv .col{position:relative;border-left:1px solid #EEF2F8;background-image:linear-gradient(#EEF2F8 1px,transparent 1px);background-size:100% 46px}.calv .col.hoy{background-color:rgba(31,111,255,.04)}
-.calv .cita{position:absolute;left:3px;right:3px;border-radius:9px;padding:4px 5px 3px;font-size:10px;line-height:12px;color:#0B1730;border-left:3px solid;overflow:hidden;box-shadow:0 2px 6px rgba(11,23,48,.10);animation:calpop .45s cubic-bezier(.2,.9,.3,1.3)}
-.calv .cita b{display:block;font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calv .cita span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#3B4A68}.calv .cita i{font-style:normal;font-weight:700;color:#1F6FFF}
-.calv .lista{margin-top:12px;display:flex;flex-direction:column;gap:6px}.calv .lista .it{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E6EAF2;border-radius:14px;padding:10px 12px;animation:calpop .4s ease}
-.calv .lista .it .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}.calv .lista .it .tx{flex:1;min-width:0;font-size:13px;color:#0B1730}.calv .lista .it .tx b{font-weight:800}.calv .lista .it .tx small{display:block;color:#5B6B8A;font-size:12px}.calv .lista .it .ok{color:#12B981;font-weight:800;font-size:12px;white-space:nowrap}
-.calv .tick{min-height:22px;margin:0 2px 10px;font-size:13px;color:#0B1730;display:flex;align-items:center;gap:8px}.calv .tick .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}.calv .tick b{font-weight:800}.calv .tick.pop{animation:calpop .4s ease}
-.calv .acc{display:flex;gap:10px;margin-top:14px;width:100%}.calv .acc button{flex:1 1 0;min-width:0;width:auto;display:flex!important;align-items:center;justify-content:center;height:48px!important;min-height:48px;border-radius:14px;font-weight:700;font-size:15px;text-align:center;padding:0 12px}.calv .acc .rep{background:#1F6FFF;color:#fff}.calv .acc .lim{background:#EEF2F8;color:#0B1730}
-@keyframes calpop{0%{opacity:0;transform:scale(.6)}60%{opacity:1;transform:scale(1.06)}100%{transform:scale(1)}}
-.run-bar{position:absolute;left:0;right:0;bottom:0;z-index:31;display:flex;align-items:center;gap:6px;padding:8px 10px calc(8px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
-.run-bar button{width:44px;height:44px;border-radius:14px;background:var(--s2);color:#fff;display:grid;place-items:center;font-size:18px;font-weight:700}
-.run-bar button.on{background:var(--pri)}.run-bar button.fin{background:rgba(255,92,108,.18);color:#ffb3bb}.run-bar button:disabled{opacity:.35}
-.run-bar .st{flex:1;min-width:0;font-size:12px;line-height:15px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.run-bar .st b{display:block;font-size:13px;color:#fff}
 .sel-bar{position:absolute;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 16px calc(10px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
 .sel-bar b{flex:1;font-size:15px}
 .sel-bar .cta{width:auto;min-width:0;height:44px;padding:0 16px;margin:0}
@@ -336,7 +298,6 @@ a{color:var(--pri2)}
 .msg .med b{display:block;font-size:14px;line-height:18px;font-weight:600}
 .msg .med small{display:block;font-size:12px;line-height:16px;opacity:.75}
 .msg .med audio{width:200px;max-width:100%;height:32px}
-.sis.tiempo{padding:12px 0;margin:8px 0}.sis.tiempo span{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;background:var(--s1);border:1px solid var(--border);color:#fff;font-size:13px;font-weight:600;letter-spacing:.02em}.sis.tiempo svg{width:16px;height:16px}.sis.tiempo.rojo span{border-color:rgba(255,92,108,.6);color:#ffb3bb}.sis.tiempo.verde span{border-color:rgba(53,224,176,.6);color:#9ff0d6}.sis.tiempo.banco span{border-color:rgba(46,139,255,.7);color:#dff5ff;animation:latido 1.2s ease-in-out infinite}@keyframes latido{50%{opacity:.55}}
 .sis{align-self:center;max-width:88%;text-align:center;font-size:12px;line-height:16px;color:var(--muted);padding:4px 12px;margin:4px 0;white-space:pre-wrap}
 .sis i{display:inline-flex;align-items:center;gap:4px;font-style:normal;font-size:11px;color:var(--muted);margin-top:2px;opacity:.8}
 .sis i .ic{width:12px;height:12px}
@@ -971,180 +932,9 @@ function pintarMas(){
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
       masRow('settings', 'Ajustes', 'Preferencias de la app', "abrirPronto('Ajustes', 'Las preferencias de la app llegan en una próxima versión.')") +
     '</div>' +
-    (Number(TENANT.id) === 2 ? '<div class="grupo">' + masRow('bot', 'Tomas de video', 'Simuladores, crédito, Pedro Tacoma, Bryan, Ignacio y carrusel de citas', 'abrirTomas()') + '</div>' : '') +
     '<div class="grupo">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>';
 }
 // SIMULADOR (orden owner 2026-09-15): reinicia el chat contigo mismo y corre el flujo exacto paso a paso (la UI marca el ritmo)
-let SIM_CORRIDA = null;   // compat: id de la corrida viva
-// ══ RUNNER DE TOMAS con controles (orden owner 2026-09-15): ⏮ atrás (deshace el último paso en FyraChat) · ⏯ pausa/continuar · ⏭ adelante · ✕ terminar
-let RUN = null;
-function runBarra(){
-  let bar = document.getElementById('run-bar');
-  if (!bar) { bar = document.createElement('div'); bar.id = 'run-bar'; bar.className = 'run-bar'; bar.innerHTML = '<button type="button" id="rb-atras" aria-label="Atrás">⏮</button><button type="button" id="rb-pausa" aria-label="Pausa">⏸</button><button type="button" id="rb-sig" aria-label="Adelante">⏭</button><div class="st"><b id="rb-t"></b><span id="rb-s"></span></div><button type="button" class="fin" id="rb-fin" aria-label="Terminar">✕</button>'; $('scr-chat').appendChild(bar);
-    bar.querySelector('#rb-atras').onclick = () => runAtras(); bar.querySelector('#rb-pausa').onclick = () => runPausa(); bar.querySelector('#rb-sig').onclick = () => runAdelante(); bar.querySelector('#rb-fin').onclick = () => runTerminar(); }
-  return bar;
-}
-function runPintar(){
-  if (!RUN) return; const bar = runBarra();
-  const hechos = RUN.log.length, total = RUN.total || '?';
-  bar.querySelector('#rb-t').textContent = RUN.titulo || RUN.escena;
-  bar.querySelector('#rb-s').textContent = (RUN.fin ? 'Terminada · ' : (RUN.pausado ? 'En pausa · ' : 'Corriendo · ')) + 'paso ' + hechos + ' de ' + total + (RUN.ultimo ? ' · ' + RUN.ultimo : '');
-  bar.querySelector('#rb-pausa').textContent = RUN.pausado || RUN.fin ? '▶' : '⏸'; bar.querySelector('#rb-pausa').classList.toggle('on', !!RUN.pausado && !RUN.fin);
-  bar.querySelector('#rb-atras').disabled = !hechos || RUN.ocupado; bar.querySelector('#rb-sig').disabled = RUN.fin || RUN.ocupado; bar.querySelector('#rb-pausa').disabled = RUN.fin;
-}
-async function runRefrescar(id){ try { const h = hiloDe(id); h.cargado = false; h.ult_ts = 0; h.msgs = []; h.keys = new Set(); h.porMid = new Map(); await cargarHilo(id); if (CHAT_ID === id) { pintarMensajes(hiloDe(id)); irAlFondo(true); } } catch (e) {} }
-function runProgramar(){ if (!RUN || RUN.pausado || RUN.fin || RUN.ocupado) return; clearTimeout(RUN.timer); RUN.timer = setTimeout(() => runPaso(), RUN.pausa || 1500); }
-async function runPaso(){
-  if (!RUN || RUN.fin || RUN.ocupado) return; RUN.ocupado = true; clearTimeout(RUN.timer); runPintar();
-  const R = RUN; const paso = R.siguiente;
-  try {
-    const r = await apiPost(R.action, Object.assign({}, R.base, { paso, chat_id: R.actual, corrida: R.corrida }));
-    if (R !== RUN) return;
-    if (!r.ok && !r.fin) { if (/inexistente|no existe/i.test(String(r.error || ''))) { R.fin = true; runPintar(); return; } avisoError('Paso ' + paso + ': ' + (r.error || 'falló')); }
-    if (r.chat_id && r.chat_id !== R.actual) { R.actual = r.chat_id; if (CHAT_ID) cerrarChat(); await new Promise(x => setTimeout(x, 350)); abrirChat(R.actual); await new Promise(x => setTimeout(x, 900)); }
-    if (!r.fin || r.quien) R.log.push({ paso, chat_id: r.chat_id || R.actual, ini: r.ini, fin: r.fin_ts, quien: r.quien });
-    R.ultimo = (r.quien ? r.quien + ': ' : '') + String(r.texto || '').slice(0, 40);
-    R.total = r.de || R.total;
-    await runRefrescar(R.actual);
-    if (r.fin || !r.siguiente) { R.fin = true; } else { R.siguiente = r.siguiente; R.pausa = r.pausa || 1500; }
-  } finally { if (R === RUN) { R.ocupado = false; runPintar(); runProgramar(); } }
-}
-function runPausa(){ if (!RUN || RUN.fin) return; RUN.pausado = !RUN.pausado; clearTimeout(RUN.timer); runPintar(); runProgramar(); }
-async function runAdelante(){ if (!RUN || RUN.fin || RUN.ocupado) return; const p = RUN.pausado; RUN.pausado = true; clearTimeout(RUN.timer); await runPaso(); if (RUN) { RUN.pausado = p; runPintar(); runProgramar(); } }
-async function runAtras(){
-  if (!RUN || RUN.ocupado || !RUN.log.length) return; RUN.ocupado = true; const fueP = RUN.pausado; RUN.pausado = true; clearTimeout(RUN.timer); runPintar();
-  const R = RUN; const u = R.log.pop();
-  try {
-    const r = await apiPost(R.action, Object.assign({}, R.base, { paso: u.paso, chat_id: u.chat_id, corrida: R.corrida, deshacer: true, ini: u.ini, fin: u.fin }));
-    if (!r.ok) { R.log.push(u); avisoError(r.error || 'No se pudo deshacer'); }
-    else { R.siguiente = u.paso; R.fin = false; R.ultimo = 'deshecho: ' + (u.quien || ''); if (u.chat_id !== R.actual) { R.actual = u.chat_id; if (CHAT_ID) cerrarChat(); await new Promise(x => setTimeout(x, 350)); abrirChat(R.actual); await new Promise(x => setTimeout(x, 700)); } await runRefrescar(R.actual); }
-  } finally { if (R === RUN) { R.ocupado = false; R.pausado = fueP; runPintar(); runProgramar(); } }
-}
-function runTerminar(){ if (RUN) clearTimeout(RUN.timer); RUN = null; SIM_CORRIDA = null; const bar = document.getElementById('run-bar'); if (bar) bar.remove(); }
-async function iniciarCorrida({ action, base, titulo, reset }){
-  runTerminar(); const corrida = uuid(); SIM_CORRIDA = corrida;
-  const r0 = await apiPost(action, Object.assign({}, base, { paso: 0 }));
-  if (!r0.ok) { SIM_CORRIDA = null; return avisoError(r0.error || 'No se pudo preparar la toma'); }
-  if (reset !== false) { HILOS.clear(); await cargarInbox({ reset: true }); }
-  irTab('inicio'); const actual = r0.chat_id || null; if (actual && CHAT_ID !== actual) abrirChat(actual);
-  RUN = { action, base, corrida, titulo: r0.titulo || titulo, actual, siguiente: r0.siguiente || null, pausa: r0.pausa || 1500, total: r0.total || null, log: [], pausado: false, fin: !r0.siguiente, ocupado: false, ultimo: '' };
-  runPintar(); runProgramar();
-}
-async function simuladorVideo(parte){ return iniciarCorrida({ action: 'video_simulador', base: (parte === 2 || parte === 3) ? { parte } : {}, titulo: 'Simulador' + (parte ? ' · parte ' + parte : ''), reset: !(parte === 2 || parte === 3) }); }
-async function correrEscena(escena){ return iniciarCorrida({ action: 'video_escena', base: { escena }, titulo: escena }); }
-// CALENDARIO TOMA: semana actual en blanco; 8 citas caen una tras otra (≈12 s) con contador y lista legible
-let CALV_T = [];
-function abrirCalendarioToma(){
-  const CITAS = [   // [nombre, auto, díaOffset desde hoy (0=hoy), hora decimal, color]
-    ['Laura', 'Mazda 3 2021', 1, 10, '#1F6FFF'], ['Andrés', 'Honda CR-V 2019', 3, 12, '#12B981'], ['Paty', 'Kia Sorento 2023', 1, 18, '#8B5CF6'], ['Jorge', 'BMW X5 2020', 2, 17, '#F59E0B'],
-    ['Mónica', 'Jeep Wrangler 2021', 0, 16, '#EF4444'], ['Ricardo', 'Mustang GT 2022', 2, 19, '#0EA5E9'], ['Karla', 'Chevrolet Onix 2021', 0, 15, '#10B981'], ['Daniel', 'Toyota Sienna 2021', 4, 11, '#6366F1']
-  ];
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0); const lunes = new Date(hoy);   // 5 días a partir de HOY (columnas anchas y legibles en el teléfono)
-  const H0 = 9, H1 = 20, ROW = 46, NDIAS = 5;
-  const dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-  const fechaDe = off => { const d = new Date(hoy); d.setDate(hoy.getDate() + off); return d; };
-  const colDe = d => Math.round((d - hoy) / 86400000);
-  let cabecera = '<div>' + '</div>'; for (let i = 0; i < NDIAS; i++) { const d = fechaDe(i); cabecera += '<div class="' + (i === 0 ? 'hoy' : '') + '">' + dias[d.getDay()] + '<b>' + d.getDate() + '</b></div>'; }
-  let hrs = ''; for (let h = H0; h <= H1; h++) hrs += '<div>' + h + ':00</div>';
-  let cols = ''; for (let i = 0; i < NDIAS; i++) cols += '<div class="col' + (i === 0 ? ' hoy' : '') + '" data-c="' + i + '" style="height:' + ((H1 - H0 + 1) * ROW) + 'px"></div>';
-  const mesTxt = hoy.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }); const mesCap = mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1);
-  const s = sheet({ titulo: 'Calendario', big: true, full: true, html: '<div class="calv">' +
-    '<div class="top"><div><h2>Citas de la semana</h2><small>' + esc(mesCap) + ' · del ' + hoy.getDate() + ' al ' + fechaDe(NDIAS - 1).getDate() + '</small></div><div class="cnt" id="calv-cnt">0 citas</div></div>' +
-    '<div class="tick" id="calv-tick"></div>' +
-    '<div class="grid"><div class="dias">' + cabecera + '</div><div class="cuerpo"><div class="hrs">' + hrs + '</div>' + cols + '</div></div>' +
-    '<div class="lista" id="calv-lista"></div>' +
-    '<div class="acc"><button type="button" class="rep" id="calv-rep">Reproducir</button><button type="button" class="lim" id="calv-lim">Limpiar</button></div></div>', alCerrar: () => { CALV_T.forEach(clearTimeout); CALV_T = []; } });
-  s.el.querySelector('.sh').classList.add('calv');
-  const cuerpo = s.body.querySelector('.cuerpo'), lista = s.body.querySelector('#calv-lista'), cnt = s.body.querySelector('#calv-cnt');
-  const limpiar = () => { CALV_T.forEach(clearTimeout); CALV_T = []; cuerpo.querySelectorAll('.cita').forEach(x => x.remove()); lista.innerHTML = ''; cnt.textContent = '0 citas'; s.body.querySelector('#calv-tick').innerHTML = ''; };
-  const poner = (c, n) => {
-    const [nombre, auto, off, hora, color] = c; const d = fechaDe(off); const col = cuerpo.querySelector('.col[data-c="' + colDe(d) + '"]'); if (!col) return;
-    const el = document.createElement('div'); el.className = 'cita'; el.style.top = ((hora - H0) * ROW + 2) + 'px'; el.style.height = (ROW - 4) + 'px'; el.style.borderLeftColor = color; el.style.background = color + '22';
-    el.innerHTML = '<b>' + esc(nombre) + '</b><span>' + esc(auto.split(' ').slice(0, 2).join(' ')) + '</span><i>' + hora + ':00</i>'; col.appendChild(el);
-    const tk = s.body.querySelector('#calv-tick'); tk.innerHTML = '<span class="dot" style="background:' + color + '"></span><span><b>' + esc(nombre) + '</b> · ' + esc(auto) + ' · ' + esc(d.toLocaleDateString('es-MX', { weekday: 'short' })).replace('.', '') + ' ' + hora + ':00</span>'; tk.classList.remove('pop'); void tk.offsetWidth; tk.classList.add('pop');
-    const it = document.createElement('div'); it.className = 'it'; it.innerHTML = '<span class="dot" style="background:' + color + '"></span><div class="tx"><b>' + esc(nombre) + '</b> · ' + esc(auto) + '<small>' + esc(d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric' })) + ' · ' + hora + ':00</small></div><span class="ok">Confirmada ✓</span>';
-    lista.prepend(it);
-    cnt.textContent = n + (n === 1 ? ' cita' : ' citas'); cnt.classList.add('bump'); setTimeout(() => cnt.classList.remove('bump'), 220);
-    s.body.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  const reproducir = () => { limpiar(); CITAS.forEach((c, i) => CALV_T.push(setTimeout(() => poner(c, i + 1), 700 + i * 1500))); };   // 8 citas en ≈12 s
-  s.body.querySelector('#calv-rep').onclick = reproducir; s.body.querySelector('#calv-lim').onclick = limpiar;
-  setTimeout(reproducir, 900);
-}
-// VENTAS TOMA: 8 ventas en ≈12 s; total que suma; bolsa "Metas · Autos MTY" que se llena; luego se abren las bolsas de los vendedores (una vacía)
-let VENV_T = [];
-function abrirVentasToma(){
-  const $m = n => '$' + Number(n).toLocaleString('es-MX');
-  const B = [ { id: 'mty', nom: 'Metas · Autos MTY', meta: 2500000 }, { id: 'v1', nom: 'Metas · Vendedor 1', meta: 1500000 }, { id: 'v2', nom: 'Metas · Vendedor 2', meta: 1000000 }, { id: 'v3', nom: 'Metas · Vendedor 3', meta: 1000000 } ];
-  const V = [   // [auto, precio, bolsa, portada(inv id para portada por autos_mios si está)]
-    ['Mazda CX-5 Grand Touring 2021', 379900, 'mty', 295], ['Nissan Sentra SR 2023', 349900, 'mty', 291], ['Kia Sorento Turbo SXL 2023', 599900, 'mty', 280], ['Honda CR-V 2019', 285000, 'mty', 257],
-    ['BMW X5 45e 2020', 599900, 'v1', 292], ['Ford Mustang GT 2022', 799900, 'v1', 278], ['Toyota Tacoma 2014', 345000, 'v2', 263], ['Audi Q5 elite Sportback 2023', 739000, 'mty', 285]
-  ];
-  const portadas = {}; (AUTOS || []).forEach(a => { portadas[Number(a.id)] = a.portada; });
-  const bolsaHTML = b => '<div class="bcard vacia" data-b="' + b.id + '"><div class="bolsa"><div class="nudo"></div><div class="cuerpo"><div class="liq"></div></div><div class="sig">$</div><div class="pct">0%</div></div><div class="nom">' + esc(b.nom) + '</div><div class="mon">$0</div><div class="sub">0 ventas · meta ' + $m(b.meta) + '</div></div>';
-  const s = sheet({ titulo: 'Ventas', big: true, full: true, html: '<div class="venv">' +
-    '<div class="tot"><div><small>Vendido este mes</small><b id="venv-tot">$0</b></div><div class="n" id="venv-n">0 ventas</div></div>' +
-    '<h3>Metas</h3><div class="bolsas uno" id="venv-bolsas">' + bolsaHTML(B[0]) + '</div>' +
-    '<h3>Ventas</h3><div class="ventas" id="venv-lista"></div>' +
-    '<div class="acc"><button type="button" class="rep" id="venv-rep">Reproducir</button><button type="button" class="lim" id="venv-lim">Limpiar</button></div></div>', alCerrar: () => { VENV_T.forEach(clearTimeout); VENV_T = []; } });
-  s.el.querySelector('.sh').classList.add('venv');
-  const tot = s.body.querySelector('#venv-tot'), nn = s.body.querySelector('#venv-n'), bolsas = s.body.querySelector('#venv-bolsas'), lista = s.body.querySelector('#venv-lista');
-  const acum = { total: 0, n: 0, porBolsa: {} };
-  const contar = (el, desde, hasta) => { const t0 = performance.now(), dur = 700; const f = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = $m(Math.round(desde + (hasta - desde) * e)); if (k < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); };
-  const pintarBolsa = (id) => { const b = B.find(x => x.id === id), c = bolsas.querySelector('.bcard[data-b="' + id + '"]'); if (!c) return; const v = acum.porBolsa[id] || { m: 0, n: 0 }; const pct = Math.min(100, Math.round(v.m / b.meta * 100)); c.classList.toggle('vacia', !v.n); c.querySelector('.liq').style.height = pct + '%'; c.querySelector('.bolsa').classList.toggle('llena', pct >= 45); c.querySelector('.pct').textContent = pct + '%'; c.querySelector('.mon').textContent = $m(v.m); c.querySelector('.sub').textContent = v.n + (v.n === 1 ? ' venta' : ' ventas') + ' · meta ' + $m(b.meta); };
-  const abrirEquipo = () => { if (bolsas.querySelector('[data-b="v1"]')) return; bolsas.classList.remove('uno'); B.slice(1).forEach((b, i) => VENV_T.push(setTimeout(() => { bolsas.insertAdjacentHTML('beforeend', bolsaHTML(b)); pintarBolsa(b.id); }, i * 450))); };
-  const vender = (v, i) => {
-    const [auto, precio, bid, inv] = v; const p = auto.split(' ');
-    const el = document.createElement('div'); el.className = 'vt'; el.innerHTML = '<div class="ph">' + (portadas[inv] ? '<img src="' + esc(portadas[inv]) + '" alt="">' : ico('car')) + '</div><div class="tx"><b>' + esc(p.slice(0, -1).join(' ')) + '</b><small>' + esc(p[p.length - 1]) + ' · ' + esc(B.find(x => x.id === bid).nom.replace('Metas · ', '')) + '</small></div><div class="pr">' + $m(precio) + '</div><span class="ok">' + ico('check') + 'VENDIDO</span>';
-    lista.prepend(el);
-    const antes = acum.total; acum.total += precio; acum.n++; contar(tot, antes, acum.total);
-    nn.textContent = acum.n + (acum.n === 1 ? ' venta' : ' ventas'); nn.classList.add('bump'); setTimeout(() => nn.classList.remove('bump'), 220);
-    acum.porBolsa[bid] = acum.porBolsa[bid] || { m: 0, n: 0 }; acum.porBolsa[bid].m += precio; acum.porBolsa[bid].n++;
-    if (i === 4) abrirEquipo();
-    setTimeout(() => pintarBolsa(bid), i === 4 ? 600 : 50);
-    s.body.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  const limpiar = () => { VENV_T.forEach(clearTimeout); VENV_T = []; acum.total = 0; acum.n = 0; acum.porBolsa = {}; tot.textContent = '$0'; nn.textContent = '0 ventas'; lista.innerHTML = ''; bolsas.className = 'bolsas uno'; bolsas.innerHTML = bolsaHTML(B[0]); };
-  const reproducir = () => { limpiar(); V.forEach((v, i) => VENV_T.push(setTimeout(() => vender(v, i), 700 + i * 1500))); };
-  s.body.querySelector('#venv-rep').onclick = reproducir; s.body.querySelector('#venv-lim').onclick = limpiar;
-  cargarAutos({ silencioso: true }).then(() => { (AUTOS || []).forEach(a => { portadas[Number(a.id)] = a.portada; }); }).catch(() => {});
-  setTimeout(reproducir, 900);
-}
-function abrirTomas(){
-  const f = (a, i, t, sub, rojo) => '<button type="button" class="row op' + (rojo ? ' rojo' : '') + '" data-a="' + a + '"><div class="sq">' + ico(i) + '</div><div class="tx"><div class="t">' + esc(t) + '</div><div class="s">' + esc(sub) + '</div></div>' + ico('chev') + '</button>';
-  const s = sheet({ titulo: 'Tomas de video', html: '<div class="grupo">' +
-    f('sim', 'bot', 'Simulador (3 partes)', 'Tu chat: Juan, cotización, ubicación, fotos, cita y seguimiento.') +
-    f('sim2', 'clock', 'Simulador · parte 2', 'Horas después, prueba de manejo y cita.') +
-    f('sim3', 'calendar', 'Simulador · parte 3', 'Recordatorios, vendedor verificado, en camino y llegada.') +
-    '</div><div class="grupo">' +
-    f('credito', 'dollar', 'Simulador crédito', 'Tu chat como Juan Pablo · Audi: requisitos, documentos, crédito aprobado, cita.') +
-    f('toma2', 'car', 'Toma 2 · Pedro Tacoma', 'Tu chat como Pedro: fotos, cita, cancela, reagenda entre 9 y 11.') +
-    f('bryan', 'map', 'Bryan · viene en la tarde', 'Chat aparte con contexto previo y vendedor verificado.') +
-    f('ignacio', 'x', 'Ignacio · no alcanza a llegar', 'Chat aparte: cita cancelada, reagendar.') +
-    f('carrusel', 'checks', 'Carrusel · 8 citas confirmadas', '8 chats con contexto; el bot va confirmando uno por uno.') +
-    f('calendario', 'calendar', 'Calendario · se llena solo', 'Semana en blanco: 8 citas caen una tras otra en 12 segundos.') +
-    f('ventas', 'dollar', 'Ventas · el dinero se suma', 'Autos con VENDIDO ✓, total que sube y bolsas de metas que se llenan (una vacía).') +
-    '</div><div class="grupo">' + f('limpiar', 'x', 'Limpiar tomas', 'Borra los chats de Bryan, Ignacio y el carrusel.', true) + '</div>' });
-  s.body.onclick = async (e) => {
-    const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a; s.cerrar();
-    if (a === 'sim') return simuladorVideo(); if (a === 'sim2') return simuladorVideo(2); if (a === 'sim3') return simuladorVideo(3);
-    if (a === 'calendario') return abrirCalendarioToma();
-    if (a === 'ventas') return abrirVentasToma();
-    if (a === 'limpiar') { const r = await apiPost('video_limpiar', {}); if (!r.ok) return avisoError(r.error || 'No se pudo'); HILOS.clear(); await cargarInbox({ reset: true }); return; }
-    return correrEscena(a);
-  };
-}
-// MODO VIDEO desde Más (cuando ya no existe el chat): elige el auto y arranca el guion
-async function reiniciarVideoDesdeMas(){
-  await cargarAutos({ silencioso: true });
-  const autos = (AUTOS || []).filter(a => a.estado !== 'vendido');
-  if (!autos.length) return avisoError('No tienes autos para el video.');
-  selectorAutos({ autos, titulo: 'Auto para el video', alElegir: async (a) => {
-    const r = await apiPost('video_reiniciar', { auto_id: a.id });
-    if (!r.ok) return avisoError(r.error || 'No se pudo');
-    await cargarInbox({ reset: true }); irTab('inicio'); if (r.chat_id) abrirChat(r.chat_id);
-  } });
-}
 // Tu cuenta: universo, teléfono, estado de WhatsApp; "Reiniciar prueba" solo en demo
 function abrirCuenta(){
   if (!TENANT) return;
@@ -1426,7 +1216,6 @@ function estadoHTML(m){
 function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s<]+)/g, (u) => '<a class="lnk" href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'); }
 function burbujaHTML(m){
   const k = keyDe(m), ts = ms(m.ts) || 0;
-  if (m.emisor === 'sistema' && /^(⏳|🏦|❌|✅)/.test(String(m.texto || ''))) { const pf = String(m.texto)[0] === '⏳' ? 'clock' : String(m.texto).startsWith('🏦') ? 'dollar' : String(m.texto).startsWith('❌') ? 'x' : 'check'; const cl = String(m.texto).startsWith('❌') ? ' rojo' : String(m.texto).startsWith('✅') ? ' verde' : String(m.texto).startsWith('🏦') ? ' banco' : ''; return '<div class="sis tiempo' + cl + '" data-k="' + esc(k) + '" data-ts="' + ts + '"><span>' + ico(pf) + esc(String(m.texto).replace(/^(⏳|🏦|❌|✅)\s*/, '')) + '</span></div>'; }
   if (m.emisor === 'sistema') return '<div class="sis" data-k="' + esc(k) + '" data-ts="' + ts + '">' + esc(m.texto || textoDe(m)) + ' <i>' + ico('eye') + 'Solo tú lo ves</i></div>';
   const out = m.dir === 'out';
   let med = '';
@@ -1644,18 +1433,12 @@ function abrirMasAcciones(){
     fila('recordatorio', 'bellring', 'Recordatorio', 'Un mensaje a la hora que pongas. Máximo 2.') +
     (demo ? fila('sim', 'flask', 'Simular respuesta', 'Solo demo. Nada sale a WhatsApp.') : '') +
     '</div>' +
-    ((TENANT && Number(TENANT.id) === 2 && (() => { const h = hiloDe(id); const tl = String(((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono) || '').replace(/\D/g, ''); return tl && tl === String(TENANT.telefono || '').replace(/\D/g, ''); })()) ? '<div class="grupo">' + fila('tomas', 'bot', 'Tomas de video', 'Simuladores, crédito, Pedro Tacoma, Bryan, Ignacio y carrusel.') + '</div>' : '') +
     '<div class="grupo">' + fila('soltar', 'hand', 'Soltar chat', 'El asistente deja de leer este chat.', true) + fila('borrar', 'x', 'Borrar chat', 'Se borra de tu FyraChat (WhatsApp no se toca).', true) + '</div>' });
   s.body.onclick = async (e) => {
     const b = e.target.closest('.op'); if (!b) return; const a = b.dataset.a;
     if (a === 'recordatorio') { s.cerrar(); return abrirRecordatorio(); }
     if (a === 'sim') { s.cerrar(); return abrirSimular(); }
     if (a === 'soltar') { s.cerrar(); return soltarChat(); }
-    if (a === 'video') { s.cerrar(); return reiniciarVideo(id); }
-    if (a === 'tomas') { s.cerrar(); return abrirTomas(); }
-    if (a === 'simulador') { s.cerrar(); return simuladorVideo(); }
-    if (a === 'simulador2') { s.cerrar(); return simuladorVideo(2); }
-    if (a === 'simulador3') { s.cerrar(); return simuladorVideo(3); }
     if (a === 'borrar') { s.cerrar(); return borrarChat(id); }
     if (a === 'seleccionar') { s.cerrar(); return modoSeleccion(id); }
     bloquear(b, true); s.body.querySelectorAll('.op').forEach(x => { x.disabled = true; });
@@ -1704,7 +1487,6 @@ function abrirRecordatorio(){
 }
 // BORRAR (orden owner 2026-09-15): chat completo o mensaje suelto — solo en FyraChat, WhatsApp no se toca
 async function borrarChat(id){
-  runTerminar();   // si una toma estaba corriendo, se detiene
   const c = INBOX.rows.get(id) || {}; const nom = c.nombre || ('+' + String(c.telefono || '').replace(/\D/g, ''));
   const ok = await confirmar({ titulo: 'Borrar chat', texto: 'Se borra la conversación con ' + nom + ' de tu FyraChat: mensajes, cita y delegación. En WhatsApp no cambia nada.', ok: 'Borrar chat', peligro: true });
   if (!ok) return;
@@ -1754,17 +1536,6 @@ function mantener(root, sel, fn){
 }
 mantener($('msgs'), '.msg, .sis', (el) => { const k = String(el.dataset.k || ''); const m = /^id:(\d+)$/.exec(k); if (!m || !CHAT_ID) return avisoError('Este mensaje aún no se guarda en el servidor.'); borrarMensaje(CHAT_ID, Number(m[1]), el); });
 mantener($('lista'), '.fila', (el) => { const id = Number(el.dataset.id); if (id) borrarChat(id); });
-// MODO VIDEO (owner 2026-09-15): borrar el chat consigo mismo y volver a agregarse con el guion de entrada
-async function reiniciarVideo(id){
-  const h = hiloDe(id); const auto = h.chat && h.chat.auto;
-  const ok = await confirmar({ titulo: 'Reiniciar video', texto: 'Se borra todo este chat (mensajes, cita, delegación) y te vuelves a agregar con el guion de Juan' + (auto ? ' para el ' + auto.nombre : '') + '.', ok: 'Borrar y volver a agregar', peligro: true });
-  if (!ok) return;
-  const r = await apiPost('video_reiniciar', { chat_id: id, auto_id: auto ? auto.id : undefined });
-  if (!r.ok) return avisoError(r.error || 'No se pudo reiniciar');
-  HILOS.delete(id); INBOX.rows.delete(id); cerrarChat();
-  await cargarInbox({ reset: true });
-  if (r.chat_id) abrirChat(r.chat_id);
-}
 async function soltarChat(){
   const id = CHAT_ID; if (!id) return;
   const ok = await confirmar({ titulo: '¿Soltar este chat?', texto: 'El asistente deja de leer y registrar esta conversación. Puedes volver a delegarla después.', ok: 'Soltar', peligro: true });
