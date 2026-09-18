@@ -844,7 +844,15 @@ async function conectar() {
                 if (chatD.ca_id) db.execute({ sql: 'UPDATE chats_activos SET ' + (fromMeD ? 'ultimo_from_me' : 'ultimo_entrante') + '=? WHERE id=?', args: [tsD, chatD.ca_id] }).catch(() => {});   // dual-write (Etapa 2); conversaciones.ult_msg_ts/ult_dir ya lo llevan
                 // TIMBRE con dirección (contrato v2): el chat_id sale del MISMO upsert que persiste el renglón (cero lecturas extra)
                 guardarMensajeNuevo({ tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null), ai_generated: 0, tenantId: tenant.id })
-                    .then(cid => emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), ai: 0, nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null) })))
+                    .then(cid => {
+                        emitir(evMensaje({ tenantId: tenant.id, chatId: cid, tel: telD, msgId: m.key.id, ts: tsD, direccion: fromMeD ? 'out' : 'in', emisor: fromMeD ? 'dueno' : (m.pushName || null), texto: textoD, tipo: tipoDeMsg(m.message), ai: 0, nombre: fromMeD ? null : (m.pushName || chatD.comprador_nombre || null) }));
+                        // AUTO-BOTÓN POR UNIVERSO (orden owner 2026-09-18): solo si el universo lo tiene encendido (config.auto_boton=1) se avisa a
+                        // fyrachat cada ENTRANTE de texto de un chat delegado; allá la IA decide si aprieta un botón (misma puerta que el vendedor).
+                        if (!fromMeD && textoD && cid && tenant.config && Number(tenant.config.auto_boton) === 1) setTimeout(() => {
+                            fetch('https://fyrachat.vercel.app/api/seb-panel', { method: 'POST', headers: HDR_PUENTE, body: cuerpoPanel({ action: 'entrante_v2', tenant_id: tenant.id, chat_id: cid, msg_id: m.key.id, texto: textoD, ultimo_from_me: chatD.ultimo_from_me || null }) })
+                                .then(r => r.json().catch(() => ({}))).then(j => console.log('[entrante_v2] t' + tenant.id + ' → ' + JSON.stringify(j).slice(0, 160))).catch(e => console.error('[entrante_v2]', e.message));
+                        }, 500);
+                    })
                     .catch(() => {});
                 console.log('[t' + tenant.id + '] ' + (fromMeD ? 'salida dueño' : 'entrada') + ' · chat ' + jidHash(telD) + ' · ' + tipoDeMsg(m.message));
                 // ══ CITAS POR UNIVERSO (orden owner 2026-09-08): un ENTRANTE de un chat delegado toca la MISMA máquina

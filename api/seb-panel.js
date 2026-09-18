@@ -157,7 +157,7 @@ async function guardarOferta(telO, segs) {
 const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
 // CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
 const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
-const ACC_PUENTE = new Set(['opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
+const ACC_PUENTE = new Set(['entrante_v2', 'opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
 const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
     'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
     'flags_msgs', 'flags_msgs_done', 'citas_backfill', 'universo_backfill']);
@@ -266,6 +266,25 @@ module.exports = async function handler(req, res) {
                 } catch (e) { autoBoton = { resultado: 'error', error: e.message }; }
             }
             return res.status(r.ok ? 200 : 400).json(Object.assign({ simulado: true, chat_id: req.body.chat_id ? Number(req.body.chat_id) : undefined, auto_boton: autoBoton }, r));
+        }
+        // ══ ENTRANTE DE UNIVERSO → AUTO-BOTÓN (orden owner 2026-09-18): el puente avisa cada mensaje del comprador en un chat delegado de un
+        //    universo con config.auto_boton=1. La IA decide si un humano apretaría un botón y lo aprieta por la MISMA puerta que la UI.
+        //    Candados: universo encendido · chat del universo y delegado · POSESIÓN (si el vendedor escribió a mano hace < 15 min, Seb calla).
+        if (action === 'entrante_v2' && req.method === 'POST') {
+            if (!conPuente && !conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
+            const tE = await tenantDeParam(String(req.body.tenant_id || '')); if (!tE || !Number(tE.id)) return res.status(404).json({ ok: false, error: 'universo inexistente' });
+            if (!(tE.config && Number(tE.config.auto_boton) === 1)) return res.status(200).json({ ok: true, ignorado: 'auto_boton apagado en este universo' });
+            const chE = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chE || Number(chE.tenant_id) !== Number(tE.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en ese universo' });
+            const POSESION_MS = 15 * 60000;
+            const ultManual = (await query("SELECT MAX(ts) t FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND emisor = 'dueno' AND COALESCE(ai_generated,0) = 0 AND msg_id NOT LIKE 'sim:%' AND msg_id NOT LIKE 'media:%'", [Number(chE.id)]).catch(() => [{ t: null }]))[0];
+            const tManual = Math.max(Number(ultManual && ultManual.t) || 0, Number(req.body.ultimo_from_me) || 0);
+            if (tManual && (Date.now() - tManual) < POSESION_MS) return res.status(200).json({ ok: true, ignorado: 'posesión del vendedor (escribió hace < 15 min)' });
+            const puertaE = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tE.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tE.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
+            const rastroE = async (txt) => { const ts = Date.now(), msgId = 'auto:' + Number(chE.id) + ':' + ts; await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chE.id), msgId, ts, 'out', 'sistema', txt, 'text', 1, ts]).catch(() => { }); try { await MSJ.timbreMensaje({ tenant_id: Number(tE.id), chat_id: Number(chE.id), telefono: chE.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'out', emisor: 'sistema', texto: txt, ts, media: null, estado: 'enviado' } }); } catch (e) { } };
+            let rE = null;
+            try { rE = await AUTOBOTON.correr({ tenant: tE, chat: chE, texto: req.body.texto, msgId: req.body.msg_id, puerta: puertaE, rastro: rastroE, dry: req.body.dry === true }); }
+            catch (e) { rE = { resultado: 'error', error: e.message }; }
+            return res.status(200).json({ ok: true, auto_boton: rE });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
@@ -2845,7 +2864,7 @@ module.exports = async function handler(req, res) {
                 // MODO PRUEBA (PRUEBAS#): jamás publica en fyradrive.com; el alta se simula completa en la UI
                 if (tV && tV.demo) return { ok: true, simulado: true, auto_id: 'demo-' + Date.now(), web_id: null, inv_id: null, estado: estadoWeb === 'privado' ? 'activo' : 'revision', fotos: fotos.length, template: false };
                 if (!process.env.K_PANEL) return { ok: false, status: 503, error: 'K_PANEL no configurada' };
-                const duenoTel = TV ? String(tV.telefono || '') : ACC.OWNER_TEL;
+                const duenoTel = (TV && String(tV.telefono || '').replace(/\D/g, '').length >= 12) ? String(tV.telefono) : ACC.OWNER_TEL;   // universo aún sin número (p. ej. TERRA MOTORS) → a nombre de Fyradrive
                 const partes = String(tV.nombre || 'Vendedor').trim().split(/\s+/).filter(Boolean);
                 const cuerpo = {
                     tipo: 'particular', key: process.env.KEY_VIEJA || undefined,
