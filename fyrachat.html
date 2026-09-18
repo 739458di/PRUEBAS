@@ -501,6 +501,28 @@ select.inp option{background:#09183F;color:#fff}
 #tuto .paso-i{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--sep);font-size:15px;line-height:22px}
 #tuto .paso-i .n{flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:var(--pri);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px}
 #tuto .fin{margin-top:auto;padding-top:24px}
+
+/* ══ CITAS FLEXIBLES (TERRA): barra del chat + hoja con reloj virtual y línea del tiempo ══ */
+.cf-bar{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px;padding:10px 12px;border-radius:12px;background:rgba(53,224,176,.10);border:1px solid rgba(53,224,176,.30);color:var(--txt);font-size:13px;line-height:17px;text-align:left}
+.cf-bar.off{background:var(--s1);border-color:var(--border);color:var(--txt2)}
+.cf-bar.duda{background:rgba(255,209,102,.10);border-color:rgba(255,209,102,.35)}
+.cf-bar b{font-weight:700}.cf-bar .r{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--txt2);white-space:nowrap}
+.cf h4{margin:18px 0 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cf .reloj{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-variant-numeric:tabular-nums}.cf .reloj b{font-size:20px}.cf .reloj span{font-size:12px;color:var(--warn)}
+.cf .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.cf .btns button{height:38px;padding:0 12px;border-radius:10px;background:var(--s2);color:#fff;font-size:13px;font-weight:600;border:1px solid var(--border)}
+.cf .btns button.pri{background:var(--pri)}.cf .btns button.ok{background:rgba(53,224,176,.18);border-color:rgba(53,224,176,.45)}.cf .btns button.no{background:rgba(255,92,108,.14);border-color:rgba(255,92,108,.4)}
+.cf .btns button:disabled{opacity:.45}
+.cf .card{padding:12px;border-radius:12px;background:var(--s1);border:1px solid var(--border);font-size:13px;line-height:19px}
+.cf .card .st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:rgba(53,224,176,.16);color:var(--pos);margin-right:6px}
+.cf .card .st.m{background:rgba(255,255,255,.08);color:var(--txt2)}.cf .card .st.w{background:rgba(255,209,102,.16);color:var(--warn)}
+.cf .card .d{color:var(--txt2);margin-top:4px}
+.cf ol{list-style:none;margin:0;padding:0}
+.cf ol li{display:grid;grid-template-columns:18px 118px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid var(--sep);font-size:13px;line-height:17px;font-variant-numeric:tabular-nums}
+.cf ol li .p{width:10px;height:10px;border-radius:50%;margin-top:3px;border:2px solid var(--pri2)}
+.cf ol li.e .p{background:var(--pos);border-color:var(--pos)}.cf ol li.x .p{border-color:var(--muted);opacity:.5}.cf ol li.x{color:var(--muted)}.cf ol li.sig{background:rgba(31,111,255,.10)}
+.cf ol li .q{color:var(--txt2)}.cf ol li small{display:block;color:var(--muted);font-size:11.5px}
+.cf .ev{font-size:12px;line-height:18px;color:var(--txt2);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -631,6 +653,7 @@ select.inp option{background:#09183F;color:#fff}
       </div>
       <button class="foco" id="ch-foco" onclick="abrirSelectorAuto()"><div class="ph"><i data-ico="car"></i></div><div class="tx"><div class="t">Elegir auto en foco</div><div class="p none">Toca para elegirlo</div></div><i data-ico="chev" class="chev"></i></button>
       <div id="ch-l2"></div>
+      <button type="button" class="cf-bar" id="cf-bar" onclick="abrirCitaFlex()" hidden></button>
     </div>
     <div class="msgs" id="msgs"></div>
     <button class="nuevos" id="nuevos" onclick="irAlFondo(true)">Nuevos mensajes<i data-ico="down"></i></button>
@@ -1151,6 +1174,7 @@ function abrirChat(id){
   if (h.msgs.length) { pintarMensajes(h); }
   $('scr-chat').classList.add('on'); $('tabbar').classList.add('hide');
   if (!HIST) { try { history.pushState({ chat: id }, ''); HIST = true; } catch(e){} }
+  cfBarra(id);
   cargarHilo(id).then(r => {
     if (CHAT_ID !== id) return;
     if (!r.ok) { if (!h.msgs.length) $('msgs').innerHTML = '<div class="vacio"><b>No pude abrir el chat</b>' + esc(r.error || '') + '</div>'; return; }
@@ -1301,7 +1325,7 @@ async function enviarComoComprador(id, texto){
   if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) m.ts = r.ts; h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); }
   const refrescarYa = () => { if (CHAT_ID !== id) return Promise.resolve(); return cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
   // SEB AUTÓNOMO (universos con seb_auto): tras registrar el entrante se pide el turno completo del cerebro (opener → continuación → etapa 3)
-  if (r.seb_auto) { pintarPensando(true); try { await apiPost('seb_turno', { chat_id: id }); } finally { pintarPensando(false); } await refrescarYa(); return; }
+  if (r.seb_auto) { pintarPensando(true); try { await apiPost('seb_turno', { chat_id: id }); } finally { pintarPensando(false); } await refrescarYa(); cfBarra(id); return; }
   const refrescar = () => { if (CHAT_ID !== id) return; cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
   setTimeout(refrescar, 700); setTimeout(refrescar, 3500);
 }
@@ -1413,6 +1437,7 @@ function citaFormWire(body){
   return st;
 }
 function abrirCita(){
+  if (TENANT && TENANT.citas_flex) return abrirCitaFlex();   // aquí la cita nace de lo que dice el comprador; este botón abre la cita y su línea del tiempo
   const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const auto = h.chat && h.chat.auto;
   const s = sheet({ titulo: 'Agendar cita', html: '<div class="pillz">' + (auto ? autoEnHojaHTML(auto) : '<p class="hint">Sin auto en foco: el servidor lo pedirá si hace falta.</p>') + citaFormHTML('') + '</div>',
     pie: '<button class="cta" id="ci-go">Agendar</button><button class="cta sec" id="ci-sin">' + ico('clock') + 'Aún sin horario · proponerle día y hora</button><div class="g-err" id="ci-gerr"></div>' });
@@ -1973,6 +1998,73 @@ async function scEnviar(){
   } catch (e) { avisoError(e.message || 'No se pudo'); }
   finally { SC.enviando = false; bloquear(go, false); tx.placeholder = 'Escribe o manda fotos…'; }
 }
+
+// ══════════ CITAS FLEXIBLES (universos con citas_flex · TERRA MOTORS): barra del chat + hoja con reloj virtual y línea del tiempo ══════════
+const CF_TIPOS = { r1: 'Recordatorio', vispera: 'Un día antes', dia: 'Mensaje del día', dia_multi: 'Mensaje del día', dia_ultimo: 'Último día', empujon: 'Segundo empujón', marcar: 'Aviso al vendedor: márcale', me_avisas: '“Me avisas cuando vengas”', revision: 'Revisión', revision_suave: 'Mensaje suave', cierre: 'Cierre: ¿llegó?', cierre_2: '¿Llegó? (otra vez)', sin_cierre: 'Queda sin cierre' };
+const CF_EST = { viva: 'Viva', en_camino: 'En camino', esperando_cierre: 'Esperando cierre', realizada: 'Realizada', no_llego: 'No llegó', cancelada: 'Cancelada', pospuesta: 'Pospuesta', sin_cierre: 'Sin cierre', reemplazada: 'Reemplazada' };
+let CF = null;
+async function cfBarra(id){
+  const b = $('cf-bar'); if (!b) return;
+  if (!(TENANT && TENANT.citas_flex)) { b.hidden = true; return; }
+  const r = await apiPost('citaf_estado', { chat_id: id }).catch(() => null); if (CHAT_ID !== id || !r || !r.ok) return;
+  cfPintarBarra(r); if (CF && CF.id === id) cfPintar(r);
+}
+function cfPintarBarra(r){
+  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita;
+  const rel = '<span class="r">' + (r.reloj.virtual ? '⏱ ' : '') + esc(r.reloj.ahora) + '</span>';
+  if (!c || !c.viva) { b.className = 'cf-bar off'; b.innerHTML = '<span>' + (c ? 'Cita ' + esc((CF_EST[c.estado] || c.estado).toLowerCase()) + ' · toca para ver' : 'Sin cita · escribe como comprador para que nazca') + '</span>' + rel; return; }
+  b.className = 'cf-bar' + (c.en_duda ? ' duda' : '');
+  const sig = (r.casillas || []).find(k => k.estado === 'pendiente');
+  b.innerHTML = '<span><b>Cita ' + esc(c.cuando) + '</b>' + (c.en_duda ? ' · en duda' : (c.estado === 'en_camino' ? ' · viene en camino' : (c.confirmada_dia ? ' · día confirmado' : ''))) + (sig ? '<br>Sigue: ' + esc(CF_TIPOS[sig.tipo] || sig.tipo) + ' · ' + esc(sig.cuando) : '') + '</span>' + rel;
+}
+function abrirCitaFlex(){
+  const id = CHAT_ID; if (!id) return;
+  const s = sheet({ titulo: 'Cita y línea del tiempo', big: true, full: true, html: '<div class="cf" id="cf-box"><div class="cargando">Cargando…</div></div>', alCerrar: () => { CF = null; } });
+  CF = { s, id, ocupado: false };
+  s.body.addEventListener('click', (e) => { const b = e.target.closest('button[data-cf]'); if (b && !b.disabled) cfAccion(b.dataset.cf, b.dataset.v); });
+  apiPost('citaf_estado', { chat_id: id }).then(r => { if (CF && CF.s === s) { if (r && r.ok) { cfPintar(r); cfPintarBarra(r); } else s.body.querySelector('#cf-box').innerHTML = '<div class="vacio"><b>No pude leer la cita</b>' + esc((r && r.error) || '') + '</div>'; } });
+}
+function cfPintar(r){
+  if (!CF) return; const box = CF.s.body.querySelector('#cf-box'); if (!box) return; const c = r.cita; const off = CF.ocupado ? ' disabled' : '';
+  let h = '<h4>Reloj del sandbox</h4><div class="reloj"><b>' + esc(r.reloj.ahora) + '</b>' + (r.reloj.virtual ? '<span>tiempo adelantado</span>' : '<span style="color:var(--txt2)">tiempo real · hoy el lote abre ' + esc(r.horario_hoy) + '</span>') + '</div>' +
+    '<div class="btns"><button class="pri" data-cf="reloj" data-v="siguiente"' + off + '>▶ Siguiente mensaje</button><button data-cf="mas" data-v="3600000"' + off + '>+1 h</button><button data-cf="mas" data-v="21600000"' + off + '>+6 h</button><button data-cf="mas" data-v="86400000"' + off + '>+1 día</button><button data-cf="reloj" data-v="fin"' + off + '>⏭ Fin de la ventana</button><button data-cf="reloj" data-v="reset"' + off + '>↺ Volver a hoy</button></div>' +
+    '<p class="hint" style="margin-top:10px">Adelanta el tiempo y mira qué saldría si el comprador no contesta. Para que conteste, cierra esta hoja, cambia a Comprador y escribe: la línea se reacomoda sola.</p>';
+  h += '<h4>La cita</h4>';
+  if (!c) h += '<div class="card">Todavía no hay cita en este chat. Nace cuando el comprador dice un día: “voy el sábado”, “cómo andas hoy a las 5”, “entre jueves y viernes”.</div>';
+  else {
+    const cls = c.viva ? (c.en_duda ? 'w' : '') : 'm'; const d = c.datos || {}; const extra = [];
+    if (d.restriccion) extra.push('Restricción: ' + d.restriccion); if (d.asiste) extra.push('Asiste: ' + d.asiste); if (d.condicion) extra.push('Depende de: ' + d.condicion); if (d.a_cuenta) extra.push('Trae auto a cuenta'); if (d.foraneo) extra.push('Foráneo');
+    h += '<div class="card"><span class="st ' + cls + '">' + esc(CF_EST[c.estado] || c.estado) + '</span>' + (c.en_duda ? '<span class="st w">En duda</span>' : '') + (c.confirmada_dia && c.viva ? '<span class="st">Día confirmado</span>' : '') + (c.suave ? '<span class="st m">Modo suave</span>' : '') +
+      '<div style="margin-top:8px"><b>' + esc(c.auto || 'Sin auto') + '</b></div><div class="d">Ventana: ' + esc(c.ventana) + '</div>' + (c.ventana_original ? '<div class="d">Ventana original que él dio: ' + esc(c.ventana_original) + '</div>' : '') +
+      (extra.length ? '<div class="d">' + esc(extra.join(' · ')) + '</div>' : '') + (c.razon ? '<div class="d">Razón: ' + esc(c.razon) + '</div>' : '') + (c.resultado ? '<div class="d">Resultado: ' + esc(c.resultado) + '</div>' : '') + (c.previa_id ? '<div class="d">Ligada a una cita anterior de este comprador</div>' : '') + '</div>';
+    h += '<h4>Botones del vendedor</h4><div class="btns"><button class="ok" data-cf="vend" data-v="llego"' + off + '>Llegó</button>' + (c.viva ? '<button class="no" data-cf="vend" data-v="no_llego"' + off + '>No llegó</button><button data-cf="vend" data-v="auto_vendido"' + off + '>El auto se vendió</button><button data-cf="vend" data-v="mueve"' + off + '>Necesito moverla</button>' : '') + '</div>';
+    if (c.estado === 'realizada') h += '<div class="btns">' + ['compró', 'apartó', 'no compró', 'sigue pensando'].map(x => '<button data-cf="res" data-v="' + x + '"' + off + (c.resultado === x ? ' class="pri"' : '') + '>' + Cap1(x) + '</button>').join('') + '</div>';
+    const ahora = r.reloj.ahora_ts; let marcada = false;
+    h += '<h4>Línea del tiempo</h4><ol>' + (r.casillas || []).map(k => { const sig = !marcada && k.estado === 'pendiente'; if (sig) marcada = true; return '<li class="' + (k.estado === 'enviada' ? 'e' : (k.estado === 'pendiente' ? '' : 'x')) + (sig ? ' sig' : '') + '"><span class="p"></span><span>' + esc(k.cuando) + '</span><span>' + esc(CF_TIPOS[k.tipo] || k.tipo) + ' <span class="q">→ ' + esc(k.para) + '</span>' + (k.estado === 'enviada' ? '<small>salió</small>' : (k.estado === 'pendiente' ? '' : '<small>' + (k.estado === 'saltada' ? 'no salió: ' : 'cancelada: ') + esc(k.motivo || '') + '</small>')) + '</span></li>'; }).join('') + '</ol>' + (!(r.casillas || []).length ? '<p class="hint">Sin mensajes programados.</p>' : '');
+    h += '<h4>Bitácora de eventos</h4><div class="ev">' + (r.eventos || []).map(e => esc(e.cuando) + ' · ' + esc(e.fuente) + ' · <b>' + esc(e.evento) + '</b>').join('<br>') + '</div>';
+    if ((r.historial || []).length) h += '<h4>Citas anteriores de este comprador</h4><div class="ev">' + r.historial.map(x => '#' + x.id + ' · ' + esc(x.cuando) + ' · ' + esc(CF_EST[x.estado] || x.estado) + (x.resultado ? ' · ' + esc(x.resultado) : '')).join('<br>') + '</div>';
+  }
+  box.innerHTML = h;
+}
+function aviso(txt){ avisoError(txt); }
+function Cap1(x){ x = String(x || ''); return x.charAt(0).toUpperCase() + x.slice(1); }
+async function cfAccion(tipo, v){
+  if (!CF || CF.ocupado) return; const id = CF.id; CF.ocupado = true; CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = true);
+  let r = null;
+  try {
+    if (tipo === 'reloj') r = await apiPost('citaf_reloj', { chat_id: id, accion: v });
+    else if (tipo === 'mas') r = await apiPost('citaf_reloj', { chat_id: id, accion: 'mas', ms: Number(v) });
+    else if (tipo === 'vend') r = await apiPost('citaf_vendedor', { chat_id: id, evento: v });
+    else if (tipo === 'res') r = await apiPost('citaf_vendedor', { chat_id: id, evento: 'resultado', resultado: v });
+  } catch (e) { r = { ok: false, error: e.message }; }
+  if (CF) CF.ocupado = false;
+  if (!r || !r.ok) { aviso((r && r.error) || 'No se pudo'); if (CF) CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); return; }
+  if (r.sin_siguiente) aviso('No queda ningún mensaje programado.');
+  else if (r.hechas && r.hechas.length) aviso(r.hechas.map(x => (CF_TIPOS[x.tipo] || x.tipo) + (x.salio ? '' : ' (no salió)')).join(' · '));
+  if (CF) cfPintar(r); cfPintarBarra(r);
+  if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }).catch(() => {});
+}
+
 function abrirSubirAuto(){
   const s = sheet({ titulo: 'Subir auto', big: true, full: true, html: '<div class="sc" id="sc-msgs"><div class="cargando">Cargando…</div></div>',
     pie: '<div class="sc-pend" id="sc-pend" hidden></div><div class="sc-comp"><input type="file" id="sc-file" accept="image/*" multiple hidden><button type="button" class="ib" id="sc-clip" aria-label="Fotos">' + ico('clip') + '</button><textarea class="inp" id="sc-tx" rows="1" placeholder="Escribe o manda fotos…" enterkeyhint="send"></textarea><button type="button" class="go" id="sc-send" aria-label="Enviar">' + ico('send') + '</button></div>',

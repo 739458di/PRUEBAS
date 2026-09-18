@@ -25,6 +25,7 @@ const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
 const AUTOBOTON = require('../lib/seb/auto-boton.js');
+const CITAF = require('../lib/seb/citas-flex.js');   // CITAS FLEXIBLES (ventana + eventos + reloj virtual) — solo universos con config.citas_flex=1 (TERRA MOTORS)
 const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
 // aprobada, botones, opener de delegar en t0, programados, rescates) sale por lib/seb/mensajeria.js: resuelve chat →
@@ -291,12 +292,57 @@ module.exports = async function handler(req, res) {
             catch (e) { rE = { resultado: 'error', error: e.message }; }
             return res.status(200).json({ ok: true, auto_boton: rE });
         }
+        // ── CITAS FLEXIBLES: tubería (sandbox → hilo; real → WhatsApp por la puerta de mensajes) y auto del chat ──
+        const ioCitaf = (tC, chC) => {
+            let n = 0; const base = 'citaf:' + Number(chC.id) + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 6);
+            const nota = async (txt) => { try { if (tC.demo) await DEMO.sistema(tC, String(chC.telefono), txt); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chC.id), 'citaf-nota:' + ts + ':' + (n++), ts, 'out', 'sistema', txt, 'text', 1, ts]); } } catch (e) { } };
+            const mandar = (extra) => MSJ.enviar(Object.assign({ tenantId: Number(tC.id), chatId: Number(chC.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'cita_flex' }, extra));
+            return {
+                mandar: (texto) => mandar({ texto }),
+                pin: async (autoInvId) => { const pe = (await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [Number(autoInvId)]).catch(() => []))[0]; if (!pe) return; await mandar({ imagen: pe.image_b64 || null, imagen_ref: pe.image_b64 ? 'ubic-img:' + Number(autoInvId) : null, location: (pe.lat != null && pe.lng != null) ? { lat: pe.lat, lng: pe.lng, name: pe.name || '', maps_link: pe.maps_link || undefined } : null }); },
+                vendedor: (txt) => nota(txt),   // TODO número real: además WhatsApp al vendedor del lote
+                sistema: (txt) => nota(txt)
+            };
+        };
+        const autoCitaf = async (tC, chC) => { try { const f = await focoDe(tC, String(chC.telefono)); if (!f) return null; const inv = (await query('SELECT id, estado FROM inventario_autos WHERE id = ? LIMIT 1', [Number(f.id)]).catch(() => []))[0]; return { id: inv ? Number(inv.id) : null, nombre: f.nombre || null, vendido: !!(inv && String(inv.estado) !== 'activo') }; } catch (e) { return null; } };
+        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor'].includes(action) && req.method === 'POST') {
+            const tC = await tenantDeParam(VEND_PARAM || String(req.body.tenant_id || '') || String(SES ? SES.tenant_id : ''));
+            if (!tC || !Number(tC.id) || !CITAF.activo(tC)) return res.status(403).json({ ok: false, error: 'las citas flexibles no están encendidas en este universo' });
+            if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tC.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
+            const chC = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chC || Number(chC.tenant_id) !== Number(tC.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
+            const ioDe = async (c) => { const ch = (c && Number(c.chat_id) !== Number(chC.id)) ? (await U.chatPorId(Number(c.chat_id))) || chC : chC; return ioCitaf(tC, ch); };
+            let hechas = [], rV = null;
+            if (action === 'citaf_reloj') {
+                if (!tC.demo) return res.status(400).json({ ok: false, error: 'el reloj virtual solo existe en el sandbox' });
+                const acc = String(req.body.accion || ''); const off = await CITAF.offsetDe(tC.id); const ahoraV = Date.now() + off;
+                if (acc === 'reset') await CITAF.ponerOffset(tC.id, 0);
+                else {
+                    let destino = null;
+                    if (acc === 'mas') destino = ahoraV + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
+                    else if (acc === 'siguiente') { const st = await CITAF.estado({ tenant: tC, chat: chC }); const sig = (st.casillas || []).find(k => k.estado === 'pendiente' && k.due_ts > ahoraV); if (!sig) return res.status(200).json(Object.assign({ sin_siguiente: true, hechas: [] }, st)); destino = sig.due_ts + 1000; }
+                    else if (acc === 'fin') { const st = await CITAF.estado({ tenant: tC, chat: chC }); if (!st.cita) return res.status(200).json(Object.assign({ hechas: [] }, st)); destino = Math.max(ahoraV, st.cita.fin_ts) + 2 * 3600000; }
+                    else return res.status(400).json({ ok: false, error: "accion debe ser 'mas' | 'siguiente' | 'fin' | 'reset'" });
+                    await CITAF.ponerOffset(tC.id, destino - Date.now());
+                    hechas = await CITAF.tick({ tenant: tC, ioDe });
+                }
+            }
+            if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
+            const st = await CITAF.estado({ tenant: tC, chat: chC });
+            return res.status(200).json(Object.assign({ hechas, vendedor: rV }, st));
+        }
         if (action === 'seb_turno' && req.method === 'POST') {
             const tS = await tenantDeParam(VEND_PARAM || String(req.body.tenant_id || '') || String(SES ? SES.tenant_id : ''));
             if (!tS || !Number(tS.id) || !(tS.config && Number(tS.config.seb_auto) === 1)) return res.status(403).json({ ok: false, error: 'Seb autónomo no está encendido en este universo' });
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tS.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
             const chS = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chS || Number(chS.tenant_id) !== Number(tS.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const telS = String(chS.telefono);
+            // ══ CITAS FLEXIBLES (orden owner 2026-09-18): el mensaje pasa PRIMERO por la puerta de eventos de cita. Si es de la cita, ahí se resuelve
+            //    (nace / angosta / mueve / ya voy / se complicó…) y el cerebro no habla; si además pregunta algo del auto, el cerebro contesta después.
+            let citaF = null;
+            if (CITAF.activo(tS)) {
+                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS) }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
+                if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF });
+            }
             // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
             try {
                 const nIn = (await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id = ? AND direccion = 'in'", [Number(chS.id)]))[0].n;
@@ -323,12 +369,14 @@ module.exports = async function handler(req, res) {
             }
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
             const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : (out.escalar_owner ? ('🔴 Seb escaló (no contestó): ' + String(out.escala_motivo || '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo')));
+            try { if (citaF && citaF.nota) await ioCitaf(tS, chS).sistema(citaF.nota); } catch (e) { }
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
             return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             const tDr = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDr || !tDr.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });
             const r = await DEMO.reset(tDr);
+            try { await CITAF.reset(tDr.id); } catch (e) { }   // citas flexibles + reloj virtual vuelven a cero
             return res.status(r.ok ? 200 : 400).json(r);
         }
 
@@ -900,7 +948,7 @@ module.exports = async function handler(req, res) {
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
@@ -2552,6 +2600,9 @@ module.exports = async function handler(req, res) {
                         const porId = {}; for (const f of filasC) porId[Number(f.id)] = f;
                         for (const id of idsC) if (porId[id]) fijados.push(porId[id]);
                     }
+                }
+                if (TV && !cursor && !q && filtro !== 'sugerencia' && tV && CITAF.activo(tV)) {   // CITAS FLEXIBLES: misma fila verde, hasta arriba
+                    try { const vf = await CITAF.vivasPorChat(TV); const idsF = Object.keys(vf).map(Number).filter(id => !citaMap[id]); if (idsF.length) { const filasF = await query(`SELECT ${COLS} FROM conversaciones WHERE id IN (${ph(idsF)}) AND COALESCE(tenant_id,0) = ?`, idsF.concat([TV])).catch(() => []); for (const f of filasF) { citaMap[Number(f.id)] = vf[Number(f.id)]; fijados.push(f); } } } catch (e) { }
                 }
                 const fijadosIds = new Set(fijados.map(f => Number(f.id)));
                 const lista = fijados.slice(); let consumidas = 0;
