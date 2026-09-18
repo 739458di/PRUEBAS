@@ -787,7 +787,7 @@ module.exports = async function handler(req, res) {
             else { const t = digits.length === 10 ? '521' + digits : digits; rows = await query("SELECT id, telefono, nombre, config_json FROM tenants WHERE telefono=? AND activo=1", [t]); }
             if (!rows.length) return null;
             const cfgT = (() => { try { return JSON.parse(rows[0].config_json || '{}'); } catch (e) { return {}; } })();
-            return { id: Number(rows[0].id), telefono: String(rows[0].telefono || ''), nombre: String(rows[0].nombre || ''), config: cfgT, demo: Number(cfgT.demo) === 1 };   // demo: FyraChat de prueba (nada sale al puente)
+            return { id: Number(rows[0].id), telefono: String(rows[0].telefono || ''), nombre: String(rows[0].nombre || ''), config: cfgT, demo: Number(cfgT.demo) === 1 || Number(cfgT.sandbox) === 1 };   // demo: FyraChat de prueba o SANDBOX (nada sale al puente)
         }
         // Autos del tenant: los suyos (dueño por teléfono); el tenant 0 ve todo el inventario activo
         async function autosDeTenant(t) {
