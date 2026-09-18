@@ -261,7 +261,7 @@ module.exports = async function handler(req, res) {
                 try {
                     const chatAB = await U.chatPorId(Number(r.chat_id));
                     // POSESIÓN (misma regla que en universos reales): si el vendedor escribió a mano hace < 15 min, la IA calla (y lo dice)
-                    const um = (await query("SELECT MAX(ts) t FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND emisor = 'dueno' AND COALESCE(ai_generated,0) = 0", [Number(r.chat_id)]).catch(() => [{ t: null }]))[0];
+                    const um = (await query("SELECT MAX(ts) t FROM envios WHERE chat_id = ? AND accion = 'manual' AND estado <> 'error'", [Number(r.chat_id)]).catch(() => [{ t: null }]))[0];   // solo lo TECLEADO en el composer (un botón o el primer mensaje no dan posesión)
                     if (um && um.t && (Date.now() - Number(um.t)) < 15 * 60000) { await DEMO.sistema(tDm, telDm, '🤖 Seb calló: escribiste a mano hace menos de 15 min (posesión del vendedor)'); return res.status(200).json(Object.assign({ simulado: true, chat_id: Number(r.chat_id), auto_boton: { resultado: 'posesion' } }, r)); }
                     const puerta = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tDm.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tDm.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
                     autoBoton = await AUTOBOTON.correr({ tenant: tDm, chat: chatAB, texto: req.body.texto, msgId: r.msg_id, puerta, rastro: (txt) => DEMO.sistema(tDm, telDm, txt) });
@@ -278,7 +278,7 @@ module.exports = async function handler(req, res) {
             if (!(tE.config && Number(tE.config.auto_boton) === 1)) return res.status(200).json({ ok: true, ignorado: 'auto_boton apagado en este universo' });
             const chE = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chE || Number(chE.tenant_id) !== Number(tE.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en ese universo' });
             const POSESION_MS = 15 * 60000;
-            const ultManual = (await query("SELECT MAX(ts) t FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND emisor = 'dueno' AND COALESCE(ai_generated,0) = 0 AND msg_id NOT LIKE 'sim:%' AND msg_id NOT LIKE 'media:%'", [Number(chE.id)]).catch(() => [{ t: null }]))[0];
+            const ultManual = (await query("SELECT MAX(ts) t FROM envios WHERE chat_id = ? AND accion = 'manual' AND estado <> 'error'", [Number(chE.id)]).catch(() => [{ t: null }]))[0];   // composer de FyraChat; lo tecleado en el teléfono llega en ultimo_from_me
             const tManual = Math.max(Number(ultManual && ultManual.t) || 0, Number(req.body.ultimo_from_me) || 0);
             if (tManual && (Date.now() - tManual) < POSESION_MS) return res.status(200).json({ ok: true, ignorado: 'posesión del vendedor (escribió hace < 15 min)' });
             const puertaE = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tE.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tE.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };

@@ -1107,7 +1107,7 @@ function mezclar(h, mensajes){
       // ECO de un optimista mío (mismo texto saliente, <2 min): adopta el id del servidor en vez de duplicar
       if (m.dir === 'out') { const op = h.msgs.find(x => x.local && x.estado !== 'error' && !x.id && normTxt(x.texto) === normTxt(m.texto) && Math.abs(ms(m.ts) - ms(x.ts)) < 120000); if (op) { op._kDom = op._kDom || ('l:' + op.local); fundir(op, m); h.keys.add(k); continue; } }
       // misma dirección + mismo texto + casi mismo instante (sin ids que casen) → es el mismo renglón por otra vía
-      const gem = h.msgs.find(x => x.dir === m.dir && normTxt(x.texto) === normTxt(m.texto) && String(x.texto || '').trim() && Math.abs(ms(m.ts) - ms(x.ts)) < 3000 && (!x.msg_id || !m.msg_id));
+      const gem = h.msgs.find(x => x.dir === m.dir && normTxt(x.texto) === normTxt(m.texto) && String(x.texto || '').trim() && Math.abs(ms(m.ts) - ms(x.ts)) < (x.local ? 120000 : 3000) && (!x.msg_id || !m.msg_id));
       if (gem) { fundir(gem, m); h.keys.add(k); continue; }
     }
     m._kDom = k;
@@ -1296,6 +1296,8 @@ async function enviarComoComprador(id, texto){
   const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
   const r = await apiPost('demo_responder', { chat_id: id, telefono: tel, texto });
   if (!r.ok) return avisoError(r.error || 'No se pudo');
+  // la burbuja local adopta el folio del servidor → al recargar el hilo se FUNDE con su renglón (jamás doble, aunque el reloj del teléfono difiera)
+  if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) m.ts = r.ts; h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); }
   const refrescar = () => { if (CHAT_ID !== id) return; cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
   setTimeout(refrescar, 700); setTimeout(refrescar, 3500);
 }
