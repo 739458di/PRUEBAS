@@ -1612,7 +1612,7 @@ const NC_MENSAJE = [
   { m: 'texto', ico: 'pen', t: 'Escribo yo el mensaje', s: 'Tu texto, literal, firmado como tuyo.' },
   { m: 'silencio', ico: 'mute', t: 'Entra callado', s: 'Solo entra al chat. No manda mensaje.' }
 ];
-const NC_CTA = { cotizar: 'Delegar y cotizar', cita: 'Delegar y agendar' };
+const NC_CTA = { cotizar: 'Delegar y cotizar', cita: 'Delegar y agendar', entrante: 'Recibir mensaje' };
 const NC_NOTA = { silencio: 'entró callado', texto: 'con tu texto', bot: 'se presentó a tu nombre', primer_mensaje: 'mandó tu primer mensaje', info: 'mandó la ficha', fotos: 'mandó las fotos', ubicacion: 'mandó la ubicación', cotizar: 'mandó la cotización', cita: 'agendó la cita' };
 function abrirNuevoComprador(){
   const demo = !!(TENANT && TENANT.demo);
@@ -1668,6 +1668,7 @@ function abrirNuevoComprador(){
     setBack(paso1); s.setTitulo('¿Cómo entra?'); arriba();
     const rowOp = (o) => '<button type="button" class="row op" data-m="' + o.m + '"><div class="sq">' + ico(o.ico) + '</div><div class="tx"><div class="t">' + esc(o.t) + '</div><div class="s">' + esc(o.s) + '</div></div>' + ico('chev', 'chev') + '</button>';
     box.innerHTML = pasos(2) + '<p class="sub">' + esc(nombreSinAnio(st.auto) + (anioDe(st.auto) ? ' ' + anioDe(st.auto) : '')) + ' · +52 ' + esc(telFmt10(st.tel)) + '</p>' +
+      ((TENANT && TENANT.demo) ? '<span class="lbl">El comprador escribe primero</span><div class="grupo">' + rowOp({ m: 'entrante', ico: 'chat', t: 'Recibo yo el mensaje', s: 'Entra un mensaje del comprador (lo tecleas tú) y Seb responde solo.' }) + '</div>' : '') +
       '<span class="lbl">Ejecuta una acción</span><div class="grupo">' + NC_ACCION.map(rowOp).join('') + '</div>' +
       '<span class="lbl">Solo un mensaje / nada</span><div class="grupo">' + NC_MENSAJE.map(rowOp).join('') + '</div>';
     s.setPie('<button class="cta" id="nc-go" disabled>Delegar</button><div class="g-err" id="nc-gerr"></div>');
@@ -1679,11 +1680,13 @@ function abrirNuevoComprador(){
       if (st.modo === 'cotizar') h = '<label class="lbl" for="nc-eng">Enganche</label><input class="inp" id="nc-eng" inputmode="numeric" placeholder="$ 0" autocomplete="off"><div class="f-err" id="nc-eerr"></div>';
       else if (st.modo === 'cita') h = citaFormHTML('');
       else if (st.modo === 'texto') h = '<label class="lbl" for="nc-tx">Tu mensaje</label><textarea class="inp" id="nc-tx" placeholder="Hola, soy…"></textarea><div class="f-err" id="nc-txerr"></div>';
+      else if (st.modo === 'entrante') h = '<label class="lbl" for="nc-in">Lo que escribe el comprador</label><textarea class="inp" id="nc-in" placeholder="Hola, ¿sigue disponible?"></textarea><div class="f-err" id="nc-inerr"></div>';
       if (!h) return;
       desp = document.createElement('div'); desp.className = 'desp'; desp.innerHTML = h; b.after(desp);
       if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); e.oninput = () => { const n = e.value.replace(/\D/g, ''); e.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; e.classList.remove('err'); desp.querySelector('#nc-eerr').textContent = ''; }; setTimeout(() => e.focus(), 60); }
       if (st.modo === 'cita') ciSt = citaFormWire(desp);
       if (st.modo === 'texto') setTimeout(() => desp.querySelector('#nc-tx').focus(), 60);
+      if (st.modo === 'entrante') setTimeout(() => desp.querySelector('#nc-in').focus(), 60);
       setTimeout(() => desp.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 40);
     };
     box.querySelectorAll('.row.op').forEach(b => b.onclick = () => elegir(b));
@@ -1695,6 +1698,9 @@ function abrirNuevoComprador(){
       if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); const n = Number((e.value || '').replace(/\D/g, '')) || 0; if (!n) { desp.querySelector('#nc-eerr').textContent = 'Escribe el enganche.'; e.classList.add('err'); e.focus(); return; } entrada.enganche = n; }
       if (st.modo === 'cita') { if (!ciSt || !ciSt.valida()) return; entrada.fecha_iso = ciSt.fecha; entrada.hora = ciSt.hora; }
       if (st.modo === 'texto') { const t = (desp.querySelector('#nc-tx').value || '').trim(); if (!t) { desp.querySelector('#nc-txerr').textContent = 'Escribe el mensaje.'; desp.querySelector('#nc-tx').focus(); return; } entrada.texto = t; }
+      // ENTRANTE (sandbox/prueba): el comprador escribe primero → el chat nace callado y su mensaje entra al hilo; Seb decide solo
+      let textoEntrante = null;
+      if (st.modo === 'entrante') { textoEntrante = (desp.querySelector('#nc-in').value || '').trim(); if (!textoEntrante) { desp.querySelector('#nc-inerr').textContent = 'Escribe lo que dice el comprador.'; desp.querySelector('#nc-in').focus(); return; } entrada.modo = 'silencio'; }
       bloquear(go, true);
       const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, auto_id: st.auto.id, entrada, clave: cl }));
       bloquear(go, false); go.textContent = NC_CTA[st.modo] || 'Delegar';
@@ -1702,6 +1708,14 @@ function abrirNuevoComprador(){
       const id = r.chat_id; if (!id) { gerr.textContent = 'Delegado, pero el servidor no devolvió el chat.'; cargarInbox({ reset: true }); return; }
       let c = INBOX.rows.get(id); if (!c) c = await filaDesdeServidor(id);
       if (c) { c.delegado = true; c.nombre = r.nombre || c.nombre; c.auto = c.auto || { id: st.auto.id, nombre: st.auto.nombre, precio: st.auto.precio, portada: st.auto.portada }; pintarFila(c, { arriba: true }); pintarBell(); }
+      if (textoEntrante != null) {   // entra el mensaje del comprador y se abre el chat directo
+        const rIn = await apiPost('demo_responder', { chat_id: id, texto: textoEntrante });
+        if (!rIn.ok) { gerr.textContent = rIn.error || 'No pude registrar el mensaje del comprador'; return; }
+        HILOS.delete(id); s.cerrar(); irTab('inicio'); QUIEN = 'comprador'; pintarQuien(); abrirChat(id);
+        setTimeout(() => { if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }, 2500);
+        cargarInbox({ reset: true });
+        return;
+      }
       // la nota y la burbuja de lo enviado quedan en el hilo: se pintan al abrir el chat (lógica existente)
       notaLocal(id, (r.ya_delegado ? 'Ya estaba delegado · ' : 'Delegado · ') + (NC_NOTA[st.modo] || st.modo) + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : ''));
       if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r);
