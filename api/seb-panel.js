@@ -304,7 +304,7 @@ module.exports = async function handler(req, res) {
                 if (Number(nIn) <= 1 && dl && dl.auto_id) { const a = (await query('SELECT marca, modelo, anio, precio FROM inventario_autos WHERE id = ? OR fyradrive_web_id = ? LIMIT 1', [Number(dl.auto_id), Number(dl.auto_id)]))[0]; if (a) await run("INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at", [telS, 'Fyradrive | 🚘 ' + String(a.marca || '').toUpperCase() + ' ' + String(a.modelo || '').toUpperCase() + ' ' + a.anio + '\n💵 $' + Number(a.precio || 0).toLocaleString('en-US'), Date.now()]).catch(() => { }); }
             } catch (e) { }
             // correr el MISMO opener_auto del número principal, dentro del universo ambiente (memoria, chat y catálogo de ESTE universo)
-            const catalogo = (await autosDeTenant(tS)).map(a => Number(a.id));
+            const catalogo = (await autosDeTenant(tS)).map(a => ({ id: Number(a.id), web: a.fyradrive_web_id == null ? null : Number(a.fyradrive_web_id) }));
             let out = null, status = 200;
             const resFalso = { _h: {}, setHeader() { }, status(c) { status = c; return this; }, json(j) { out = j; return this; }, end() { return this; } };
             const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
@@ -322,7 +322,7 @@ module.exports = async function handler(req, res) {
                 if (!segs.length) { if (fotos.length) await mandarS({ fotos }); if (!out.pin_primero) await pin(); }
             }
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
-            const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : ''));
+            const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : (out.escalar_owner ? ('🔴 Seb escaló (no contestó): ' + String(out.escala_motivo || '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo')));
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
             return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
         }
