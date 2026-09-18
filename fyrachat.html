@@ -287,6 +287,7 @@ a{color:var(--pri2)}
 .msg.in .lnk{color:#9fd0ff}
 .msg .med small{word-break:break-all}
 .msg.sel{outline:3px solid var(--pos);outline-offset:2px}
+.composer .quien{flex:0 0 auto;height:36px;padding:0 12px;border-radius:12px;background:var(--s2);color:#fff;font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap}.composer .quien.comp{background:var(--pos);color:#04231a}
 .sel-bar{position:absolute;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 16px calc(10px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
 .sel-bar b{flex:1;font-size:15px}
 .sel-bar .cta{width:auto;min-width:0;height:44px;padding:0 16px;margin:0}
@@ -641,6 +642,7 @@ select.inp option{background:#09183F;color:#fff}
     <div class="composer">
       <input type="file" id="adj-file" accept="image/*" multiple hidden>
       <button class="ib" id="adj-btn" onclick="abrirAdjuntar()" aria-label="Adjuntar" disabled><i data-ico="clip"></i></button>
+      <button type="button" class="quien" id="quien" onclick="toggleQuien()" hidden>Vendedor</button>
       <textarea id="tx" rows="1" placeholder="Escribe un mensaje..." enterkeyhint="send"></textarea>
       <button class="send" id="send" aria-label="Enviar" onmousedown="event.preventDefault()" ontouchend="event.preventDefault();enviarTexto()" onclick="enviarTexto()"><i data-ico="send"></i></button>
     </div>
@@ -851,15 +853,15 @@ async function cargarTenantInfo(){
   const d = await apiGet('tenant_info', {});
   if (!d.ok) { avisoError(d.error || 'Este link no corresponde a un vendedor dado de alta'); return; }
   TENANT = Object.assign({}, TENANT, d.tenant, { autos: d.autos || [], sesion: d.sesion || null });
-  if (TENANT.demo) { document.body.classList.add('demo'); document.title = 'FyraChat · PRUEBAS# · MODO PRUEBA'; }
+  if (TENANT.demo) { document.body.classList.add('demo'); document.title = TENANT.sandbox ? ('FyraChat · ' + (TENANT.nombre || '') + ' · SANDBOX') : 'FyraChat · PRUEBAS# · MODO PRUEBA'; }
   pintarUniverso();
   if (!TENANT.demo && !T0 && (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado')) avisoError('Tu WhatsApp aún no está vinculado al asistente. Vincúlalo en fyradrive.com/seb.');
 }
 function telFmtDe(t){ const telV = String(t || '').replace(/\D/g, ''); return telV.length === 13 ? ('+' + telV.slice(0, 2) + ' ' + telV.slice(2, 5) + ' ' + telV.slice(5, 8) + ' ' + telV.slice(8)) : (telV ? '+' + telV : ''); }
 // el header ya no lleva nombre fijo (sistema visual 2026-09-12): solo la etiqueta PRUEBA junto al título cuando es demo; el universo se ve en Más › Tu cuenta
 function pintarUniverso(){
-  const el = $('univ'); if (!TENANT) return;
-  el.innerHTML = TENANT.demo ? '<span class="tag">PRUEBA</span>' : '';
+  const el = $('univ'); if (!TENANT) return; try { pintarQuien(); } catch (e) {}
+  el.innerHTML = TENANT.sandbox ? '<span class="tag">SANDBOX</span>' : (TENANT.demo ? '<span class="tag">PRUEBA</span>' : '');
   el.title = TENANT.nombre || '';
 }
 
@@ -1283,10 +1285,25 @@ async function marcarLeidoAbierto(id){ const c = INBOX.rows.get(id); if (c) { c.
 const TX = $('tx');
 TX.addEventListener('input', () => { TX.style.height = 'auto'; TX.style.height = Math.min(TX.scrollHeight, 132) + 'px'; });
 TX.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarTexto(); } });
+// SANDBOX / PRUEBA: el composer puede hablar como el VENDEDOR (sale por la puerta de siempre, simulado) o como el COMPRADOR (entra al hilo y la IA decide)
+let QUIEN = 'vendedor';
+function pintarQuien(){ const b = $('quien'); if (!b) return; const on = !!(TENANT && TENANT.demo); b.hidden = !on; if (!on) return; const nom = (TENANT.nombre || 'Vendedor').split(/\s+/)[0]; b.textContent = QUIEN === 'comprador' ? 'Comprador' : nom; b.classList.toggle('comp', QUIEN === 'comprador'); TX.placeholder = QUIEN === 'comprador' ? 'Escribe como el comprador…' : 'Escribe un mensaje...'; }
+function toggleQuien(){ QUIEN = QUIEN === 'comprador' ? 'vendedor' : 'comprador'; pintarQuien(); TX.focus(); }
+async function enviarComoComprador(id, texto){
+  const h = hiloDe(id); const local = clave('comp', id);
+  const m = { local, dir: 'in', emisor: 'comprador', texto, ts: Date.now(), estado: 'enviado' };
+  h.keys.add(keyDe(m)); h.msgs.push(m); insertarBurbuja(m); actualizarFilaLocal(id, m);
+  const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
+  const r = await apiPost('demo_responder', { chat_id: id, telefono: tel, texto });
+  if (!r.ok) return avisoError(r.error || 'No se pudo');
+  const refrescar = () => { if (CHAT_ID !== id) return; cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
+  setTimeout(refrescar, 700); setTimeout(refrescar, 3500);
+}
 function enviarTexto(){
   const id = CHAT_ID; if (!id) return;
   const texto = TX.value.replace(/\s+$/, ''); if (!texto.trim()) return;
   TX.value = ''; TX.style.height = 'auto';   // se vacía ANTES de mandar → doble clic no duplica
+  if (QUIEN === 'comprador' && TENANT && TENANT.demo) return enviarComoComprador(id, texto);
   const h = hiloDe(id); const local = clave('enviar', id);
   const m = { local, dir: 'out', emisor: 'dueno', texto, ts: Date.now(), estado: 'enviando', clave: local };
   h.keys.add(keyDe(m)); h.msgs.push(m); insertarBurbuja(m);
@@ -2055,7 +2072,7 @@ async function primeraVezReal(){
   const ok = await cargarTenant();
   if (ok === false) return;
   let primera = false;
-  if (TENANT.demo) primera = await primeraVezDemo();
+  if (TENANT.demo && !TENANT.sandbox) primera = await primeraVezDemo();   // el SANDBOX conserva sus chats; se reinicia a mano
   await Promise.all([cargarTenantInfo(), cargarInbox({ reset: true }), (async () => { if (!TENANT.demo) primera = await primeraVezReal(); })()]);
   connectTimbre();
   if (primera) tutoArrancar();

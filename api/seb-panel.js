@@ -249,8 +249,7 @@ module.exports = async function handler(req, res) {
         const SES_DEMO = !!(SES && SES.tenant && SES.tenant.demo);
         if (SES_DEMO && ['sugerir', 'resolver', 'agregar_mensaje', 'nuevo_chat'].includes(action)) return res.status(400).json({ ok: false, error: 'no disponible en modo prueba' });   // escriben en hilos del tenant 0
         if (action === 'demo_responder' && req.method === 'POST') {
-            if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
-            const tDm = await tenantDeParam(String(SES.tenant_id)); if (!tDm || !tDm.demo) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
+            const tDm = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDm || !tDm.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });
             // v2 (2026-09-12): la UI manda chat_id (conversaciones.id del universo demo); el teléfono se resuelve aquí
             let telDm = req.body.telefono;
             if (!telDm && req.body.chat_id) { const cDm = await U.chatPorId(Number(req.body.chat_id) || 0); if (!cDm || Number(cDm.tenant_id) !== Number(tDm.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' }); telDm = cDm.telefono; }
@@ -261,6 +260,9 @@ module.exports = async function handler(req, res) {
             if (r.ok && r.chat_id && process.env.K_PANEL && req.body.sin_auto_boton !== true) {
                 try {
                     const chatAB = await U.chatPorId(Number(r.chat_id));
+                    // POSESIÓN (misma regla que en universos reales): si el vendedor escribió a mano hace < 15 min, la IA calla (y lo dice)
+                    const um = (await query("SELECT MAX(ts) t FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND emisor = 'dueno' AND COALESCE(ai_generated,0) = 0", [Number(r.chat_id)]).catch(() => [{ t: null }]))[0];
+                    if (um && um.t && (Date.now() - Number(um.t)) < 15 * 60000) { await DEMO.sistema(tDm, telDm, '🤖 Seb calló: escribiste a mano hace menos de 15 min (posesión del vendedor)'); return res.status(200).json(Object.assign({ simulado: true, chat_id: Number(r.chat_id), auto_boton: { resultado: 'posesion' } }, r)); }
                     const puerta = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tDm.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tDm.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
                     autoBoton = await AUTOBOTON.correr({ tenant: tDm, chat: chatAB, texto: req.body.texto, msgId: r.msg_id, puerta, rastro: (txt) => DEMO.sistema(tDm, telDm, txt) });
                 } catch (e) { autoBoton = { resultado: 'error', error: e.message }; }
@@ -287,8 +289,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, auto_boton: rE });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
-            if (!SES_DEMO) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
-            const tDr = await tenantDeParam(String(SES.tenant_id)); if (!tDr || !tDr.demo) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba' });
+            const tDr = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDr || !tDr.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });
             const r = await DEMO.reset(tDr);
             return res.status(r.ok ? 200 : 400).json(r);
         }
@@ -861,7 +862,7 @@ module.exports = async function handler(req, res) {
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, sandbox: DEMO.esSandbox(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
@@ -2133,7 +2134,7 @@ module.exports = async function handler(req, res) {
             if (!dirAcc.chat_id) return R(404, { ok: false, error: 'este contacto no tiene chat en este universo (delega primero)' });
             const claveB = String(B.clave || ('boton:' + accB + ':' + dirAcc.chat_id + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8)));
             const mandar = (extra) => MSJ.enviar(Object.assign({ tenantId: TID, chatId: dirAcc.chat_id, origen: 'boton:' + accB, clave: claveB + ':msg', manual: false, sesionId: SES ? SES.sid : null, accion: 'boton_' + accB, refId: inv.id, meta: { auto: nombreAuto, via: B.via || 'boton' } }, extra || {}));
-            const simTxt = () => 'SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ';
+            const simTxt = () => DEMO.esSandbox(tAcc) ? '' : ('SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ');
             try {
                 // ── 2) EJECUTAR LITERAL ──
                 if (accB === 'info') {
@@ -2862,7 +2863,7 @@ module.exports = async function handler(req, res) {
                 if (fotos.length < 4) campos.fotos = 'mínimo 4 fotos (van ' + fotos.length + ')';
                 if (Object.keys(campos).length) { const campo = Object.keys(campos)[0]; return { ok: false, status: 400, error: campo + ': ' + campos[campo], campo, campos }; }
                 // MODO PRUEBA (PRUEBAS#): jamás publica en fyradrive.com; el alta se simula completa en la UI
-                if (tV && tV.demo) return { ok: true, simulado: true, auto_id: 'demo-' + Date.now(), web_id: null, inv_id: null, estado: estadoWeb === 'privado' ? 'activo' : 'revision', fotos: fotos.length, template: false };
+                if (tV && tV.demo && !DEMO.esSandbox(tV)) return { ok: true, simulado: true, auto_id: 'demo-' + Date.now(), web_id: null, inv_id: null, estado: estadoWeb === 'privado' ? 'activo' : 'revision', fotos: fotos.length, template: false };
                 if (!process.env.K_PANEL) return { ok: false, status: 503, error: 'K_PANEL no configurada' };
                 const duenoTel = (TV && String(tV.telefono || '').replace(/\D/g, '').length >= 12) ? String(tV.telefono) : ACC.OWNER_TEL;   // universo aún sin número (p. ej. TERRA MOTORS) → a nombre de Fyradrive
                 const partes = String(tV.nombre || 'Vendedor').trim().split(/\s+/).filter(Boolean);
