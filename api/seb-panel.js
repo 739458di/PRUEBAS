@@ -336,6 +336,14 @@ module.exports = async function handler(req, res) {
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tS.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
             const chS = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chS || Number(chS.tenant_id) !== Number(tS.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const telS = String(chS.telefono);
+            // UN TURNO POR MENSAJE (timbre idempotente): si ya corrió —o va corriendo— un turno para el ÚLTIMO mensaje del comprador, este no corre.
+            try {
+                await run('CREATE TABLE IF NOT EXISTS seb_turnos (chat_id INTEGER NOT NULL, ultimo_in_id INTEGER NOT NULL, ts INTEGER, PRIMARY KEY (chat_id, ultimo_in_id))');
+                const ui = (await query("SELECT MAX(id) m FROM mensajes WHERE conversacion_id = ? AND direccion = 'in'", [Number(chS.id)]))[0];
+                if (!ui || !ui.m) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: false, motivo: 'sin_entrantes' } });
+                const cl = await run('INSERT OR IGNORE INTO seb_turnos (chat_id, ultimo_in_id, ts) VALUES (?,?,?)', [Number(chS.id), Number(ui.m), Date.now()]);
+                if (!Number(cl.rowsAffected)) return res.status(200).json({ ok: true, chat_id: Number(chS.id), repetido: true, seb: { ok: false, motivo: 'turno_repetido' } });
+            } catch (e) { console.error('[seb_turno] candado:', e.message); }
             // ══ CITAS FLEXIBLES (orden owner 2026-09-18): el mensaje pasa PRIMERO por la puerta de eventos de cita. Si es de la cita, ahí se resuelve
             //    (nace / angosta / mueve / ya voy / se complicó…) y el cerebro no habla; si además pregunta algo del auto, el cerebro contesta después.
             let citaF = null;
@@ -345,7 +353,8 @@ module.exports = async function handler(req, res) {
             }
             // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
             try {
-                const nIn = (await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id = ? AND direccion = 'in'", [Number(chS.id)]))[0].n;
+                // "primer entrante" = todavía nadie le ha contestado (no importa si el comprador mandó 1 o 3 burbujas antes de la respuesta)
+                const nIn = (await query("SELECT COUNT(*) n FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND COALESCE(emisor,'') <> 'sistema'", [Number(chS.id)]))[0].n ? 99 : 1;
                 const dl = (await query('SELECT auto_id FROM delegaciones WHERE chat_id = ? AND hasta IS NULL ORDER BY id DESC LIMIT 1', [Number(chS.id)]).catch(() => []))[0];
                 if (Number(nIn) <= 1 && dl && dl.auto_id) { const a = (await query('SELECT marca, modelo, anio, precio FROM inventario_autos WHERE id = ? OR fyradrive_web_id = ? LIMIT 1', [Number(dl.auto_id), Number(dl.auto_id)]))[0]; if (a) await run("INSERT INTO ad_por_telefono (telefono, ad_context, updated_at) VALUES (?,?,?) ON CONFLICT(telefono) DO UPDATE SET ad_context=excluded.ad_context, updated_at=excluded.updated_at", [telS, 'Fyradrive | 🚘 ' + String(a.marca || '').toUpperCase() + ' ' + String(a.modelo || '').toUpperCase() + ' ' + a.anio + '\n💵 $' + Number(a.precio || 0).toLocaleString('en-US'), Date.now()]).catch(() => { }); }
             } catch (e) { }
@@ -1172,7 +1181,13 @@ module.exports = async function handler(req, res) {
             const resetTsOA = Number(resetsOA[tel] || 0);
             let mensajes = [];
             if (convId) {
-                const mr = await query("SELECT direccion, texto, ts, ai_generated FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                let mr = await query("SELECT direccion, texto, ts, ai_generated, emisor FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                // UNIVERSO CON SEB AUTÓNOMO: los renglones grises de rastro ('sistema': lector de cita, "Seb escaló", "Seb calló", avisos al vendedor) NO son
+                // palabra de Seb. Si contaran, una nota escrita entre el mensaje del comprador y el turno haría creer que ya contestamos (caso 2026-09-18
+                // "donde lo puedo ver" → calló). 
+                if (TSEB) mr = mr.filter(m => m.emisor !== 'sistema');   // incluida la nota "Chat delegado": si el comprador escribe primero, ES primer contacto → OPENER determinista (antes caía en continuación y el ruteador IA a veces escalaba un simple "hola me interesa el auto")
+                // el MISMO mensaje del comprador repetido seguido (doble toque / reenvío en < 60 s) cuenta una vez: duplicado confundía al clasificador y escalaba
+                if (TSEB) mr = mr.filter((m, i) => !(i > 0 && m.direccion === 'in' && mr[i - 1].direccion === 'in' && String(mr[i - 1].texto || '').trim() === String(m.texto || '').trim() && Number(m.ts) - Number(mr[i - 1].ts) < 60000));
                 let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0 }));
                 if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
                 mensajes = rows;

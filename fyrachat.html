@@ -1724,8 +1724,13 @@ function abrirNuevoComprador(){
     box.querySelectorAll('.row.op').forEach(b => b.onclick = () => elegir(b));
     if (st.modo) { const b = box.querySelector('.row.op[data-m="' + st.modo + '"]'); if (b) elegir(b); }
     const cl = clave('delegar', st.tel);   // clave fija para esta hoja: reintentar = mismo resultado
+    let ncCorriendo = false;   // un solo disparo: el segundo toque mientras corre no repite el mensaje del comprador ni el turno de Seb
     go.onclick = async () => {
+      if (ncCorriendo) return;
       if (!st.modo || !st.auto) return; gerr.textContent = '';
+      ncCorriendo = true; try { await ncDelegar(); } finally { ncCorriendo = false; }
+    };
+    const ncDelegar = async () => {
       const entrada = { modo: st.modo };
       if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); const n = Number((e.value || '').replace(/\D/g, '')) || 0; if (!n) { desp.querySelector('#nc-eerr').textContent = 'Escribe el enganche.'; e.classList.add('err'); e.focus(); return; } entrada.enganche = n; }
       if (st.modo === 'cita') { if (!ciSt || !ciSt.valida()) return; entrada.fecha_iso = ciSt.fecha; entrada.hora = ciSt.hora; }
