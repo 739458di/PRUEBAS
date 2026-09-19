@@ -310,9 +310,10 @@ module.exports = async function handler(req, res) {
                 else {
                     let destino = null;
                     if (acc === 'mas') destino = ahoraV + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
+                    else if (acc === 'ir') { destino = Number(req.body.ts) || 0; if (destino <= ahoraV) return res.status(400).json({ ok: false, error: 'El reloj solo avanza: lo que ya salió no se desmanda. Hacia atrás solo es vista.' }); if (destino > ahoraV + 60 * 86400000) return res.status(400).json({ ok: false, error: 'demasiado lejos' }); }
                     else if (acc === 'siguiente') { const st = await CITAF.estado({ tenant: tC, chat: chC }); const sig = (st.casillas || []).find(k => k.estado === 'pendiente' && k.due_ts > ahoraV); if (!sig) return res.status(200).json(Object.assign({ sin_siguiente: true, hechas: [] }, st)); destino = sig.due_ts + 1000; }
                     else if (acc === 'fin') { const st = await CITAF.estado({ tenant: tC, chat: chC }); if (!st.cita) return res.status(200).json(Object.assign({ hechas: [] }, st)); destino = Math.max(ahoraV, st.cita.fin_ts) + 2 * 3600000; }
-                    else return res.status(400).json({ ok: false, error: "accion debe ser 'mas' | 'siguiente' | 'fin' | 'reset'" });
+                    else return res.status(400).json({ ok: false, error: "accion debe ser 'mas' | 'ir' | 'siguiente' | 'fin' | 'reset'" });
                     await CITAF.ponerOffset(tC.id, destino - Date.now());
                     hechas = await CITAF.tick({ tenant: tC, ioDe });
                 }
@@ -335,13 +336,7 @@ module.exports = async function handler(req, res) {
                 const cl = await run('INSERT OR IGNORE INTO seb_turnos (chat_id, ultimo_in_id, ts) VALUES (?,?,?)', [Number(chS.id), Number(ui.m), Date.now()]);
                 if (!Number(cl.rowsAffected)) return res.status(200).json({ ok: true, chat_id: Number(chS.id), repetido: true, seb: { ok: false, motivo: 'turno_repetido' } });
             } catch (e) { console.error('[seb_turno] candado:', e.message); }
-            // ══ CITAS FLEXIBLES (orden owner 2026-09-18): el mensaje pasa PRIMERO por la puerta de eventos de cita. Si es de la cita, ahí se resuelve
-            //    (nace / angosta / mueve / ya voy / se complicó…) y el cerebro no habla; si además pregunta algo del auto, el cerebro contesta después.
-            let citaF = null;
-            if (CITAF.activo(tS)) {
-                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS) }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
-                if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF });
-            }
+            const correrCerebro = async (soloTexto) => {
             // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
             try {
                 // "primer entrante" = todavía nadie le ha contestado (no importa si el comprador mandó 1 o 3 burbujas antes de la respuesta)
@@ -351,16 +346,16 @@ module.exports = async function handler(req, res) {
             } catch (e) { }
             // correr el MISMO opener_auto del número principal, dentro del universo ambiente (memoria, chat y catálogo de ESTE universo)
             const catalogo = (await autosDeTenant(tS)).map(a => ({ id: Number(a.id), web: a.fyradrive_web_id == null ? null : Number(a.fyradrive_web_id) }));
-            let out = null, status = 200;
+            let out = null, status = 200; const enviados = [];
             const resFalso = { _h: {}, setHeader() { }, status(c) { status = c; return this; }, json(j) { out = j; return this; }, end() { return this; } };
-            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS, citas_flex: CITAF.activo(tS) }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
+            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS, citas_flex: CITAF.activo(tS), solo_texto: soloTexto || undefined }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
             try { await CTX.correr(Number(tS.id), catalogo, () => module.exports(reqFalso, resFalso)); } catch (e) { out = { ok: false, motivo: 'error: ' + e.message }; }
             out = out || { ok: false, motivo: 'sin respuesta' };
             if (out.cita_datos && CITAF.activo(tS)) {   // el cerebro cerró una cita (día + hora en sus letras) → entra por la MISMA puerta de cuándo; el acuse lo da esa puerta
                 try { const tsC = citasVivas.resolverCitaTs(out.cita_datos.fecha, out.cita_datos.hora); if (tsC) { const iso = citasVivas.tsAIsoHora(tsC); const rC = await CITAF.vendedor({ tenant: tS, chat: chS, evento: 'agenda', datos: { dia_ini: iso.fecha_iso, hora_ini: iso.hora_hhmm }, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS) }); out = { ok: !!rC.ok, modo: 'cita_flex', tipo: 'agenda_cerebro', segmentos: [], motivo: rC.error || null }; } else out = { ok: false, escalar_owner: true, escala_motivo: 'Seb cerró una cita pero no pude amarrar la fecha — revísala tú' }; } catch (e) { out = { ok: false, escalar_owner: true, escala_motivo: 'error al agendar: ' + e.message }; }
             }
             // ── ENVIAR lo que el cerebro decidió, por la PUERTA DE MENSAJES de este universo (sandbox → se pinta en el hilo; real → WhatsApp) ──
-            const base = 'seb:' + Number(chS.id) + ':' + Date.now(); let n = 0; const enviados = [];
+            const base = 'seb:' + Number(chS.id) + ':' + Date.now() + (soloTexto ? ':c' : ''); let n = 0;
             const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno' }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
             const pin = async () => { if (!out.ubicacion_auto_id) return; const pe = (await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [Number(out.ubicacion_auto_id)]).catch(() => []))[0]; if (!pe) return; await mandarS({ imagen: pe.image_b64 || null, imagen_ref: pe.image_b64 ? 'ubic-img:' + Number(out.ubicacion_auto_id) : null, location: (pe.lat != null && pe.lng != null) ? { lat: pe.lat, lng: pe.lng, name: pe.name || '', maps_link: pe.maps_link || undefined } : null }); };
             if (out.ok && Array.isArray(out.segmentos)) {
@@ -372,8 +367,19 @@ module.exports = async function handler(req, res) {
             }
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
             const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : (out.escalar_owner ? ('🔴 Seb escaló (no contestó): ' + String(out.escala_motivo || '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo')));
-            try { if (citaF && citaF.nota) await ioCitaf(tS, chS).sistema(citaF.nota); } catch (e) { }
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
+                return { out, enviados };
+            };
+            // ══ VISITAS FLEXIBLES: el mensaje pasa PRIMERO por la puerta de eventos de cita. La IA solo interpreta; el motor aplica. Si el mismo mensaje trae
+            //    ADEMÁS una pregunta comercial ("¿aceptan crédito?"), esa parte la contesta el flujo comercial de siempre (el cerebro, con SOLO ese texto) y
+            //    después la cita hace lo suyo. La pregunta comercial jamás se vuelve un estado de cita.
+            let citaF = null, comercialR = null;
+            if (CITAF.activo(tS)) {
+                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
+                if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF, comercial: comercialR ? { ok: !!comercialR.out.ok, tipo: comercialR.out.tipo || null, enviados: comercialR.enviados.length } : null });
+            }
+            const { out, enviados } = await correrCerebro(null);
+            try { if (citaF && citaF.nota) await ioCitaf(tS, chS).sistema(citaF.nota); } catch (e) { }
             return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
@@ -1185,6 +1191,7 @@ module.exports = async function handler(req, res) {
                 if (TSEB) mr = mr.filter((m, i) => !(i > 0 && m.direccion === 'in' && mr[i - 1].direccion === 'in' && String(mr[i - 1].texto || '').trim() === String(m.texto || '').trim() && Number(m.ts) - Number(mr[i - 1].ts) < 60000));
                 let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0 }));
                 if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
+                if (TSEB && req.body && req.body.solo_texto) { while (rows.length && rows[rows.length - 1].direccion === 'in') rows.pop(); rows.push({ mensaje: String(req.body.solo_texto), direccion: 'in', ts: Date.now(), ai: 0 }); }   // mensaje con varias partes: aquí solo entra la parte COMERCIAL
                 mensajes = rows;
             }
             const entrantes = mensajes.filter(m => m.direccion === 'in');

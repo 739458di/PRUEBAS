@@ -503,6 +503,22 @@ select.inp option{background:#09183F;color:#fff}
 #tuto .fin{margin-top:auto;padding-top:24px}
 
 
+
+/* ── SIMULADOR: calendario visual de la visita ── */
+.cfl-wrap{overflow-x:auto;border-radius:12px;background:var(--s1);border:1px solid var(--border);-webkit-overflow-scrolling:touch}
+.cfl{position:relative;height:118px;min-width:100%}
+.cfl-dia{position:absolute;top:0;bottom:0;border-left:1px solid var(--sep)}.cfl-dia span{position:sticky;left:4px;display:inline-block;margin:4px 0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cfl-win{position:absolute;top:22px;height:14px;border-radius:7px;background:rgba(53,224,176,.55)}.cfl-win.orig{background:none;border:1px dashed rgba(53,224,176,.6)}.cfl-win.ven{background:rgba(255,209,102,.55)}.cfl-win.fin{background:rgba(255,255,255,.18)}
+.cfl-k{position:absolute;width:14px;height:14px;margin-left:-7px;border-radius:50%;border:2px solid var(--pri2);background:var(--bg);padding:0}
+.cfl-k.enviada{background:var(--pos);border-color:var(--pos)}.cfl-k.pendiente{background:var(--pri)}.cfl-k.futura{border-style:dashed;border-color:var(--txt2)}.cfl-k.cancelada,.cfl-k.saltada{border-color:var(--muted);opacity:.45}.cfl-k.enviando{background:var(--warn);border-color:var(--warn)}
+.cfl-ev{position:absolute;top:20px;width:0;height:0;margin-left:-6px;padding:0;background:none;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid #fff}
+.cfl-now{position:absolute;top:0;bottom:0;width:2px;background:var(--danger);pointer-events:none}.cfl-now span{position:absolute;bottom:2px;left:4px;font-size:10px;color:var(--danger);white-space:nowrap}
+.cfl-cur{position:absolute;top:0;bottom:0;width:2px;background:var(--warn);pointer-events:none}
+.cfl-car{font-size:11px;line-height:15px;color:var(--muted);margin-top:6px}
+.cfl-rng{width:100%;margin:10px 0 4px;accent-color:#FFD166}
+.cfl-leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--txt2);margin-bottom:8px}.cfl-leg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;border:2px solid var(--pri2);vertical-align:-1px}.cfl-leg i.enviada{background:var(--pos);border-color:var(--pos)}.cfl-leg i.pendiente{background:var(--pri)}.cfl-leg i.futura{border-style:dashed;border-color:var(--txt2)}.cfl-leg i.cancelada{border-color:var(--muted);opacity:.5}
+.cf-chat{display:flex;flex-direction:column;gap:6px;padding-bottom:6px}.cfm{max-width:84%;padding:8px 11px;border-radius:14px;font-size:13.5px;line-height:18px;white-space:pre-wrap;word-break:break-word}.cfm.in{align-self:flex-end;background:var(--pos);color:#04231a}.cfm.out{align-self:flex-start;background:var(--in)}.cfm.pens{opacity:.6;font-style:italic}
+.cf-comp{display:flex;gap:8px;align-items:flex-end}.cf-comp .inp{flex:1;min-height:44px;max-height:110px;resize:none;padding:11px 14px}
 /* ══ LA LIBRETA (visitas vivas del universo) ══ */
 .lb-top{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 6px}
 .lb-top div{padding:12px 10px;border-radius:14px;background:var(--s1);border:1px solid var(--border);text-align:center}
@@ -512,6 +528,9 @@ select.inp option{background:#09183F;color:#fff}
 .lb-h{margin:16px 0 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.lb-h.at{color:var(--warn)}
 .lb-f{display:block;width:100%;text-align:left;padding:12px;margin-bottom:8px;border-radius:14px;background:var(--s1);border:1px solid var(--border);color:var(--txt);font-size:13px;line-height:18px}
 .lb-f.at{border-color:rgba(255,209,102,.5);background:rgba(255,209,102,.07)}
+.lb-f.ven{border-style:dashed;border-color:rgba(255,209,102,.45)}.lb-f.ven .l1 span{color:var(--warn)}.lb-f.cam{border-color:rgba(53,224,176,.5);background:rgba(53,224,176,.07)}
+.lb-f.cer{opacity:.75}.lb-f.cer .l1 span{color:var(--txt2)}.lb-f.cer.realizada .l1 span{color:var(--pos)}
+.lb .cal{margin:6px 0 4px}.cal-d .dots i.c-ven{background:var(--warn)}.cal-d .dots i.c-cam,.cal-d .dots i.c-realizada{background:var(--pos)}.cal-d .dots i.c-cancelada,.cal-d .dots i.c-no_llego{background:var(--muted)}
 .lb-f .l1{display:flex;justify-content:space-between;gap:10px}.lb-f .l1 b{font-size:15px}.lb-f .l1 span{color:var(--pos);font-weight:600;white-space:nowrap}
 .lb-f .l2{color:var(--txt2)}.lb-f .l3{margin-top:4px}.lb-f .l3.at{color:var(--warn);font-weight:700}.lb-f .l4{margin-top:4px;font-size:12px;color:var(--muted)}.lb-f .mal,.lb .mal{color:var(--danger);font-weight:700}
 /* ══ CITAS FLEXIBLES (TERRA): barra del chat + hoja con reloj virtual y línea del tiempo ══ */
@@ -1839,18 +1858,36 @@ function setCitasEstado(e){
 }
 function citasSkeleton(){ return Array.from({ length: 3 }, () => '<div class="cita sk"><div class="top"><div class="dia-b"></div><div class="info"><div class="l1"></div><div class="l2"></div></div></div></div>').join(''); }
 // ══ LA LIBRETA (universos con visitas flexibles): todas las visitas vivas, su situación y su PRÓXIMA ACCIÓN. Métrica: sin próxima acción = 0 ══
-const LB_GRUPOS = [['atencion', 'Necesitan tu atención'], ['en_camino', 'En camino'], ['hoy', 'Hoy'], ['proximas', 'Próximas'], ['rescate', 'Por rescatar · pendientes de reagendar']];
+const LB_GRUPOS = [['atencion', 'Necesitan tu atención'], ['en_camino', 'En camino'], ['hoy', 'Hoy'], ['proximas', 'Próximas'], ['vencidas', 'Ventana vencida · sin resolver'], ['sin_fecha', 'Sin fecha · fuera del calendario'], ['cerradas', 'Cerradas']];
+const LB_EST = { realizada: 'Asistió', cancelada: 'Canceló', no_llego: 'No asistió' };
+let LB = { r: null, mes: null, dia: null };
+function lbFila(f){
+  const cls = f.grupo === 'cerradas' ? ' cer ' + f.estado : (f.atencion ? ' at' : (f.vencida ? ' ven' : (f.estado === 'en_camino' ? ' cam' : '')));
+  return '<button type="button" class="lb-f' + cls + '" data-chat="' + f.chat_id + '"><div class="l1"><b>' + esc(f.nombre) + '</b><span>' + esc(f.grupo === 'cerradas' ? (LB_EST[f.estado] || f.estado) : f.cuando) + '</span></div><div class="l2">' + esc(f.auto || 'Sin auto') + (f.grupo === 'cerradas' ? ' · ' + esc(f.cuando) + (f.resultado ? ' · ' + esc(f.resultado) : '') : ' · ' + esc(f.hora || '')) + '</div>' + (f.atencion ? '<div class="l3 at">' + esc(f.atencion) + '</div>' : '') + (f.grupo === 'cerradas' ? '' : '<div class="l3">' + esc(f.situacion) + '</div><div class="l4">' + (f.proxima ? 'Sigue: ' + esc(f.proxima.texto) + ' · ' + esc(f.proxima.cuando) + (f.proxima.vencida ? ' · VENCIDA' : '') : (f.espera ? 'En espera: ' + esc(f.espera) : '<span class="mal">SIN PRÓXIMA ACCIÓN</span>')) + (f.ultimo ? '<br>Último: ' + esc(f.ultimo.evento.replace(/_/g, ' ')) + ' · ' + esc(f.ultimo.cuando) : '') + '</div>') + '</button>';
+}
+function lbPintar(){
+  const c = $('citas-lista'), r = LB.r; if (!r) return; const todas = r.filas.concat(r.cerradas || []);
+  const porDia = {}; todas.forEach(f => (f.dias || []).forEach(k => (porDia[k] = porDia[k] || []).push(f)));
+  const [hy, hm2, hd] = r.hoy.split('-').map(Number); const hoy = new Date(hy, hm2 - 1, hd); const m = LB.mes || new Date(hy, hm2 - 1, 1);
+  const primero = new Date(m.getFullYear(), m.getMonth(), 1); const off = (primero.getDay() + 6) % 7; const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(); const k2 = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  let g = ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(w => '<div class="wd">' + w + '</div>').join(''); for (let i = 0; i < off; i++) g += '<div class="cal-d off"></div>';
+  for (let d = 1; d <= dias; d++) { const dt = new Date(m.getFullYear(), m.getMonth(), d), k = k2(dt), l = porDia[k] || []; g += '<button type="button" class="cal-d' + (l.length ? ' has' : '') + (k === r.hoy ? ' hoy' : '') + (k === LB.dia ? ' on' : '') + (dt < hoy ? ' pas' : '') + '" data-k="' + k + '">' + d + (l.length ? '<span class="dots">' + l.slice(0, 3).map(f => '<i class="' + (f.grupo === 'cerradas' ? 'c-' + f.estado : (f.vencida ? 'c-ven' : (f.estado === 'en_camino' ? 'c-cam' : ''))) + '"></i>').join('') + '</span>' : '') + '</button>'; }
+  const tit = m.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  let h = '<div class="lb"><div class="lb-top"><div><b>' + r.vivas + '</b><span>visitas con fecha</span></div><div class="' + (r.sin_proxima_accion ? 'mal' : 'bien') + '"><b>' + r.sin_proxima_accion + '</b><span>sin próxima acción</span></div><div class="' + (r.vencidas ? 'mal' : '') + '"><b>' + r.vencidas + '</b><span>ventanas vencidas</span></div></div><div class="lb-reloj">' + (r.virtual ? '⏱ reloj adelantado · ' : '') + esc(r.ahora) + '</div>' +
+    '<div class="cal"><div class="cal-h"><button type="button" class="cal-nav" data-d="-1">‹</button><b>' + esc(tit.charAt(0).toUpperCase() + tit.slice(1)) + '</b><button type="button" class="cal-nav" data-d="1">›</button></div><div class="cal-g">' + g + '</div></div>';
+  if (LB.dia) { const l = porDia[LB.dia] || []; const [y, mo, d] = LB.dia.split('-').map(Number); const t2 = new Date(y, mo - 1, d).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }); h += '<h4 class="lb-h">' + esc(t2) + ' · ' + (l.length ? l.length + (l.length === 1 ? ' visita' : ' visitas') : 'sin visitas') + '</h4>' + l.map(lbFila).join(''); }
+  else { if (!todas.length) h += '<div class="vacio"><b>Sin visitas</b>Nacen solas cuando un comprador dice qué día viene.</div>'; for (const [gk, t3] of LB_GRUPOS) { const fs = todas.filter(f => f.grupo === gk); if (!fs.length || gk === 'cerradas') continue; h += '<h4 class="lb-h' + (gk === 'atencion' ? ' at' : '') + '">' + esc(t3) + ' · ' + fs.length + '</h4>' + fs.map(lbFila).join(''); } }
+  c.innerHTML = h + '</div>';
+  c.querySelectorAll('.lb-f').forEach(b => b.onclick = (e) => { e.stopPropagation(); abrirChat(Number(b.dataset.chat)); });
+  c.querySelectorAll('.cal-nav').forEach(b => b.onclick = (e) => { e.stopPropagation(); LB.mes = new Date(m.getFullYear(), m.getMonth() + Number(b.dataset.d), 1); lbPintar(); });
+  c.querySelectorAll('.cal-d[data-k]').forEach(b => b.onclick = (e) => { e.stopPropagation(); LB.dia = LB.dia === b.dataset.k ? null : b.dataset.k; lbPintar(); });
+}
 async function cargarLibreta(){
   const c = $('citas-lista'); const pills = $('ci-pills'), vista = $('ci-vista'); if (pills) pills.parentElement.hidden = true; if (vista) vista.hidden = true;
   if (!c.querySelector('.lb')) c.innerHTML = citasSkeleton();
   const r = await apiPost('citaf_tablero', {}).catch(() => null);
   if (!r || !r.ok) { c.innerHTML = '<div class="vacio"><b>No pude cargar la libreta</b>' + esc((r && r.error) || '') + '<br><button class="masbtn" onclick="cargarLibreta()">Reintentar</button></div>'; return; }
-  let h = '<div class="lb"><div class="lb-top"><div><b>' + r.vivas + '</b><span>visitas vivas</span></div><div class="' + (r.sin_proxima_accion ? 'mal' : 'bien') + '"><b>' + r.sin_proxima_accion + '</b><span>sin próxima acción</span></div><div class="' + (r.vencidas ? 'mal' : '') + '"><b>' + r.vencidas + '</b><span>acciones vencidas</span></div></div><div class="lb-reloj">' + (r.virtual ? '⏱ reloj adelantado · ' : '') + esc(r.ahora) + '</div>';
-  if (!r.filas.length) h += '<div class="vacio"><b>Sin visitas vivas</b>Nacen solas cuando un comprador dice qué día viene.</div>';
-  for (const [g, tit] of LB_GRUPOS) { const fs = r.filas.filter(f => f.grupo === g); if (!fs.length) continue;
-    h += '<h4 class="lb-h' + (g === 'atencion' ? ' at' : '') + '">' + esc(tit) + ' · ' + fs.length + '</h4>' + fs.map(f => '<button type="button" class="lb-f' + (f.atencion ? ' at' : '') + '" data-chat="' + f.chat_id + '"><div class="l1"><b>' + esc(f.nombre) + '</b><span>' + esc(f.cuando) + '</span></div><div class="l2">' + esc(f.auto || 'Sin auto') + ' · ' + esc(f.concrecion) + '</div>' + (f.atencion ? '<div class="l3 at">' + esc(f.atencion) + '</div>' : '') + '<div class="l3">' + esc(f.situacion) + '</div><div class="l4">' + (f.proxima ? 'Sigue: ' + esc(f.proxima.texto) + ' · ' + esc(f.proxima.cuando) + (f.proxima.vencida ? ' · VENCIDA' : '') : '<span class="mal">SIN PRÓXIMA ACCIÓN</span>') + (f.ultimo ? '<br>Último: ' + esc(f.ultimo.evento.replace(/_/g, ' ')) + ' · ' + esc(f.ultimo.cuando) : '') + '</div></button>').join(''); }
-  c.innerHTML = h + '</div>';
-  c.querySelectorAll('.lb-f').forEach(b => b.onclick = (e) => { e.stopPropagation(); abrirChat(Number(b.dataset.chat)); });
+  LB.r = r; lbPintar();
 }
 async function cargarCitas({ silencioso } = {}){
   if (TENANT && TENANT.citas_flex) return cargarLibreta();
@@ -2032,8 +2069,8 @@ async function scEnviar(){
 }
 
 // ══════════ CITAS FLEXIBLES (universos con citas_flex · TERRA MOTORS): barra del chat + hoja con reloj virtual y línea del tiempo ══════════
-const CF_TIPOS = { rescate: 'Rescate: buscarlo para reagendar', fin_rescate: 'Fin del rescate: no asistió', marcar_pregunta: 'Aviso al vendedor: no contestó la pregunta', r1: 'Recordatorio', vispera: 'Un día antes', dia: 'Mensaje del día', dia_multi: 'Mensaje del día', dia_ultimo: 'Último día', empujon: 'Segundo empujón', marcar: 'Aviso al vendedor: márcale', me_avisas: '“Me avisas cuando vengas”', revision: 'Revisión', revision_suave: 'Mensaje suave', cierre: 'Cierre: ¿llegó?', cierre_2: '¿Llegó? (otra vez)', sin_cierre: 'Queda sin cierre' };
-const CF_EST = { viva: 'Viva', en_camino: 'En camino', esperando_cierre: 'Esperando cierre', realizada: 'Asistió', no_llego: 'No asistió', cancelada: 'Canceló', pospuesta: 'Pendiente de reagendar', sin_cierre: 'Sin cierre', reemplazada: 'Reemplazada' };
+const CF_TIPOS = { vence: 'Vence la ventana', aclaracion: 'Preguntarle si fue o si todavía viene', marcar_pregunta: 'Aviso al vendedor: no contestó la pregunta', r1: 'Recordatorio', vispera: 'Un día antes', dia: 'Mensaje del día', dia_multi: 'Mensaje del día', dia_ultimo: 'Último día', empujon: 'Segundo empujón', marcar: 'Aviso al vendedor: márcale', me_avisas: '“Me avisas cuando vengas”', revision: 'Revisión', revision_suave: 'Mensaje suave', cierre: 'Cierre: ¿llegó?', cierre_2: '¿Llegó? (otra vez)', sin_cierre: 'Queda sin cierre' };
+const CF_EST = { viva: 'Viva', en_camino: 'En camino', esperando_cierre: 'Esperando cierre', realizada: 'Asistió', no_llego: 'No asistió', cancelada: 'Canceló', pospuesta: 'Sin fecha', sin_cierre: 'Sin cierre', reemplazada: 'Reemplazada' };
 let CF = null;
 async function cfBarra(id){
   const b = $('cf-bar'); if (!b) return;
@@ -2042,26 +2079,29 @@ async function cfBarra(id){
   cfPintarBarra(r); if (CF && CF.id === id) cfPintar(r);
 }
 function cfPintarBarra(r){
-  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita;
+  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita; try { const ba = document.querySelector('#acciones .acc[data-acc="cita"]'); if (ba && !ba.dataset.sim) { ba.dataset.sim = '1'; ba.lastChild.textContent = 'Simulador'; } } catch (e) {}
   const rel = '<span class="r">' + (r.reloj.virtual ? '⏱ ' : '') + esc(r.reloj.ahora) + '</span>';
   if (!c || !c.viva) { b.className = 'cf-bar off'; b.innerHTML = '<span>' + (c ? 'Cita ' + esc((CF_EST[c.estado] || c.estado).toLowerCase()) + ' · toca para ver' : 'Sin cita · escribe como comprador para que nazca') + '</span>' + rel; return; }
-  if (c.estado === 'pospuesta') { const sg = (r.casillas || []).find(k => k.estado === 'pendiente'); b.className = 'cf-bar duda'; b.innerHTML = '<span><b>Pendiente de reagendar</b> · sin fecha' + (sg ? '<br>Sigue: ' + esc(CF_TIPOS[sg.tipo] || sg.tipo) + ' · ' + esc(sg.cuando) : '') + '</span>' + rel; return; }
+  if (c.estado === 'pospuesta') { b.className = 'cf-bar off'; b.innerHTML = '<span><b>Sin fecha</b> · fuera del calendario hasta que diga un día</span>' + rel; return; }
+  if (c.vencida) { const sg = (r.casillas || []).find(k => k.estado === 'pendiente'); b.className = 'cf-bar duda'; b.innerHTML = '<span><b>Ventana vencida</b> · sin llegada acreditada' + (sg ? '<br>Sigue: ' + esc(CF_TIPOS[sg.tipo] || sg.tipo) + ' · ' + esc(sg.cuando) : '<br>Ya se le preguntó; sin respuesta no se concluye nada') + '</span>' + rel; return; }
   b.className = 'cf-bar' + (c.en_duda ? ' duda' : '');
   const sig = (r.casillas || []).find(k => k.estado === 'pendiente');
   b.innerHTML = '<span><b>Cita ' + esc(c.cuando) + '</b>' + (c.en_duda ? ' · en duda' : (c.estado === 'en_camino' ? ' · viene en camino' : (c.confirmada_dia ? ' · día confirmado' : ''))) + (sig ? '<br>Sigue: ' + esc(CF_TIPOS[sig.tipo] || sig.tipo) + ' · ' + esc(sig.cuando) : '') + '</span>' + rel;
 }
 function abrirCitaFlex(){
   const id = CHAT_ID; if (!id) return;
-  const s = sheet({ titulo: 'Cita y línea del tiempo', big: true, full: true, html: '<div class="cf" id="cf-box"><div class="cargando">Cargando…</div></div>', alCerrar: () => { CF = null; } });
-  CF = { s, id, ocupado: false };
+  const s = sheet({ titulo: 'Simulador · cliente y calendario', big: true, full: true, html: '<div class="cf" id="cf-box"><div class="cargando">Cargando…</div></div>', pie: '<div class="cf-comp"><textarea class="inp" id="cf-tx" rows="1" placeholder="Escribe como el cliente…"></textarea><button class="send" id="cf-send" aria-label="Enviar">' + ico('send') + '</button></div>', alCerrar: () => { CF = null; } });
+  CF = { s, id, ocupado: false, cursor: null, sel: null, r: null };
+  const txC = s.pie.querySelector('#cf-tx'); const mandarC = async () => { const t = (txC.value || '').trim(); if (!t || !CF || CF.ocupado) return; txC.value = ''; CF.ocupado = true; cfChat(true); try { await enviarComoComprador(id, t); } finally { if (CF) CF.ocupado = false; } const r2 = await apiPost('citaf_estado', { chat_id: id }).catch(() => null); if (CF && r2 && r2.ok) { CF.cursor = null; cfPintar(r2); cfPintarBarra(r2); const sb = CF.s.body; sb.scrollTop = 0; } };
+  s.pie.querySelector('#cf-send').onclick = mandarC; txC.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); mandarC(); } };
   s.body.addEventListener('click', (e) => { const b = e.target.closest('button[data-cf]'); if (b && !b.disabled) cfAccion(b.dataset.cf, b.dataset.v); });
   apiPost('citaf_estado', { chat_id: id }).then(r => { if (CF && CF.s === s) { if (r && r.ok) { cfPintar(r); cfPintarBarra(r); } else s.body.querySelector('#cf-box').innerHTML = '<div class="vacio"><b>No pude leer la cita</b>' + esc((r && r.error) || '') + '</div>'; } });
 }
 function cfPintar(r){
-  if (!CF) return; const box = CF.s.body.querySelector('#cf-box'); if (!box) return; const c = r.cita; const off = CF.ocupado ? ' disabled' : '';
-  let h = '<h4>Reloj del sandbox</h4><div class="reloj"><b>' + esc(r.reloj.ahora) + '</b>' + (r.reloj.virtual ? '<span>tiempo adelantado</span>' : '<span style="color:var(--txt2)">tiempo real · hoy el lote abre ' + esc(r.horario_hoy) + '</span>') + '</div>' +
+  if (!CF) return; const box = CF.s.body.querySelector('#cf-box'); if (!box) return; const c = r.cita; const off = CF.ocupado ? ' disabled' : ''; CF.r = r;
+  let h = cfLineaHTML(r) + '<h4>Reloj del sandbox</h4><div class="reloj"><b>' + esc(r.reloj.ahora) + '</b>' + (r.reloj.virtual ? '<span>tiempo adelantado</span>' : '<span style="color:var(--txt2)">tiempo real · hoy el lote abre ' + esc(r.horario_hoy) + '</span>') + '</div>' +
     '<div class="btns"><button class="pri" data-cf="reloj" data-v="siguiente"' + off + '>▶ Siguiente mensaje</button><button data-cf="mas" data-v="3600000"' + off + '>+1 h</button><button data-cf="mas" data-v="21600000"' + off + '>+6 h</button><button data-cf="mas" data-v="86400000"' + off + '>+1 día</button><button data-cf="reloj" data-v="fin"' + off + '>⏭ Fin de la ventana</button><button data-cf="reloj" data-v="reset"' + off + '>↺ Volver a hoy</button></div>' +
-    '<p class="hint" style="margin-top:10px">Adelanta el tiempo y mira qué saldría si el comprador no contesta. Para que conteste, cierra esta hoja, cambia a Comprador y escribe: la línea se reacomoda sola.</p>';
+    '<p class="hint" style="margin-top:10px">Abajo escribes como el cliente y Seb contesta. Arriba ves lo que eso movió. El cursor solo deja VER; estos botones sí ejecutan (el reloj solo avanza).</p>';
   h += '<h4>La cita</h4>';
   if (!c) h += cfFormAgenda(off, 'Agendar yo la visita') + '<div class="card">Todavía no hay cita en este chat. Nace cuando el comprador dice un día: “voy el sábado”, “cómo andas hoy a las 5”, “entre jueves y viernes”.</div>';
   else {
@@ -2070,17 +2110,61 @@ function cfPintar(r){
     h += '<div class="card"><span class="st ' + cls + '">' + esc(CF_EST[c.estado] || c.estado) + '</span>' + (c.en_duda ? '<span class="st w">En duda</span>' : '') + (c.confirmada_dia && c.viva ? '<span class="st">Día confirmado</span>' : '') + (c.suave ? '<span class="st m">Modo suave</span>' : '') +
       '<div style="margin-top:8px"><b>' + esc(c.auto || 'Sin auto') + '</b></div><div class="d" style="color:var(--txt)">' + esc(c.situacion || '') + '</div>' + (c.estado === 'pospuesta' ? '' : '<div class="d">Ventana: ' + esc(c.ventana) + ' · ' + esc(c.concrecion || '') + '</div>') + (c.ventana_original ? '<div class="d">Ventana original que él dio: ' + esc(c.ventana_original) + '</div>' : '') +
       (extra.length ? '<div class="d">' + esc(extra.join(' · ')) + '</div>' : '') + (c.razon ? '<div class="d">Razón: ' + esc(c.razon) + '</div>' : '') + (c.resultado ? '<div class="d">Resultado: ' + esc(c.resultado) + '</div>' : '') + (c.previa_id ? '<div class="d">Ligada a una cita anterior de este comprador</div>' : '') + '</div>';
-    h += '<h4>Botones del vendedor</h4><div class="btns"><button class="ok" data-cf="vend" data-v="llego"' + off + '>Llegó</button>' + (c.viva ? (c.estado !== 'pospuesta' ? '<button class="no" data-cf="vend" data-v="no_llego"' + off + '>No llegó</button><button data-cf="vend" data-v="auto_vendido"' + off + '>El auto se vendió</button><button data-cf="vend" data-v="mueve"' + off + '>Necesito moverla</button>' : '') + '<button data-cf="vend" data-v="descartar"' + off + '>Ya no va a venir</button>' : '') + '</div>';
+    h += '<h4>Botones del vendedor</h4><div class="btns"><button class="ok" data-cf="vend" data-v="llego"' + off + '>Llegó</button>' + (c.viva ? ('<button class="no" data-cf="vend" data-v="no_llego"' + off + '>No llegó</button>' + (c.estado === 'pospuesta' ? '' : '<button data-cf="vend" data-v="auto_vendido"' + off + '>El auto se vendió</button><button data-cf="vend" data-v="mueve"' + off + '>Dejarla sin fecha</button>')) : '') + '</div>';
     h += cfFormAgenda(off, 'Mover a otro día');
     if (c.estado === 'realizada') h += '<div class="btns">' + ['compró', 'apartó', 'no compró', 'sigue pensando'].map(x => '<button data-cf="res" data-v="' + x + '"' + off + (c.resultado === x ? ' class="pri"' : '') + '>' + Cap1(x) + '</button>').join('') + '</div>';
     const ahora = r.reloj.ahora_ts; let marcada = false;
     h += '<h4>Línea del tiempo</h4><ol>' + (r.casillas || []).map(k => { const sig = !marcada && k.estado === 'pendiente'; if (sig) marcada = true; return '<li class="' + (k.estado === 'enviada' ? 'e' : (k.estado === 'pendiente' ? '' : 'x')) + (sig ? ' sig' : '') + '"><span class="p"></span><span>' + esc(k.cuando) + '</span><span>' + esc(CF_TIPOS[k.tipo] || k.tipo) + ' <span class="q">→ ' + esc(k.para) + '</span>' + (k.estado === 'enviada' ? '<small>salió</small>' : (k.estado === 'pendiente' ? '' : '<small>' + (k.estado === 'saltada' ? 'no salió: ' : 'cancelada: ') + esc(k.motivo || '') + '</small>')) + '</span></li>'; }).join('') + '</ol>' + (!(r.casillas || []).length ? '<p class="hint">Sin mensajes programados.</p>' : '');
-    h += '<h4>Bitácora de eventos</h4><div class="ev">' + (r.eventos || []).map(e => esc(e.cuando) + ' · ' + esc(e.fuente) + ' · <b>' + esc(e.evento) + '</b>').join('<br>') + '</div>';
+    h += '<h4>Qué movió cada acción</h4><div class="ev">' + (r.eventos || []).map(e => esc(e.cuando) + ' · ' + esc(e.fuente) + ' · <b>' + esc(String(e.evento).replace(/_/g, ' ')) + '</b>' + (e.dijo ? ' — “' + esc(e.dijo) + '”' : '') + (e.antes ? ' (antes: ' + esc(e.antes) + ')' : '')).join('<br>') + '</div>';
+    const muertas = (r.casillas || []).filter(k => k.estado === 'cancelada' || k.estado === 'saltada'); if (muertas.length) { const pm = {}; muertas.forEach(k => { const m = k.motivo || 'sin motivo'; (pm[m] = pm[m] || []).push(CF_TIPOS[k.tipo] || k.tipo); }); h += '<h4>Recordatorios que dejaron de aplicar</h4><div class="ev">' + Object.keys(pm).map(m => '<b>' + esc(m) + ':</b> ' + esc(pm[m].join(' · '))).join('<br>') + '</div>'; }
     if ((r.historial || []).length) h += '<h4>Citas anteriores de este comprador</h4><div class="ev">' + r.historial.map(x => '#' + x.id + ' · ' + esc(x.cuando) + ' · ' + esc(CF_EST[x.estado] || x.estado) + (x.resultado ? ' · ' + esc(x.resultado) : '')).join('<br>') + '</div>';
   }
-  box.innerHTML = h;
+  box.innerHTML = h + '<h4>Conversación (tú eres el cliente)</h4><div class="cf-chat" id="cf-chat"></div>';
+  cfLineaWire(); cfChat();
 }
 function aviso(txt){ avisoError(txt); }
+
+// ── SIMULADOR: calendario visual (reflejo de las MISMAS casillas + la proyección del MISMO planificador) con cursor de tiempo ──
+const CF_PX_H = 7;   // píxeles por hora
+function cfItems(r){ const a = (r.casillas || []).map(k => Object.assign({ real: true }, k)); (r.proyeccion || []).forEach(k => a.push(Object.assign({ real: false, estado: 'futura' }, k))); return a.sort((x, y) => x.due_ts - y.due_ts); }
+function cfRango(r){ const c = r.cita, its = cfItems(r); const lim = r.reloj.ahora_ts - 6 * 86400000; const ts = [r.reloj.ahora_ts]; if (c) { if (c.estado !== 'pospuesta' && c.viva) ts.push(c.ini_ts, c.fin_ts, c.ini0_ts || c.ini_ts, c.fin0_ts || c.fin_ts); if (c.nace_ts) ts.push(Math.max(c.nace_ts, lim)); } its.forEach(k => { if (k.due_ts > lim) ts.push(k.due_ts); }); (r.eventos || []).forEach(e => { if (e.ts > lim) ts.push(e.ts); }); const d0 = new Date(Math.min.apply(null, ts) - 6 * 3600000); d0.setUTCHours(0, 0, 0, 0); const d1 = new Date(Math.max.apply(null, ts) - 6 * 3600000); d1.setUTCHours(24, 0, 0, 0); const t0 = d0.getTime() + 6 * 3600000; return { t0, t1: Math.max(d1.getTime() + 6 * 3600000, t0 + 2 * 86400000) }; }
+function cfLineaHTML(r){
+  const c = r.cita; if (!c) return '<h4>Calendario de la visita</h4><div class="card">Aún no hay visita. Escribe abajo como el cliente, por ejemplo: “voy el sábado como a las 5” o “paso entre viernes y sábado”.</div>';
+  const R = cfRango(r), X = ts => Math.round((ts - R.t0) / 3600000 * CF_PX_H), W = X(R.t1); const DS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']; let h = '';
+  for (let t = R.t0; t < R.t1; t += 86400000) { const d = new Date(t - 6 * 3600000 + 12 * 3600000); h += '<div class="cfl-dia" style="left:' + X(t) + 'px;width:' + (24 * CF_PX_H) + 'px"><span>' + DS[d.getUTCDay()] + ' ' + d.getUTCDate() + '</span></div>'; }
+  if (c.estado !== 'pospuesta') { if (c.ventana_original && c.ini0_ts && c.viva) h += '<div class="cfl-win orig" style="left:' + X(c.ini0_ts) + 'px;width:' + Math.max(6, X(c.fin0_ts) - X(c.ini0_ts)) + 'px"></div>'; h += '<div class="cfl-win' + (c.vencida ? ' ven' : '') + (c.viva ? '' : ' fin') + '" style="left:' + X(c.ini_ts) + 'px;width:' + Math.max(6, X(c.fin_ts) - X(c.ini_ts)) + 'px"></div>'; }
+  (r.eventos || []).forEach((e, i) => { if (e.ts >= R.t0 && e.ts <= R.t1) h += '<button type="button" class="cfl-ev" data-e="' + i + '" style="left:' + X(e.ts) + 'px" title="' + esc(e.evento) + '"></button>'; });
+  const its = cfItems(r); const carril = { comprador: 0, vendedor: 1, sistema: 2 };
+  its.forEach((k, i) => { if (k.due_ts < R.t0) return; h += '<button type="button" class="cfl-k ' + esc(k.estado) + '" data-k="' + i + '" style="left:' + X(k.due_ts) + 'px;top:' + (46 + (carril[k.para] || 0) * 22) + 'px" title="' + esc((CF_TIPOS[k.tipo] || k.tipo) + ' · ' + k.cuando) + '"></button>'; });
+  h += '<div class="cfl-now" style="left:' + X(r.reloj.ahora_ts) + 'px"><span>ahora</span></div><div class="cfl-cur" id="cfl-cur" hidden></div>';
+  return '<h4>Calendario de la visita</h4><div class="card" style="margin-bottom:8px"><span class="st ' + (c.viva ? (c.vencida || c.en_duda ? 'w' : '') : 'm') + '">' + esc(CF_EST[c.estado] || c.estado) + '</span><b>' + esc(c.cuando) + '</b><div class="d" style="color:var(--txt)">' + esc(c.situacion || '') + '</div></div>' +
+    '<div class="cfl-wrap" id="cfl-wrap"><div class="cfl" id="cfl" style="width:' + W + 'px">' + h + '</div></div><div class="cfl-car">Filas de puntos: 1 mensajes al cliente · 2 avisos al vendedor · 3 sistema. Triángulos: lo que dijo o hizo alguien. Barra: la ventana de la visita.</div>' +
+    '<input type="range" class="cfl-rng" id="cfl-rng" min="' + R.t0 + '" max="' + R.t1 + '" step="900000" value="' + (CF && CF.cursor ? CF.cursor : r.reloj.ahora_ts) + '">' +
+    '<div class="cfl-leg"><i class="enviada"></i>salió <i class="pendiente"></i>programado <i class="futura"></i>vendría después <i class="cancelada"></i>ya no aplica</div><div class="card" id="cfl-det">Mueve el cursor a la derecha o izquierda, o toca un punto del calendario, para ver qué pasa en ese momento. Es solo vista: nada se envía.</div>';
+}
+function cfDetalle(){
+  const r = CF && CF.r, det = CF && CF.s.body.querySelector('#cfl-det'); if (!r || !det || !r.cita) return; const its = cfItems(r), now = r.reloj.ahora_ts;
+  if (CF.sel) { const k = CF.sel.k != null ? its[CF.sel.k] : null, e = CF.sel.e != null ? (r.eventos || [])[CF.sel.e] : null;
+    if (k) det.innerHTML = '<b>' + esc(CF_TIPOS[k.tipo] || k.tipo) + '</b> → ' + esc(k.para) + '<div class="d">' + esc(k.cuando) + ' · ' + (k.estado === 'enviada' ? 'ya salió' : (k.estado === 'pendiente' ? 'programado' : (k.estado === 'futura' ? 'vendría después, si nadie dice nada' : 'ya no aplica'))) + (k.condicion ? ' · ' + esc(k.condicion) : '') + '</div>' + (k.motivo ? '<div class="d">Por qué: ' + esc(k.motivo) + '</div>' : '') + (k.efecto ? '<div class="d">Efecto: ' + esc(k.efecto) + '</div>' : '') + (k.texto && k.estado === 'enviada' && k.para === 'comprador' ? '<div class="d">“' + esc(k.texto) + '”</div>' : '');
+    else if (e) det.innerHTML = '<b>' + esc(String(e.evento).replace(/_/g, ' ')) + '</b> · ' + esc(e.fuente) + '<div class="d">' + esc(e.cuando) + (e.dijo ? ' — “' + esc(e.dijo) + '”' : '') + (e.antes ? ' · antes: ' + esc(e.antes) : '') + '</div>';
+    return; }
+  const T = CF.cursor; if (!T) return; const f = new Date(T - 6 * 3600000), DS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']; let hh = f.getUTCHours(); const ap = hh >= 12 ? 'pm' : 'am'; hh = hh % 12 || 12; const lbl = DS[f.getUTCDay()] + ' ' + f.getUTCDate() + ' · ' + hh + ':' + String(f.getUTCMinutes()).padStart(2, '0') + ' ' + ap;
+  if (T <= now) { const sal = its.filter(k => k.real && k.estado === 'enviada' && k.due_ts <= T), evs = (r.eventos || []).filter(e => e.ts <= T); det.innerHTML = '<b>' + esc(lbl) + '</b> · pasado (solo vista)<div class="d">Hasta aquí ya había salido: ' + (sal.length ? esc(sal.map(k => CF_TIPOS[k.tipo] || k.tipo).join(' · ')) : 'nada') + '</div><div class="d">Último evento: ' + (evs.length ? esc(String(evs[evs.length - 1].evento).replace(/_/g, ' ')) : '—') + '</div>'; return; }
+  const sal = its.filter(k => (k.estado === 'pendiente' || k.estado === 'futura') && k.due_ts > now && k.due_ts <= T), sig = its.find(k => (k.estado === 'pendiente' || k.estado === 'futura') && k.due_ts > T), venc = sal.find(k => k.tipo === 'vence' && /vence sin/.test(k.efecto || ''));
+  det.innerHTML = '<b>' + esc(lbl) + '</b> · si nadie dice nada hasta aquí<div class="d">Habría salido: ' + (sal.length ? sal.map(k => esc(CF_TIPOS[k.tipo] || k.tipo) + (k.condicion ? ' <i>(' + esc(k.condicion) + ')</i>' : '')).join(' · ') : 'nada todavía') + '</div><div class="d">La visita estaría: ' + (venc ? 'viva, con la ventana vencida sin llegada acreditada' : esc((CF_EST[r.cita.estado] || r.cita.estado).toLowerCase())) + '</div><div class="d">Seguiría: ' + (sig ? esc(CF_TIPOS[sig.tipo] || sig.tipo) + ' · ' + esc(sig.cuando) : 'nada más: espera la palabra del cliente o tu botón') + '</div><div class="btns"><button class="pri" data-cf="ir" data-v="' + T + '">Llevar el reloj hasta aquí (ejecuta)</button></div>';
+}
+function cfLineaWire(){
+  if (!CF || !CF.r || !CF.r.cita) return; const b = CF.s.body, rng = b.querySelector('#cfl-rng'), cur = b.querySelector('#cfl-cur'), wrap = b.querySelector('#cfl-wrap'), lin = b.querySelector('#cfl'); if (!rng || !lin) return; const R = cfRango(CF.r), X = ts => Math.round((ts - R.t0) / 3600000 * CF_PX_H);
+  const poner = (T, mover) => { CF.cursor = T; CF.sel = null; cur.hidden = false; cur.style.left = X(T) + 'px'; if (mover) wrap.scrollLeft = Math.max(0, X(T) - wrap.clientWidth / 2); cfDetalle(); };
+  rng.oninput = () => poner(Number(rng.value), true);
+  lin.onclick = (e) => { const k = e.target.closest('.cfl-k'), ev = e.target.closest('.cfl-ev'); if (k) { CF.sel = { k: Number(k.dataset.k) }; cfDetalle(); return; } if (ev) { CF.sel = { e: Number(ev.dataset.e) }; cfDetalle(); return; } const x = e.clientX - lin.getBoundingClientRect().left; const T = Math.round((R.t0 + x / CF_PX_H * 3600000) / 900000) * 900000; rng.value = T; poner(T, false); };
+  wrap.scrollLeft = Math.max(0, X(CF.cursor || CF.r.reloj.ahora_ts) - wrap.clientWidth / 3); if (CF.cursor) poner(CF.cursor, false);
+}
+function cfChat(pensando){
+  if (!CF) return; const el = CF.s.body.querySelector('#cf-chat'); if (!el) return; const ms = (hiloDe(CF.id).msgs || []).filter(m => m.emisor !== 'sistema').slice(-10);
+  el.innerHTML = (ms.length ? ms.map(m => '<div class="cfm ' + (m.dir === 'in' ? 'in' : 'out') + '">' + esc(m.tipo === 'location' ? '📍 ubicación' : (m.tipo === 'image' ? '🖼 imagen' : String(m.texto || ''))) + '</div>').join('') : '<p class="hint">Sin mensajes todavía.</p>') + (pensando ? '<div class="cfm out pens">Seb está pensando…</div>' : '');
+  if (pensando) { const sb = CF.s.body; sb.scrollTop = sb.scrollHeight; }
+}
 function cfFormAgenda(off, titulo){ return '<h4>' + esc(titulo) + '</h4><div class="btns" style="align-items:center"><input type="date" id="cf-dia" class="inp" style="height:38px;width:auto;flex:1 1 140px"><input type="time" id="cf-hora" class="inp" style="height:38px;width:auto;flex:0 1 110px"><button class="pri" data-cf="agenda" data-v="1"' + off + '>Guardar</button></div><p class="hint" style="margin-top:8px">La hora es opcional. Pasa por la misma puerta que cuando lo dice el comprador: le llega su acuse y la línea se rearma.</p>'; }
 function Cap1(x){ x = String(x || ''); return x.charAt(0).toUpperCase() + x.slice(1); }
 async function cfAccion(tipo, v){
@@ -2088,6 +2172,7 @@ async function cfAccion(tipo, v){
   let r = null;
   try {
     if (tipo === 'reloj') r = await apiPost('citaf_reloj', { chat_id: id, accion: v });
+    else if (tipo === 'ir') r = await apiPost('citaf_reloj', { chat_id: id, accion: 'ir', ts: Number(v) });
     else if (tipo === 'mas') r = await apiPost('citaf_reloj', { chat_id: id, accion: 'mas', ms: Number(v) });
     else if (tipo === 'vend') r = await apiPost('citaf_vendedor', { chat_id: id, evento: v });
     else if (tipo === 'agenda') { const d = (CF.s.body.querySelector('#cf-dia') || {}).value, hh = (CF.s.body.querySelector('#cf-hora') || {}).value; if (!d) { CF.ocupado = false; CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); return aviso('Elige el día.'); } r = await apiPost('citaf_vendedor', { chat_id: id, evento: 'agenda', datos: { dia_ini: d, hora_ini: hh || '' } }); }
@@ -2097,7 +2182,7 @@ async function cfAccion(tipo, v){
   if (!r || !r.ok) { aviso((r && r.error) || 'No se pudo'); if (CF) CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); return; }
   if (r.sin_siguiente) aviso('No queda ningún mensaje programado.');
   else if (r.hechas && r.hechas.length) aviso(r.hechas.map(x => (CF_TIPOS[x.tipo] || x.tipo) + (x.salio ? '' : ' (no salió)')).join(' · '));
-  if (CF) cfPintar(r); cfPintarBarra(r);
+  if (CF) { CF.cursor = null; CF.sel = null; cfPintar(r); } cfPintarBarra(r);
   if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }).catch(() => {});
 }
 
