@@ -293,22 +293,13 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, auto_boton: rE });
         }
         // ── CITAS FLEXIBLES: tubería (sandbox → hilo; real → WhatsApp por la puerta de mensajes) y auto del chat ──
-        const ioCitaf = (tC, chC) => {
-            let n = 0; const base = 'citaf:' + Number(chC.id) + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 6);
-            const nota = async (txt) => { try { if (tC.demo) await DEMO.sistema(tC, String(chC.telefono), txt); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chC.id), 'citaf-nota:' + ts + ':' + (n++), ts, 'out', 'sistema', txt, 'text', 1, ts]); } } catch (e) { } };
-            const mandar = (extra) => MSJ.enviar(Object.assign({ tenantId: Number(tC.id), chatId: Number(chC.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'cita_flex' }, extra));
-            return {
-                mandar: (texto) => mandar({ texto }),
-                pin: async (autoInvId) => { const pe = (await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [Number(autoInvId)]).catch(() => []))[0]; if (!pe) return; await mandar({ imagen: pe.image_b64 || null, imagen_ref: pe.image_b64 ? 'ubic-img:' + Number(autoInvId) : null, location: (pe.lat != null && pe.lng != null) ? { lat: pe.lat, lng: pe.lng, name: pe.name || '', maps_link: pe.maps_link || undefined } : null }); },
-                vendedor: (txt) => nota(txt),   // TODO número real: además WhatsApp al vendedor del lote
-                sistema: (txt) => nota(txt)
-            };
-        };
+        const ioCitaf = (tC, chC) => CITAF.ioPara(tC, chC);   // UNA sola tubería (panel, cron y pruebas): vive en lib/seb/citas-flex.js
         const autoCitaf = async (tC, chC) => { try { const f = await focoDe(tC, String(chC.telefono)); if (!f) return null; const inv = (await query('SELECT id, estado FROM inventario_autos WHERE id = ? LIMIT 1', [Number(f.id)]).catch(() => []))[0]; return { id: inv ? Number(inv.id) : null, nombre: f.nombre || null, vendido: !!(inv && String(inv.estado) !== 'activo') }; } catch (e) { return null; } };
-        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor'].includes(action) && req.method === 'POST') {
+        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor', 'citaf_tablero'].includes(action) && req.method === 'POST') {
             const tC = await tenantDeParam(VEND_PARAM || String(req.body.tenant_id || '') || String(SES ? SES.tenant_id : ''));
             if (!tC || !Number(tC.id) || !CITAF.activo(tC)) return res.status(403).json({ ok: false, error: 'las citas flexibles no están encendidas en este universo' });
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tC.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
+            if (action === 'citaf_tablero') return res.status(200).json(await CITAF.tablero({ tenant: tC }));   // LA LIBRETA: todas las visitas vivas + próxima acción + métrica sin_proxima_accion
             const chC = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chC || Number(chC.tenant_id) !== Number(tC.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const ioDe = async (c) => { const ch = (c && Number(c.chat_id) !== Number(chC.id)) ? (await U.chatPorId(Number(c.chat_id))) || chC : chC; return ioCitaf(tC, ch); };
             let hechas = [], rV = null;
@@ -326,7 +317,7 @@ module.exports = async function handler(req, res) {
                     hechas = await CITAF.tick({ tenant: tC, ioDe });
                 }
             }
-            if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
+            if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, datos: req.body.datos || null, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
             const st = await CITAF.estado({ tenant: tC, chat: chC });
             return res.status(200).json(Object.assign({ hechas, vendedor: rV }, st));
         }
@@ -362,9 +353,12 @@ module.exports = async function handler(req, res) {
             const catalogo = (await autosDeTenant(tS)).map(a => ({ id: Number(a.id), web: a.fyradrive_web_id == null ? null : Number(a.fyradrive_web_id) }));
             let out = null, status = 200;
             const resFalso = { _h: {}, setHeader() { }, status(c) { status = c; return this; }, json(j) { out = j; return this; }, end() { return this; } };
-            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
+            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS, citas_flex: CITAF.activo(tS) }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
             try { await CTX.correr(Number(tS.id), catalogo, () => module.exports(reqFalso, resFalso)); } catch (e) { out = { ok: false, motivo: 'error: ' + e.message }; }
             out = out || { ok: false, motivo: 'sin respuesta' };
+            if (out.cita_datos && CITAF.activo(tS)) {   // el cerebro cerró una cita (día + hora en sus letras) → entra por la MISMA puerta de cuándo; el acuse lo da esa puerta
+                try { const tsC = citasVivas.resolverCitaTs(out.cita_datos.fecha, out.cita_datos.hora); if (tsC) { const iso = citasVivas.tsAIsoHora(tsC); const rC = await CITAF.vendedor({ tenant: tS, chat: chS, evento: 'agenda', datos: { dia_ini: iso.fecha_iso, hora_ini: iso.hora_hhmm }, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS) }); out = { ok: !!rC.ok, modo: 'cita_flex', tipo: 'agenda_cerebro', segmentos: [], motivo: rC.error || null }; } else out = { ok: false, escalar_owner: true, escala_motivo: 'Seb cerró una cita pero no pude amarrar la fecha — revísala tú' }; } catch (e) { out = { ok: false, escalar_owner: true, escala_motivo: 'error al agendar: ' + e.message }; }
+            }
             // ── ENVIAR lo que el cerebro decidió, por la PUERTA DE MENSAJES de este universo (sandbox → se pinta en el hilo; real → WhatsApp) ──
             const base = 'seb:' + Number(chS.id) + ':' + Date.now(); let n = 0; const enviados = [];
             const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno' }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
@@ -1126,6 +1120,7 @@ module.exports = async function handler(req, res) {
             // UNIVERSO AMBIENTE (TERRA MOTORS, 2026-09-18): si este turno corre dentro de CTX.correr(9, …) TODO el cerebro trabaja sobre ese
             // universo (memoria, chat, catálogo). Las compuertas que solo existen para el número principal se saltan.
             const TSEB = CTX.tenant();
+            const FLEXC = !!(TSEB && req.body && req.body.citas_flex);   // universo con visitas flexibles: la cita del cerebro NO va a cita_canonica/citas_match (sería una segunda verdad)
             // ══ PRIMERA COMPUERTA — "CERRAR" (bloque 5, 2026-09-10): si el teléfono es dueño de un universo y su último
             // entrante es exactamente CERRAR, se cierran TODAS sus sesiones de FyraChat y se le confirma por WhatsApp.
             // Determinista (regex exacta), jamás despierta al bot.
@@ -1470,6 +1465,7 @@ module.exports = async function handler(req, res) {
                 }
                 if (cont && cont.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
                 if (cont && cont.segmentos && cont.segmentos.length) {
+                    if (cont.cita_confirmada && cont.cita_datos && FLEXC) return res.status(200).json({ ok: true, modo: 'continuacion', tipo: 'cita_flex', segmentos: [], cita_datos: cont.cita_datos });
                     if (cont.cita_confirmada && cont.cita_datos) {
                         await regCanonica(tel, cont, TSEB);
                         try { await citasVivas.intentarMatchDirecto(tel, cont.cita_datos.fecha, cont.cita_datos.hora, TSEB); } catch (e) { }   // opener_auto = universo 0
@@ -1556,6 +1552,7 @@ module.exports = async function handler(req, res) {
                 if (e3 && e3.segmentos && e3.segmentos.length) {
                     // MATCH DIRECTO real: si esta confirmación empata con la CONTRAPROPUESTA
                     // viva del dueño → match sin re-preguntarle (se le avisa "confirmó ✅").
+                    if (e3.cita_confirmada && e3.cita_datos && FLEXC) return res.status(200).json({ ok: true, modo: 'etapa3', tipo: 'cita_flex', segmentos: [], cita_datos: e3.cita_datos });
                     if (e3.cita_confirmada && e3.cita_datos) {
                         await regCanonica(tel, e3, TSEB);
                         try { await citasVivas.intentarMatchDirecto(tel, e3.cita_datos.fecha, e3.cita_datos.hora, TSEB); } catch (e) { }   // opener_auto = universo 0
@@ -2857,6 +2854,10 @@ module.exports = async function handler(req, res) {
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
                 const fI = String(req.body.fecha_iso || ''), hI = String(req.body.hora || '');
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) return err(400, 'para agendar hace falta día (YYYY-MM-DD) y hora (HH:MM)', { necesita: 'fecha_hora' });
+                if (TV && CITAF.activo(tV)) {   // UNA SOLA VERDAD: aquí la cita manual entra por la puerta de visitas flexibles (misma ventana, misma línea del tiempo, mismos candados)
+                    const rF = await MSJ.conClave(clave, { tenantId: TV, chatId: c.id, accion: 'cita_v2', sesionId: SID }, async () => { const o = await CITAF.vendedor({ tenant: tV, chat: c, evento: 'agenda', datos: { dia_ini: fI, hora_ini: hI }, auto: await autoCitaf(tV, c), io: ioCitaf(tV, c) }); return { ok: !!o.ok, status: o.ok ? 200 : 400, chat_id: Number(c.id), cita: o.ok ? { fecha: fI, hora: hI, cita_id: o.cita } : null, cita_flex: true, error: o.error || undefined }; });
+                    return res.status(codigoDe(rF)).json(rF);
+                }
                 const r = await MSJ.conClave(clave, { tenantId: TV, chatId: c.id, accion: 'cita_v2', sesionId: SID }, async () => {
                     const rA = await ejecutarAccion(tV, c.telefono, 'cita', { fecha_iso: fI, hora: hI, comprador_nombre: (c.nombre && c.nombre !== '.') ? c.nombre : '', clave, via: 'v2' });
                     const o = rA.out || {};

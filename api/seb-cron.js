@@ -29,6 +29,8 @@ module.exports = async function handler(req, res) {
         // puerta, LUEGO el estado. Si el puente falló, quedan pendientes (intentos+1) y ESTE cron los reintenta (máx. 3).
         // Misma puerta idempotente que el ghost_scan del puente (clave 'prog:<id>' / 'rescate:<folio>:<etapa>'): sin dobles.
         // 2 lecturas por índice por tick (pendientes vencidos), sin barridos.
+        // VISITAS FLEXIBLES (universos con citas_flex): el paso del tiempo también es realidad → mismas casillas, misma puerta, reclamo idempotente
+        try { r.citas_flex = await require('../lib/seb/citas-flex.js').tickTodos(); } catch (e) { r.citas_flex = { error: e.message }; }
         try { r.programados = await require('../lib/seb/programados.js').despachar({ ahora: Date.now() }); } catch (e) { r.programados = { error: e.message }; }
         try { r.rescates = await require('../lib/seb/rescate.js').despachar({ ahora: Date.now() }); } catch (e) { r.rescates = { error: e.message }; }
         // ══ HUÉRFANAS @lid (causa 2 del mapa FyraChat): conversaciones t0 con identidad @lid cuyo teléfono ya se conoce → fusión (1/h)
