@@ -1,6 +1,6 @@
 // scripts/citas-flex-prueba.js — ESCENARIOS EXTREMOS del subsistema de visitas flexibles (TERRA MOTORS, sandbox: NADA sale a WhatsApp).
 //   cd /Users/Shared/PRUEBAS && node scripts/citas-flex-prueba.js [n,n,...]
-// Cada escenario usa su propio chat de prueba (tel 52100000001xx) y un RELOJ FIJO (no toca el reloj virtual del universo ni los chats del owner).
+// Cada escenario usa su propio chat de prueba (números de prueba 52100000000NN libres) y un RELOJ FIJO (no toca el reloj virtual del universo ni los chats del owner).
 // En cada paso se verifican los INVARIANTES: 1 sola visita viva por chat · visita viva ⇒ próxima acción pendiente · toda casilla pendiente pertenece a la realidad actual.
 const fs = require('fs'), path = require('path'); const RAIZ = path.join(__dirname, '..');
 fs.readFileSync(path.join(RAIZ, '.env'), 'utf8').split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) process.env[l.slice(0, i).trim()] = process.env[l.slice(0, i).trim()] || l.slice(i + 1).trim(); });
@@ -12,8 +12,8 @@ const soloEstos = (process.argv[2] || '').split(',').map(Number).filter(Boolean)
 let T, fallas = 0; const resumen = [];
 
 async function nuevoChat(n) {
-    const tel = '52100000001' + String(n).padStart(2, '0'); const p = DEMO.telComprador(tel);
-    const v = (await query('SELECT id FROM conversaciones WHERE tenant_id = ? AND telefono = ?', [TEN, p]))[0]; if (v) await borrarChat(Number(v.id), p);
+    // número de prueba EXPLÍCITO del carril 52100000000NN; si ese número ya es de un chat que NO creó esta prueba, se busca otro (jamás se borra un chat ajeno)
+    let tel = null, p = null; for (let k = 0; k < 60 && !tel; k++) { const cand = '52100000000' + String(10 + ((30 + n + k) % 90)).padStart(2, '0'); const v = (await query('SELECT id, nombre FROM conversaciones WHERE tenant_id = ? AND telefono = ?', [TEN, cand]))[0]; if (!v) { tel = cand; } else if (/^Prueba \d+$/.test(String(v.nombre || ''))) { await borrarChat(Number(v.id), cand); tel = cand; } } p = tel;
     const d = await DEMO.delegar({ tenant: T, tel, auto_id: AUTO_WEB, auto_nombre: 'Nissan Sentra Sr 2023', nombre: 'Prueba ' + n });
     const ch = (await query('SELECT id, telefono, nombre, tenant_id FROM conversaciones WHERE id = ?', [d.chat_id]))[0];
     await DEMO.salida(T, p, '¿Te late venir a verlo y manejarlo?', 'asistente');   // contexto mínimo: ya platicaban del auto

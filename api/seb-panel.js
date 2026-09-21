@@ -295,11 +295,12 @@ module.exports = async function handler(req, res) {
         // ── CITAS FLEXIBLES: tubería (sandbox → hilo; real → WhatsApp por la puerta de mensajes) y auto del chat ──
         const ioCitaf = (tC, chC) => CITAF.ioPara(tC, chC);   // UNA sola tubería (panel, cron y pruebas): vive en lib/seb/citas-flex.js
         const autoCitaf = async (tC, chC) => { try { const f = await focoDe(tC, String(chC.telefono)); if (!f) return null; const inv = (await query('SELECT id, estado FROM inventario_autos WHERE id = ? LIMIT 1', [Number(f.id)]).catch(() => []))[0]; return { id: inv ? Number(inv.id) : null, nombre: f.nombre || null, vendido: !!(inv && String(inv.estado) !== 'activo') }; } catch (e) { return null; } };
-        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor', 'citaf_tablero'].includes(action) && req.method === 'POST') {
+        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor', 'citaf_tablero', 'citaf_calendario'].includes(action) && req.method === 'POST') {
             const tC = await tenantDeParam(VEND_PARAM || String(req.body.tenant_id || '') || String(SES ? SES.tenant_id : ''));
             if (!tC || !Number(tC.id) || !CITAF.activo(tC)) return res.status(403).json({ ok: false, error: 'las citas flexibles no están encendidas en este universo' });
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tC.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
-            if (action === 'citaf_tablero') return res.status(200).json(await CITAF.tablero({ tenant: tC }));   // LA LIBRETA: todas las visitas vivas + próxima acción + métrica sin_proxima_accion
+            if (action === 'citaf_tablero') return res.status(200).json(await CITAF.tablero({ tenant: tC }));
+            if (action === 'citaf_calendario') return res.status(200).json(await CITAF.calendario({ tenant: tC }));   // calendario completo de escritorio (calendario.html)   // LA LIBRETA: todas las visitas vivas + próxima acción + métrica sin_proxima_accion
             const chC = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chC || Number(chC.tenant_id) !== Number(tC.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const ioDe = async (c) => { const ch = (c && Number(c.chat_id) !== Number(chC.id)) ? (await U.chatPorId(Number(c.chat_id))) || chC : chC; return ioCitaf(tC, ch); };
             let hechas = [], rV = null;
@@ -376,11 +377,11 @@ module.exports = async function handler(req, res) {
             let citaF = null, comercialR = null;
             if (CITAF.activo(tS)) {
                 try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
-                if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF, comercial: comercialR ? { ok: !!comercialR.out.ok, tipo: comercialR.out.tipo || null, enviados: comercialR.enviados.length } : null });
+                if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF, comercial: comercialR ? { ok: !!comercialR.out.ok, modo: comercialR.out.modo || null, tipo: comercialR.out.tipo || null, enviados: comercialR.enviados.length, textos: Array.isArray(comercialR.out.segmentos) ? comercialR.out.segmentos.map(x => String(x || '')).filter(Boolean) : [] } : null });
             }
             const { out, enviados } = await correrCerebro(null);
             try { if (citaF && citaF.nota) await ioCitaf(tS, chS).sistema(citaF.nota); } catch (e) { }
-            return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
+            return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita_flex: citaF ? { manejado: !!citaF.manejado, evento: citaF.evento || null, traza: citaF.traza || null } : null, seb: { textos: (out.ok && Array.isArray(out.segmentos)) ? out.segmentos.map(x => String(x || '')).filter(Boolean) : [], ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             const tDr = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDr || !tDr.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });

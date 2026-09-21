@@ -504,19 +504,7 @@ select.inp option{background:#09183F;color:#fff}
 
 
 
-/* ── SIMULADOR: calendario visual de la visita ── */
-.cfl-wrap{overflow-x:auto;border-radius:12px;background:var(--s1);border:1px solid var(--border);-webkit-overflow-scrolling:touch}
-.cfl{position:relative;height:118px;min-width:100%}
-.cfl-dia{position:absolute;top:0;bottom:0;border-left:1px solid var(--sep)}.cfl-dia span{position:sticky;left:4px;display:inline-block;margin:4px 0 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-.cfl-win{position:absolute;top:22px;height:14px;border-radius:7px;background:rgba(53,224,176,.55)}.cfl-win.orig{background:none;border:1px dashed rgba(53,224,176,.6)}.cfl-win.ven{background:rgba(255,209,102,.55)}.cfl-win.fin{background:rgba(255,255,255,.18)}
-.cfl-k{position:absolute;width:14px;height:14px;margin-left:-7px;border-radius:50%;border:2px solid var(--pri2);background:var(--bg);padding:0}
-.cfl-k.enviada{background:var(--pos);border-color:var(--pos)}.cfl-k.pendiente{background:var(--pri)}.cfl-k.futura{border-style:dashed;border-color:var(--txt2)}.cfl-k.cancelada,.cfl-k.saltada{border-color:var(--muted);opacity:.45}.cfl-k.enviando{background:var(--warn);border-color:var(--warn)}
-.cfl-ev{position:absolute;top:20px;width:0;height:0;margin-left:-6px;padding:0;background:none;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid #fff}
-.cfl-now{position:absolute;top:0;bottom:0;width:2px;background:var(--danger);pointer-events:none}.cfl-now span{position:absolute;bottom:2px;left:4px;font-size:10px;color:var(--danger);white-space:nowrap}
-.cfl-cur{position:absolute;top:0;bottom:0;width:2px;background:var(--warn);pointer-events:none}
-.cfl-car{font-size:11px;line-height:15px;color:var(--muted);margin-top:6px}
-.cfl-rng{width:100%;margin:10px 0 4px;accent-color:#FFD166}
-.cfl-leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--txt2);margin-bottom:8px}.cfl-leg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;border:2px solid var(--pri2);vertical-align:-1px}.cfl-leg i.enviada{background:var(--pos);border-color:var(--pos)}.cfl-leg i.pendiente{background:var(--pri)}.cfl-leg i.futura{border-style:dashed;border-color:var(--txt2)}.cfl-leg i.cancelada{border-color:var(--muted);opacity:.5}
+/* ── hoja de cita: chat como cliente ── */
 .cf-chat{display:flex;flex-direction:column;gap:6px;padding-bottom:6px}.cfm{max-width:84%;padding:8px 11px;border-radius:14px;font-size:13.5px;line-height:18px;white-space:pre-wrap;word-break:break-word}.cfm.in{align-self:flex-end;background:var(--pos);color:#04231a}.cfm.out{align-self:flex-start;background:var(--in)}.cfm.pens{opacity:.6;font-style:italic}
 .cf-comp{display:flex;gap:8px;align-items:flex-end}.cf-comp .inp{flex:1;min-height:44px;max-height:110px;resize:none;padding:11px 14px}
 /* ══ LA LIBRETA (visitas vivas del universo) ══ */
@@ -2079,7 +2067,7 @@ async function cfBarra(id){
   cfPintarBarra(r); if (CF && CF.id === id) cfPintar(r);
 }
 function cfPintarBarra(r){
-  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita; try { const ba = document.querySelector('#acciones .acc[data-acc="cita"]'); if (ba && !ba.dataset.sim) { ba.dataset.sim = '1'; ba.lastChild.textContent = 'Simulador'; } } catch (e) {}
+  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita; try { const ba = document.querySelector('#acciones .acc[data-acc="cita"]'); if (ba && !ba.dataset.sim) { ba.dataset.sim = '1'; ba.lastChild.textContent = 'Cita'; } } catch (e) {}
   const rel = '<span class="r">' + (r.reloj.virtual ? '⏱ ' : '') + esc(r.reloj.ahora) + '</span>';
   if (!c || !c.viva) { b.className = 'cf-bar off'; b.innerHTML = '<span>' + (c ? 'Cita ' + esc((CF_EST[c.estado] || c.estado).toLowerCase()) + ' · toca para ver' : 'Sin cita · escribe como comprador para que nazca') + '</span>' + rel; return; }
   if (c.estado === 'pospuesta') { b.className = 'cf-bar off'; b.innerHTML = '<span><b>Sin fecha</b> · fuera del calendario hasta que diga un día</span>' + rel; return; }
@@ -2090,7 +2078,7 @@ function cfPintarBarra(r){
 }
 function abrirCitaFlex(){
   const id = CHAT_ID; if (!id) return;
-  const s = sheet({ titulo: 'Simulador · cliente y calendario', big: true, full: true, html: '<div class="cf" id="cf-box"><div class="cargando">Cargando…</div></div>', pie: '<div class="cf-comp"><textarea class="inp" id="cf-tx" rows="1" placeholder="Escribe como el cliente…"></textarea><button class="send" id="cf-send" aria-label="Enviar">' + ico('send') + '</button></div>', alCerrar: () => { CF = null; } });
+  const s = sheet({ titulo: 'Cita · reloj y cliente', big: true, full: true, html: '<div class="cf" id="cf-box"><div class="cargando">Cargando…</div></div>', pie: '<div class="cf-comp"><textarea class="inp" id="cf-tx" rows="1" placeholder="Escribe como el cliente…"></textarea><button class="send" id="cf-send" aria-label="Enviar">' + ico('send') + '</button></div>', alCerrar: () => { CF = null; } });
   CF = { s, id, ocupado: false, cursor: null, sel: null, r: null };
   const txC = s.pie.querySelector('#cf-tx'); const mandarC = async () => { const t = (txC.value || '').trim(); if (!t || !CF || CF.ocupado) return; txC.value = ''; CF.ocupado = true; cfChat(true); try { await enviarComoComprador(id, t); } finally { if (CF) CF.ocupado = false; } const r2 = await apiPost('citaf_estado', { chat_id: id }).catch(() => null); if (CF && r2 && r2.ok) { CF.cursor = null; cfPintar(r2); cfPintarBarra(r2); const sb = CF.s.body; sb.scrollTop = 0; } };
   s.pie.querySelector('#cf-send').onclick = mandarC; txC.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); mandarC(); } };
@@ -2099,7 +2087,7 @@ function abrirCitaFlex(){
 }
 function cfPintar(r){
   if (!CF) return; const box = CF.s.body.querySelector('#cf-box'); if (!box) return; const c = r.cita; const off = CF.ocupado ? ' disabled' : ''; CF.r = r;
-  let h = cfLineaHTML(r) + '<h4>Reloj del sandbox</h4><div class="reloj"><b>' + esc(r.reloj.ahora) + '</b>' + (r.reloj.virtual ? '<span>tiempo adelantado</span>' : '<span style="color:var(--txt2)">tiempo real · hoy el lote abre ' + esc(r.horario_hoy) + '</span>') + '</div>' +
+  let h = '<a class="cta sec" style="margin-top:4px;text-decoration:none" href="/entrenar.html?vendedor=' + encodeURIComponent(VPARAM() || '') + '&chat=' + CF.id + '" target="_blank" rel="noopener">Abrir el panel de entrenamiento (pantalla grande)</a><h4>Reloj del sandbox</h4><div class="reloj"><b>' + esc(r.reloj.ahora) + '</b>' + (r.reloj.virtual ? '<span>tiempo adelantado</span>' : '<span style="color:var(--txt2)">tiempo real · hoy el lote abre ' + esc(r.horario_hoy) + '</span>') + '</div>' +
     '<div class="btns"><button class="pri" data-cf="reloj" data-v="siguiente"' + off + '>▶ Siguiente mensaje</button><button data-cf="mas" data-v="3600000"' + off + '>+1 h</button><button data-cf="mas" data-v="21600000"' + off + '>+6 h</button><button data-cf="mas" data-v="86400000"' + off + '>+1 día</button><button data-cf="reloj" data-v="fin"' + off + '>⏭ Fin de la ventana</button><button data-cf="reloj" data-v="reset"' + off + '>↺ Volver a hoy</button></div>' +
     '<p class="hint" style="margin-top:10px">Abajo escribes como el cliente y Seb contesta. Arriba ves lo que eso movió. El cursor solo deja VER; estos botones sí ejecutan (el reloj solo avanza).</p>';
   h += '<h4>La cita</h4>';
@@ -2120,46 +2108,11 @@ function cfPintar(r){
     if ((r.historial || []).length) h += '<h4>Citas anteriores de este comprador</h4><div class="ev">' + r.historial.map(x => '#' + x.id + ' · ' + esc(x.cuando) + ' · ' + esc(CF_EST[x.estado] || x.estado) + (x.resultado ? ' · ' + esc(x.resultado) : '')).join('<br>') + '</div>';
   }
   box.innerHTML = h + '<h4>Conversación (tú eres el cliente)</h4><div class="cf-chat" id="cf-chat"></div>';
-  cfLineaWire(); cfChat();
+  cfChat();
 }
 function aviso(txt){ avisoError(txt); }
 
-// ── SIMULADOR: calendario visual (reflejo de las MISMAS casillas + la proyección del MISMO planificador) con cursor de tiempo ──
-const CF_PX_H = 7;   // píxeles por hora
-function cfItems(r){ const a = (r.casillas || []).map(k => Object.assign({ real: true }, k)); (r.proyeccion || []).forEach(k => a.push(Object.assign({ real: false, estado: 'futura' }, k))); return a.sort((x, y) => x.due_ts - y.due_ts); }
-function cfRango(r){ const c = r.cita, its = cfItems(r); const lim = r.reloj.ahora_ts - 6 * 86400000; const ts = [r.reloj.ahora_ts]; if (c) { if (c.estado !== 'pospuesta' && c.viva) ts.push(c.ini_ts, c.fin_ts, c.ini0_ts || c.ini_ts, c.fin0_ts || c.fin_ts); if (c.nace_ts) ts.push(Math.max(c.nace_ts, lim)); } its.forEach(k => { if (k.due_ts > lim) ts.push(k.due_ts); }); (r.eventos || []).forEach(e => { if (e.ts > lim) ts.push(e.ts); }); const d0 = new Date(Math.min.apply(null, ts) - 6 * 3600000); d0.setUTCHours(0, 0, 0, 0); const d1 = new Date(Math.max.apply(null, ts) - 6 * 3600000); d1.setUTCHours(24, 0, 0, 0); const t0 = d0.getTime() + 6 * 3600000; return { t0, t1: Math.max(d1.getTime() + 6 * 3600000, t0 + 2 * 86400000) }; }
-function cfLineaHTML(r){
-  const c = r.cita; if (!c) return '<h4>Calendario de la visita</h4><div class="card">Aún no hay visita. Escribe abajo como el cliente, por ejemplo: “voy el sábado como a las 5” o “paso entre viernes y sábado”.</div>';
-  const R = cfRango(r), X = ts => Math.round((ts - R.t0) / 3600000 * CF_PX_H), W = X(R.t1); const DS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']; let h = '';
-  for (let t = R.t0; t < R.t1; t += 86400000) { const d = new Date(t - 6 * 3600000 + 12 * 3600000); h += '<div class="cfl-dia" style="left:' + X(t) + 'px;width:' + (24 * CF_PX_H) + 'px"><span>' + DS[d.getUTCDay()] + ' ' + d.getUTCDate() + '</span></div>'; }
-  if (c.estado !== 'pospuesta') { if (c.ventana_original && c.ini0_ts && c.viva) h += '<div class="cfl-win orig" style="left:' + X(c.ini0_ts) + 'px;width:' + Math.max(6, X(c.fin0_ts) - X(c.ini0_ts)) + 'px"></div>'; h += '<div class="cfl-win' + (c.vencida ? ' ven' : '') + (c.viva ? '' : ' fin') + '" style="left:' + X(c.ini_ts) + 'px;width:' + Math.max(6, X(c.fin_ts) - X(c.ini_ts)) + 'px"></div>'; }
-  (r.eventos || []).forEach((e, i) => { if (e.ts >= R.t0 && e.ts <= R.t1) h += '<button type="button" class="cfl-ev" data-e="' + i + '" style="left:' + X(e.ts) + 'px" title="' + esc(e.evento) + '"></button>'; });
-  const its = cfItems(r); const carril = { comprador: 0, vendedor: 1, sistema: 2 };
-  its.forEach((k, i) => { if (k.due_ts < R.t0) return; h += '<button type="button" class="cfl-k ' + esc(k.estado) + '" data-k="' + i + '" style="left:' + X(k.due_ts) + 'px;top:' + (46 + (carril[k.para] || 0) * 22) + 'px" title="' + esc((CF_TIPOS[k.tipo] || k.tipo) + ' · ' + k.cuando) + '"></button>'; });
-  h += '<div class="cfl-now" style="left:' + X(r.reloj.ahora_ts) + 'px"><span>ahora</span></div><div class="cfl-cur" id="cfl-cur" hidden></div>';
-  return '<h4>Calendario de la visita</h4><div class="card" style="margin-bottom:8px"><span class="st ' + (c.viva ? (c.vencida || c.en_duda ? 'w' : '') : 'm') + '">' + esc(CF_EST[c.estado] || c.estado) + '</span><b>' + esc(c.cuando) + '</b><div class="d" style="color:var(--txt)">' + esc(c.situacion || '') + '</div></div>' +
-    '<div class="cfl-wrap" id="cfl-wrap"><div class="cfl" id="cfl" style="width:' + W + 'px">' + h + '</div></div><div class="cfl-car">Filas de puntos: 1 mensajes al cliente · 2 avisos al vendedor · 3 sistema. Triángulos: lo que dijo o hizo alguien. Barra: la ventana de la visita.</div>' +
-    '<input type="range" class="cfl-rng" id="cfl-rng" min="' + R.t0 + '" max="' + R.t1 + '" step="900000" value="' + (CF && CF.cursor ? CF.cursor : r.reloj.ahora_ts) + '">' +
-    '<div class="cfl-leg"><i class="enviada"></i>salió <i class="pendiente"></i>programado <i class="futura"></i>vendría después <i class="cancelada"></i>ya no aplica</div><div class="card" id="cfl-det">Mueve el cursor a la derecha o izquierda, o toca un punto del calendario, para ver qué pasa en ese momento. Es solo vista: nada se envía.</div>';
-}
-function cfDetalle(){
-  const r = CF && CF.r, det = CF && CF.s.body.querySelector('#cfl-det'); if (!r || !det || !r.cita) return; const its = cfItems(r), now = r.reloj.ahora_ts;
-  if (CF.sel) { const k = CF.sel.k != null ? its[CF.sel.k] : null, e = CF.sel.e != null ? (r.eventos || [])[CF.sel.e] : null;
-    if (k) det.innerHTML = '<b>' + esc(CF_TIPOS[k.tipo] || k.tipo) + '</b> → ' + esc(k.para) + '<div class="d">' + esc(k.cuando) + ' · ' + (k.estado === 'enviada' ? 'ya salió' : (k.estado === 'pendiente' ? 'programado' : (k.estado === 'futura' ? 'vendría después, si nadie dice nada' : 'ya no aplica'))) + (k.condicion ? ' · ' + esc(k.condicion) : '') + '</div>' + (k.motivo ? '<div class="d">Por qué: ' + esc(k.motivo) + '</div>' : '') + (k.efecto ? '<div class="d">Efecto: ' + esc(k.efecto) + '</div>' : '') + (k.texto && k.estado === 'enviada' && k.para === 'comprador' ? '<div class="d">“' + esc(k.texto) + '”</div>' : '');
-    else if (e) det.innerHTML = '<b>' + esc(String(e.evento).replace(/_/g, ' ')) + '</b> · ' + esc(e.fuente) + '<div class="d">' + esc(e.cuando) + (e.dijo ? ' — “' + esc(e.dijo) + '”' : '') + (e.antes ? ' · antes: ' + esc(e.antes) : '') + '</div>';
-    return; }
-  const T = CF.cursor; if (!T) return; const f = new Date(T - 6 * 3600000), DS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']; let hh = f.getUTCHours(); const ap = hh >= 12 ? 'pm' : 'am'; hh = hh % 12 || 12; const lbl = DS[f.getUTCDay()] + ' ' + f.getUTCDate() + ' · ' + hh + ':' + String(f.getUTCMinutes()).padStart(2, '0') + ' ' + ap;
-  if (T <= now) { const sal = its.filter(k => k.real && k.estado === 'enviada' && k.due_ts <= T), evs = (r.eventos || []).filter(e => e.ts <= T); det.innerHTML = '<b>' + esc(lbl) + '</b> · pasado (solo vista)<div class="d">Hasta aquí ya había salido: ' + (sal.length ? esc(sal.map(k => CF_TIPOS[k.tipo] || k.tipo).join(' · ')) : 'nada') + '</div><div class="d">Último evento: ' + (evs.length ? esc(String(evs[evs.length - 1].evento).replace(/_/g, ' ')) : '—') + '</div>'; return; }
-  const sal = its.filter(k => (k.estado === 'pendiente' || k.estado === 'futura') && k.due_ts > now && k.due_ts <= T), sig = its.find(k => (k.estado === 'pendiente' || k.estado === 'futura') && k.due_ts > T), venc = sal.find(k => k.tipo === 'vence' && /vence sin/.test(k.efecto || ''));
-  det.innerHTML = '<b>' + esc(lbl) + '</b> · si nadie dice nada hasta aquí<div class="d">Habría salido: ' + (sal.length ? sal.map(k => esc(CF_TIPOS[k.tipo] || k.tipo) + (k.condicion ? ' <i>(' + esc(k.condicion) + ')</i>' : '')).join(' · ') : 'nada todavía') + '</div><div class="d">La visita estaría: ' + (venc ? 'viva, con la ventana vencida sin llegada acreditada' : esc((CF_EST[r.cita.estado] || r.cita.estado).toLowerCase())) + '</div><div class="d">Seguiría: ' + (sig ? esc(CF_TIPOS[sig.tipo] || sig.tipo) + ' · ' + esc(sig.cuando) : 'nada más: espera la palabra del cliente o tu botón') + '</div><div class="btns"><button class="pri" data-cf="ir" data-v="' + T + '">Llevar el reloj hasta aquí (ejecuta)</button></div>';
-}
-function cfLineaWire(){
-  if (!CF || !CF.r || !CF.r.cita) return; const b = CF.s.body, rng = b.querySelector('#cfl-rng'), cur = b.querySelector('#cfl-cur'), wrap = b.querySelector('#cfl-wrap'), lin = b.querySelector('#cfl'); if (!rng || !lin) return; const R = cfRango(CF.r), X = ts => Math.round((ts - R.t0) / 3600000 * CF_PX_H);
-  const poner = (T, mover) => { CF.cursor = T; CF.sel = null; cur.hidden = false; cur.style.left = X(T) + 'px'; if (mover) wrap.scrollLeft = Math.max(0, X(T) - wrap.clientWidth / 2); cfDetalle(); };
-  rng.oninput = () => poner(Number(rng.value), true);
-  lin.onclick = (e) => { const k = e.target.closest('.cfl-k'), ev = e.target.closest('.cfl-ev'); if (k) { CF.sel = { k: Number(k.dataset.k) }; cfDetalle(); return; } if (ev) { CF.sel = { e: Number(ev.dataset.e) }; cfDetalle(); return; } const x = e.clientX - lin.getBoundingClientRect().left; const T = Math.round((R.t0 + x / CF_PX_H * 3600000) / 900000) * 900000; rng.value = T; poner(T, false); };
-  wrap.scrollLeft = Math.max(0, X(CF.cursor || CF.r.reloj.ahora_ts) - wrap.clientWidth / 3); if (CF.cursor) poner(CF.cursor, false);
-}
+// ── chat como cliente dentro de la hoja (el entrenamiento completo vive en /entrenar.html) ──
 function cfChat(pensando){
   if (!CF) return; const el = CF.s.body.querySelector('#cf-chat'); if (!el) return; const ms = (hiloDe(CF.id).msgs || []).filter(m => m.emisor !== 'sistema').slice(-10);
   el.innerHTML = (ms.length ? ms.map(m => '<div class="cfm ' + (m.dir === 'in' ? 'in' : 'out') + '">' + esc(m.tipo === 'location' ? '📍 ubicación' : (m.tipo === 'image' ? '🖼 imagen' : String(m.texto || ''))) + '</div>').join('') : '<p class="hint">Sin mensajes todavía.</p>') + (pensando ? '<div class="cfm out pens">Seb está pensando…</div>' : '');
@@ -2172,7 +2125,6 @@ async function cfAccion(tipo, v){
   let r = null;
   try {
     if (tipo === 'reloj') r = await apiPost('citaf_reloj', { chat_id: id, accion: v });
-    else if (tipo === 'ir') r = await apiPost('citaf_reloj', { chat_id: id, accion: 'ir', ts: Number(v) });
     else if (tipo === 'mas') r = await apiPost('citaf_reloj', { chat_id: id, accion: 'mas', ms: Number(v) });
     else if (tipo === 'vend') r = await apiPost('citaf_vendedor', { chat_id: id, evento: v });
     else if (tipo === 'agenda') { const d = (CF.s.body.querySelector('#cf-dia') || {}).value, hh = (CF.s.body.querySelector('#cf-hora') || {}).value; if (!d) { CF.ocupado = false; CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); return aviso('Elige el día.'); } r = await apiPost('citaf_vendedor', { chat_id: id, evento: 'agenda', datos: { dia_ini: d, hora_ini: hh || '' } }); }
