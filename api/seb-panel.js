@@ -391,7 +391,7 @@ module.exports = async function handler(req, res) {
             }
             const { out, enviados } = await correrCerebro(null);
             try { if (citaF && citaF.nota) await ioCitaf(tS, chS).sistema(citaF.nota); } catch (e) { }
-            return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita_flex: citaF ? { manejado: !!citaF.manejado, evento: citaF.evento || null, traza: citaF.traza || null } : null, seb: { textos: (out.ok && Array.isArray(out.segmentos)) ? out.segmentos.map(x => String(x || '')).filter(Boolean) : [], ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
+            return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita_flex: citaF ? { manejado: !!citaF.manejado, evento: citaF.evento || null, tipo: citaF.tipo || null, traza: citaF.traza || null } : null, seb: { textos: (out.ok && Array.isArray(out.segmentos)) ? out.segmentos.map(x => String(x || '')).filter(Boolean) : [], ok: !!out.ok, modo: out.modo || null, tipo: out.tipo || null, motivo: out.motivo || null, escalar: !!out.escalar_owner, escala_motivo: out.escala_motivo || null, segmentos: (out.segmentos || []).length, fotos: (out.fotos || []).length, pin: !!out.ubicacion_auto_id }, enviados });
         }
         if (action === 'demo_reset' && req.method === 'POST') {
             const tDr = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDr || !tDr.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });
