@@ -302,22 +302,21 @@ module.exports = async function handler(req, res) {
             if (action === 'citaf_tablero') return res.status(200).json(await CITAF.tablero({ tenant: tC }));
             if (action === 'citaf_calendario') return res.status(200).json(await CITAF.calendario({ tenant: tC }));   // calendario completo de escritorio (calendario.html)   // LA LIBRETA: todas las visitas vivas + próxima acción + métrica sin_proxima_accion
             const chC = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chC || Number(chC.tenant_id) !== Number(tC.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
-            const ioDe = async (c) => { const ch = (c && Number(c.chat_id) !== Number(chC.id)) ? (await U.chatPorId(Number(c.chat_id))) || chC : chC; return ioCitaf(tC, ch); };
+            const ioDe = async () => ioCitaf(tC, chC);   // el reloj de la prueba es POR CLIENTE: aquí solo corre lo de ESTE chat (jamás cae nada de otra visita)
             let hechas = [], rV = null;
-            if (action === 'citaf_reloj') {
-                if (!tC.demo) return res.status(400).json({ ok: false, error: 'el reloj virtual solo existe en el sandbox' });
-                const acc = String(req.body.accion || ''); const off = await CITAF.offsetDe(tC.id); const ahoraV = Date.now() + off;
-                if (acc === 'reset') await CITAF.ponerOffset(tC.id, 0);
-                else {
-                    let destino = null;
-                    if (acc === 'mas') destino = ahoraV + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
-                    else if (acc === 'ir') { destino = Number(req.body.ts) || 0; if (destino <= ahoraV) return res.status(400).json({ ok: false, error: 'El reloj solo avanza: lo que ya salió no se desmanda. Hacia atrás solo es vista.' }); if (destino > ahoraV + 60 * 86400000) return res.status(400).json({ ok: false, error: 'demasiado lejos' }); }
-                    else if (acc === 'siguiente') { const st = await CITAF.estado({ tenant: tC, chat: chC }); const sig = (st.casillas || []).find(k => k.estado === 'pendiente' && k.due_ts > ahoraV); if (!sig) return res.status(200).json(Object.assign({ sin_siguiente: true, hechas: [] }, st)); destino = sig.due_ts + 1000; }
-                    else if (acc === 'fin') { const st = await CITAF.estado({ tenant: tC, chat: chC }); if (!st.cita) return res.status(200).json(Object.assign({ hechas: [] }, st)); destino = Math.max(ahoraV, st.cita.fin_ts) + 2 * 3600000; }
-                    else return res.status(400).json({ ok: false, error: "accion debe ser 'mas' | 'ir' | 'siguiente' | 'fin' | 'reset'" });
-                    await CITAF.ponerOffset(tC.id, destino - Date.now());
-                    hechas = await CITAF.tick({ tenant: tC, ioDe });
-                }
+            if (action === 'citaf_reloj') {   // RELOJ DE ESTE CLIENTE DE PRUEBA (película): avanzar EJECUTA lo que tocaba; retroceder REBOBINA (regresa mensajes y estado)
+                if (!tC.demo) return res.status(400).json({ ok: false, error: 'el reloj de prueba solo existe en el sandbox' });
+                const acc = String(req.body.accion || ''); const off = await CITAF.offsetDe(chC.id); const ahoraV = Date.now() + off; let destino = null, rebobino = null;
+                if (acc === 'mas') destino = ahoraV + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
+                else if (acc === 'ir') destino = Number(req.body.ts) || 0;
+                else if (acc === 'reset') destino = Date.now();
+                else if (acc === 'siguiente') { const st = await CITAF.estado({ tenant: tC, chat: chC }); const sig = (st.casillas || []).find(k => k.estado === 'pendiente' && k.due_ts > ahoraV); if (!sig) return res.status(200).json(Object.assign({ sin_siguiente: true, hechas: [] }, st)); destino = sig.due_ts + 1000; }
+                else if (acc === 'fin') { const st = await CITAF.estado({ tenant: tC, chat: chC }); if (!st.cita) return res.status(200).json(Object.assign({ hechas: [] }, st)); destino = Math.max(ahoraV, st.cita.fin_ts) + 2 * 3600000; }
+                else return res.status(400).json({ ok: false, error: "accion debe ser 'mas' | 'ir' | 'siguiente' | 'fin' | 'reset'" });
+                if (!destino || Math.abs(destino - ahoraV) > 90 * 86400000) return res.status(400).json({ ok: false, error: 'momento inválido' });
+                if (destino < ahoraV - 1000) { rebobino = await CITAF.rebobinar({ tenant: tC, chat: chC, hasta: destino }); if (!rebobino.ok) return res.status(400).json(rebobino); }
+                else { await CITAF.ponerOffset(chC.id, destino - Date.now()); hechas = await CITAF.tick({ tenant: tC, ioDe, chatId: Number(chC.id), hasta: destino }); }
+                const stR = await CITAF.estado({ tenant: tC, chat: chC }); return res.status(200).json(Object.assign({ hechas, rebobino }, stR));
             }
             if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, datos: req.body.datos || null, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
             const st = await CITAF.estado({ tenant: tC, chat: chC });
@@ -3024,6 +3023,7 @@ module.exports = async function handler(req, res) {
                     ['delegaciones', 'DELETE FROM delegaciones WHERE chat_id = ?', [cid]],
                     ['mensajes', 'DELETE FROM mensajes WHERE conversacion_id = ?', [cid]],
                     ['conversacion', 'DELETE FROM conversaciones WHERE id = ?', [cid]]]) {
+                    if (k === 'mensajes') { try { await CITAF.borrarDeChat(cid); borrado.visitas_flex = 'ok'; } catch (e) { borrado.visitas_flex = 'n/a'; } }   // la visita flexible muere con su chat (antes quedaba huérfana y sus recordatorios caían en otro chat)
                     try { const r0 = await run(sql, args); borrado[k] = (borrado[k] || 0) + (Number(r0.rowsAffected) || 0); } catch (e) { borrado[k] = 'n/a'; }
                 }
                 return borrado;
