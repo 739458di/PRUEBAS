@@ -3,107 +3,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prueba las citas de TERRA</title>
+<title>Playground de citas · TERRA</title>
 <style>
 :root{
   --bg:#0c0e13; --p1:#12151d; --p2:#191d28; --ln:#252b3b; --ln2:#343d55;
   --tx:#eef1f8; --dim:#a3adc4; --mut:#6d7790;
-  --ok:#3ddc97; --warn:#ffc857; --bad:#ff6b7a; --azul:#6aa9ff;
+  --cli:#4aa3ff; --seb:#84d957; --cita:#f2b13c; --rojo:#ff4d4d; --gris:#5b6480;
   --f:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --RH:40px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{background:var(--bg);color:var(--tx);font:15px/1.5 var(--f);overflow:hidden}
-button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
-button:disabled{opacity:.4;cursor:default}
-::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:var(--ln2);border-radius:5px}
+body{background:var(--bg);color:var(--tx);font:14.5px/1.45 var(--f);overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}button:disabled{opacity:.4;cursor:default}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--ln2);border-radius:5px}
+.app{display:grid;grid-template-columns:370px 1fr;height:100%}
 
-.top{height:56px;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--ln);background:var(--p1)}
-.top h1{font-size:16px;font-weight:800}
-.top select,.top .b{height:36px;padding:0 14px;border-radius:10px;background:var(--p2);border:1px solid var(--ln2);font-size:14px;color:var(--tx)}
-.top .b.pri{background:var(--ok);border-color:var(--ok);color:#04231a;font-weight:700}
-.top .sp{flex:1}.top .reloj{font-size:13.5px;color:var(--dim)}.top .reloj b{color:var(--warn);font-weight:700}
-
-.cols{display:grid;grid-template-columns:minmax(300px,1fr) minmax(360px,1.1fr) minmax(360px,1.1fr);height:calc(100% - 56px)}
-.col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--ln)}.col:last-child{border-right:0}
-.col>h2{flex:0 0 auto;padding:14px 20px;font-size:15px;font-weight:800;border-bottom:1px solid var(--ln);background:var(--p1)}
-.scr{flex:1;overflow-y:auto;padding:18px 20px 28px}
-
-/* conversación */
-.chat{display:flex;flex-direction:column;gap:7px}
-.m{max-width:86%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;word-break:break-word;font-size:14.5px}
-.m.in{align-self:flex-end;background:#1f6f54;color:#eafff6;border-bottom-right-radius:5px}
-.m.out{align-self:flex-start;background:var(--p2);border-bottom-left-radius:5px}
+/* ── IZQUIERDA: el chat ── */
+.chatcol{display:flex;flex-direction:column;border-right:1px solid var(--ln);background:#07080b;min-height:0}
+.chead{flex:0 0 auto;display:flex;gap:8px;align-items:center;padding:12px;background:var(--cli);color:#04213f}
+.chead select{flex:1;min-width:0;height:36px;border-radius:10px;border:0;padding:0 10px;font:600 14px var(--f);background:#fff;color:#04213f}
+.chead button{height:36px;padding:0 12px;border-radius:10px;background:#04213f;color:#fff;font-weight:700;font-size:13px;white-space:nowrap}
+.chead button.x{background:rgba(4,33,63,.18);color:#04213f;padding:0 10px}
+.cscr{flex:1;overflow-y:auto;padding:14px 12px}
+.chat{display:flex;flex-direction:column;gap:8px}
+.m{max-width:84%;padding:9px 12px;border-radius:14px;white-space:pre-wrap;word-break:break-word;font-size:14px;color:#06121f}
+.m.in{align-self:flex-end;background:var(--seb);border-bottom-right-radius:4px}
+.m.out{align-self:flex-start;background:var(--cli);border-bottom-left-radius:4px}
 .m.pens{opacity:.6;font-style:italic}
-.chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 0;border-top:1px solid var(--ln);background:var(--p1)}
-.chips button{padding:6px 11px;border-radius:999px;background:var(--p2);border:1px solid var(--ln2);font-size:13px;color:var(--dim)}
-.chips button:hover{color:var(--tx);border-color:var(--ok)}
-.comp{display:flex;gap:8px;padding:10px 14px 14px;background:var(--p1)}
-.comp textarea{flex:1;min-height:44px;max-height:120px;resize:none;padding:11px 13px;border-radius:13px;background:var(--p2);border:1px solid var(--ln2);color:var(--tx);font:inherit;outline:none}
-.comp textarea:focus{border-color:var(--ok)}
-.comp button{width:48px;border-radius:13px;background:var(--ok);color:#04231a;font-weight:800;font-size:18px}
+.m small{display:block;font-size:10.5px;font-weight:700;opacity:.6;margin-bottom:1px}
+.chips{flex:0 0 auto;display:flex;gap:6px;padding:8px 10px;overflow-x:auto;background:#0f1117;border-top:1px solid var(--ln)}
+.chips button{flex:0 0 auto;padding:6px 11px;border-radius:999px;background:var(--p2);border:1px solid var(--ln2);font-size:12.5px;color:var(--dim);white-space:nowrap}
+.chips button:hover{color:var(--tx);border-color:var(--seb)}
+.comp{flex:0 0 auto;display:flex;gap:8px;padding:12px;background:var(--cita)}
+.comp textarea{flex:1;min-height:44px;max-height:110px;resize:none;padding:11px 13px;border-radius:12px;border:0;background:#fff;color:#1a1300;font:inherit;outline:none}
+.comp button{width:48px;border-radius:12px;background:#1a1300;color:var(--cita);font-weight:800;font-size:18px}
 
-/* qué pasó */
-.t{border:1px solid var(--ln);border-radius:16px;background:var(--p1);padding:16px 18px;margin-bottom:14px}
-.t.ult{border-color:var(--ok)}
-.t.viejo{padding:10px 14px;opacity:.75}.t.viejo .fila,.t.viejo details{display:none}.t.viejo .dijo{margin:0;font-size:13.5px}.t.viejo .res{display:block}
-.t .res{display:none;color:var(--dim);font-size:13px;margin-top:2px}
-.dijo{font-size:15px;margin-bottom:12px}.dijo span{color:var(--mut);font-size:12.5px;display:block;margin-bottom:1px}
-.fila{display:grid;grid-template-columns:92px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--ln)}
-.fila>label{font-size:11.5px;font-weight:800;letter-spacing:.08em;color:var(--mut);padding-top:3px}
-.ent{font-size:17px;font-weight:800}.ent small{display:block;font-size:13px;font-weight:400;color:var(--dim);margin-top:2px}
-.cam{font-size:15.5px;font-weight:700}.cam .a{color:var(--mut);font-weight:500;text-decoration:line-through}.cam .fl{color:var(--mut);margin:0 6px}.cam .d{color:var(--ok)}.cam.igual{color:var(--dim);font-weight:500}
-.cam small{display:block;font-size:13px;font-weight:400;color:var(--dim);margin-top:2px}
-.h{display:flex;gap:8px;margin-bottom:6px;font-size:14px}.h:last-child{margin-bottom:0}.h i{flex:0 0 auto;font-style:normal;color:var(--ok)}.h.no i{color:var(--mut)}.h q{quotes:none;color:var(--dim)}
-.ojo{margin-top:8px;padding:8px 11px;border-radius:10px;background:rgba(255,200,87,.1);color:var(--warn);font-size:13.5px}
-details{margin-top:10px;border-top:1px solid var(--ln);padding-top:8px}summary{cursor:pointer;color:var(--mut);font-size:13px}details div{margin-top:6px;font-size:12.5px;color:var(--dim);white-space:pre-wrap}
+/* ── DERECHA: calendario + franja ── */
+.right{display:flex;flex-direction:column;min-width:0;min-height:0}
+.bar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--ln);background:var(--p1)}
+.bar b{font-size:15px}.bar .now{color:var(--dim);font-size:13.5px}.bar .now i{font-style:normal;color:var(--rojo);font-weight:700}
+.bar .sp{flex:1}
+.bar button{height:34px;padding:0 13px;border-radius:9px;background:var(--p2);border:1px solid var(--ln2);font-size:13px;font-weight:600}
+.bar button.pri{background:var(--rojo);border-color:var(--rojo);color:#fff}.bar button.ok{background:var(--seb);border-color:var(--seb);color:#0b2403}.bar button.no{border-color:rgba(255,77,77,.6);color:#ff8d8d}
+.leg{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:4px 16px;padding:7px 16px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--ln);background:var(--p1)}
+.leg span{display:inline-flex;align-items:center;gap:6px}.leg i{display:inline-block}
+.calwrap{flex:1;min-height:0;overflow:auto;background:#fff;position:relative}
+.cal{position:relative;min-width:100%}
+.dh{position:sticky;top:0;z-index:30;display:flex;background:#fff;border-bottom:1px solid #111;height:34px}
+.dh .g{flex:0 0 54px}.dh div.d{flex:1;min-width:150px;text-align:center;font:700 13px var(--f);color:#111;line-height:34px;border-left:1px solid #111;text-transform:capitalize}
+.dh div.d.hoy{background:#ffecec;color:#c40000}
+.body{position:relative;display:flex}
+.gut{flex:0 0 54px;position:relative}
+.gut span{position:absolute;right:6px;transform:translateY(-50%);font-size:11px;color:#666}
+.dcol{flex:1;min-width:150px;position:relative;border-left:1px solid #111;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--RH) - 1px),#111 calc(var(--RH) - 1px),#111 var(--RH))}
+.dcol .cerrado{position:absolute;left:0;right:0;background:repeating-linear-gradient(45deg,#f0f0f0 0 6px,#fafafa 6px 12px);opacity:.9}
+.visita{position:absolute;left:40px;right:30px;border-radius:12px;background:var(--cita);color:#2a1c00;padding:6px 8px;font:700 12px/1.25 var(--f);z-index:6;overflow:hidden;box-shadow:0 2px 0 rgba(0,0,0,.18);cursor:pointer}
+.visita.abierta{left:40px;right:30px;background:rgba(242,177,60,.28);border:2px dashed var(--cita);box-shadow:none}
+.visita.orig{background:none;border:2px dashed rgba(242,177,60,.7);box-shadow:none;z-index:4}
+.visita.vencida{background:#d9d9d9;color:#444;border:2px dashed #999;box-shadow:none}
+.visita.camino{background:var(--seb);color:#0b2403}.visita.fin{background:#cfd4e0;color:#333}
+.visita small{display:block;font-weight:500;font-size:11px}
+.hilo{position:absolute;left:20px;width:2px;margin-left:-1px;background:#111;z-index:5}
+.pt{position:absolute;left:20px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;z-index:8;cursor:pointer;border:3px solid #fff;box-shadow:0 0 0 1.5px #111}
+.pt.sig{background:var(--rojo)}.pt.prog{background:var(--seb)}.pt.salio{background:#111}.pt.salio::after{content:"✓";position:absolute;inset:0;color:#fff;font:800 12px/16px var(--f);text-align:center}
+.pt.muerto{left:auto;right:3px;margin-left:0;width:18px;height:18px;margin-top:-9px;background:#fff;box-shadow:0 0 0 1.5px var(--gris);opacity:.75}.pt.muerto::after{content:"✕";position:absolute;inset:0;color:var(--gris);font:800 10px/12px var(--f);text-align:center}
+.pt.futuro{background:#fff;box-shadow:0 0 0 1.5px #111;border-style:dashed;border-color:var(--seb)}
+.pt.vend{border-radius:5px}
+.ptl{position:absolute;left:36px;right:26px;background:rgba(255,255,255,.88);border-radius:4px;padding:1px 3px;transform:translateY(-50%);font:600 11px/1.15 var(--f);color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:7;pointer-events:none}
+.ptl.muerto{display:none}.ptl.futuro{color:#555;font-weight:500}
+.evt{position:absolute;left:4px;width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:11px solid var(--cli);margin-top:-7px;z-index:8;cursor:pointer}
+.ahora{position:absolute;left:54px;right:0;height:0;border-top:3px solid var(--rojo);z-index:20;pointer-events:none}
+.perilla{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#000;border:3px solid #fff;box-shadow:0 0 0 2px var(--rojo);z-index:25;cursor:grab;touch-action:none}
+.perilla.arr{cursor:grabbing;box-shadow:0 0 0 3px var(--cita)}
+.ahora.fant{border-top:3px dashed var(--cita)}
+.tip{position:fixed;z-index:60;max-width:340px;padding:10px 12px;border-radius:12px;background:#000;color:#fff;font-size:13px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.45);white-space:pre-wrap}
+.tip b{display:block;font-size:13.5px}.tip span{color:#b9c2d8}.tip .am{color:var(--cita)}
+.tip .bt{display:flex;gap:8px;margin-top:9px}.tip button{height:32px;padding:0 12px;border-radius:8px;font-weight:700;font-size:13px;background:var(--rojo);color:#fff}.tip button.s{background:#2a2f3d}
 
-/* cómo está y qué sigue */
-.real{border:1px solid var(--ln);border-radius:16px;background:var(--p1);padding:18px;margin-bottom:6px}
-.pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:800;background:rgba(61,220,151,.16);color:var(--ok)}
-.pill.w{background:rgba(255,200,87,.16);color:var(--warn)}.pill.m{background:var(--p2);color:var(--dim)}.pill.b{background:rgba(255,107,122,.16);color:var(--bad)}
-.real .big{font-size:22px;font-weight:800;margin:10px 0 3px}.real .sit{color:var(--dim);font-size:14px}
-h3{margin:22px 0 10px;font-size:15px;font-weight:800}h3 small{font-weight:400;color:var(--mut);font-size:13px}
-.sg{display:grid;grid-template-columns:104px 1fr;gap:12px;padding:11px 0;border-top:1px solid var(--ln)}
-.sg:first-of-type{border-top:0}
-.sg .cu{font-size:13px;color:var(--dim);padding-top:2px}.sg .cu b{display:block;color:var(--tx);font-size:14px}
-.sg .q{font-size:14.5px;font-weight:600}.sg .tx{margin-top:4px;color:var(--dim);font-size:13.5px;white-space:pre-wrap}.sg .si{margin-top:3px;font-size:12.5px;color:var(--warn)}
-.sg.prox .q{color:var(--azul)}.sg.lejos{opacity:.7}
-.btns{display:flex;flex-wrap:wrap;gap:8px}
-.btns button,.btns input{height:38px;padding:0 14px;border-radius:10px;background:var(--p2);border:1px solid var(--ln2);font-size:14px;font-weight:600;color:var(--tx)}
-.btns button.pri{background:var(--azul);border-color:var(--azul);color:#04162e}.btns button.ok{background:var(--ok);border-color:var(--ok);color:#04231a}.btns button.no{border-color:rgba(255,107,122,.6);color:var(--bad)}
-.btns input{font-family:var(--f);color-scheme:dark}
-.hint{font-size:13px;color:var(--mut);margin-top:8px}
-.vacio{padding:36px 10px;text-align:center;color:var(--mut)}
-.err{margin:60px auto;max-width:460px;text-align:center;color:var(--dim)}.err b{display:block;color:var(--tx);font-size:16px;margin-bottom:8px}.err a{color:var(--ok)}
-@media (max-width:1100px){body{overflow:auto}.cols{grid-template-columns:1fr;height:auto}.col{border-right:0;border-bottom:1px solid var(--ln);min-height:60vh}}
+/* franja negra: EVENTO → ESTADO → FLUJO */
+.franja{flex:0 0 auto;background:#000;border-top:1px solid #111;padding:14px 18px 16px;max-height:34vh;overflow-y:auto}
+.fr{display:grid;grid-template-columns:1fr 26px 1fr 26px 1.25fr;gap:0;align-items:stretch}
+.fr .fl{display:flex;align-items:center;justify-content:center;color:#666;font-size:20px}
+.fb{padding:2px 4px}.fb label{display:block;font:800 11px var(--f);letter-spacing:.12em;color:#7f8aa8;margin-bottom:4px}
+.fb .big{font-size:18px;font-weight:800;line-height:1.25}.fb .sub{font-size:13px;color:#b9c2d8;margin-top:3px}
+.fb.ev .big{color:var(--cli)}.fb.es .big{color:var(--cita)}.fb.fj .big{color:var(--seb);font-size:15px;font-weight:700}
+.fb .a{color:#7f8aa8;text-decoration:line-through;font-weight:500}
+.fr2{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px;padding-top:9px;border-top:1px solid #1d2230;font-size:12.5px;color:#7f8aa8}
+.fr2 button{height:28px;padding:0 10px;border-radius:7px;background:#151924;border:1px solid #2a3145;color:#cfd6ea;font-size:12.5px}
+.fr2 .sp{flex:1}.fr2 details{flex-basis:100%}.fr2 summary{cursor:pointer}.fr2 details div{margin-top:6px;white-space:pre-wrap;color:#9aa5bf}
+.vacio{padding:30px 10px;text-align:center;color:var(--mut)}
+.err{margin:80px auto;max-width:460px;text-align:center;color:var(--dim)}.err b{display:block;color:var(--tx);font-size:16px;margin-bottom:8px}.err a{color:var(--seb)}
+@media (max-width:900px){body{overflow:auto}.app{grid-template-columns:1fr;height:auto}.chatcol{height:70vh}.right{height:100vh}}
 </style>
 </head>
 <body>
-<div class="top">
-  <h1>Prueba las citas de TERRA</h1>
-  <select id="chats" title="Cliente de prueba"></select>
-  <button class="b pri" id="nuevo">+ Cliente nuevo</button>
-  <button class="b" id="borrar">Borrar</button>
-  <div class="sp"></div>
-  <div class="reloj" id="reloj"></div>
-</div>
-<div class="cols" id="cols">
-  <section class="col">
-    <h2>1 · Escribe como el cliente</h2>
-    <div class="scr" id="chatScr"><div class="chat" id="chat"></div></div>
+<div class="app" id="app">
+  <section class="chatcol">
+    <div class="chead"><select id="chats" title="Cliente de prueba"></select><button id="nuevo">+ Cliente</button><button class="x" id="borrar" title="Borrar este cliente">🗑</button></div>
+    <div class="cscr" id="chatScr"><div class="chat" id="chat"></div></div>
     <div class="chips" id="chips"></div>
-    <div class="comp"><textarea id="tx" rows="1" placeholder="Por ejemplo: voy el sábado como a las 5"></textarea><button id="send" aria-label="Enviar">➤</button></div>
+    <div class="comp"><textarea id="tx" rows="1" placeholder="Escribe como el cliente…"></textarea><button id="send" aria-label="Enviar">➤</button></div>
   </section>
-  <section class="col">
-    <h2>2 · Qué entendió y qué hizo</h2>
-    <div class="scr" id="ops"></div>
-  </section>
-  <section class="col">
-    <h2>3 · Cómo está la visita y qué sigue</h2>
-    <div class="scr" id="fut"></div>
+  <section class="right">
+    <div class="bar"><b id="titulo">Calendario de la visita</b><span class="now" id="now"></span><div class="sp"></div>
+      <button class="pri" id="bSig" title="Adelanta el reloj hasta la siguiente acción programada">▶ Que pase lo siguiente</button><button id="bHoy">Volver a hoy</button><button class="ok" id="bLlego">Sí llegó</button><button class="no" id="bNo">No llegó</button></div>
+    <div class="leg"><span><i style="width:14px;height:14px;border-radius:4px;background:var(--cita)"></i>la visita</span><span><i style="width:12px;height:12px;border-radius:50%;background:var(--rojo)"></i>lo siguiente que va a pasar</span><span><i style="width:12px;height:12px;border-radius:50%;background:var(--seb)"></i>programado</span><span><i style="width:12px;height:12px;border-radius:50%;background:#111"></i>ya salió</span><span><i style="width:12px;height:12px;border-radius:50%;border:1.5px solid var(--gris)"></i>✕ a la derecha = cancelado por el último cambio</span><span><i style="width:12px;height:12px;border-radius:50%;border:2px dashed var(--seb)"></i>vendría después</span><span><i style="width:12px;height:12px;border-radius:3px;background:var(--seb)"></i>cuadrado = aviso a ti</span><span><i style="width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:10px solid var(--cli)"></i>algo que dijo el cliente</span><span>⬤ arrastra la perilla negra para mover el tiempo</span></div>
+    <div class="calwrap" id="calwrap"><div class="cal" id="cal"></div></div>
+    <div class="franja" id="franja"></div>
   </section>
 </div>
+<div class="tip" id="tip" hidden></div>
 <script>
 const API = '/api/seb-panel'; const QS = new URLSearchParams(location.search); const VEND = QS.get('vendedor') || '9';
 const $ = id => document.getElementById(id);
@@ -112,130 +122,143 @@ const clave = p => p + ':' + Date.now() + ':' + Math.random().toString(36).slice
 async function get(action, params){ const r = await fetch(API + '?action=' + action + '&vendedor=' + encodeURIComponent(VEND) + (params ? '&' + new URLSearchParams(params) : ''), { credentials: 'same-origin' }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); j._status = r.status; return j; }
 async function post(action, body){ const r = await fetch(API + '?action=' + action + '&vendedor=' + encodeURIComponent(VEND), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action, vendedor: VEND }, body || {})) }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); j._status = r.status; return j; }
 
-let TEN = null, CHAT = null, OCUPADO = false, TURNOS = [], EST = null;
+let TEN = null, CHAT = null, OCUPADO = false, TURNOS = [], VER = 0, EST = null, GEO = null;
 const FRASES = ['voy el sábado como a las 5', 'paso entre viernes y sábado', 'mejor a las 6', 'se me hizo tarde', 'hoy no alcanzo', 'yo te aviso', 'ya voy', 'ya llegué', 'mejor el jueves a las 5. ¿Aceptan crédito?'];
 const EST_TXT = { viva: 'Visita viva', en_camino: 'Viene en camino', pospuesta: 'Sin fecha', realizada: 'Sí asistió', cancelada: 'Canceló', no_llego: 'No asistió', sin_cierre: 'Sin cierre', reemplazada: 'Reemplazada' };
-// lo que ENTENDIÓ, dicho en cristiano
-const ENTENDI = { agenda_o_cambio: 'Dijo cuándo viene', confirma: 'Confirmó que viene', se_retrasa: 'Va tarde', promete_avisar: 'Dijo “yo te aviso” (se queda sin fecha)', ya_voy: 'Ya viene en camino', ya_llegue: 'Ya llegó', ya_fue: 'Dice que ya fue', se_complico: 'No alcanza a venir', cancela: 'Canceló', cambia_auto: 'Quiere ver otro auto', incierto: 'No quedó claro si viene', no_es_de_cita: 'No habló de la visita', otra_cosa: 'Dijo algo de la visita que no sé resolver', intencion: 'Quiere venir, pero no dijo qué día' };
-// lo que SIGUE, dicho en cristiano
-const SIGUE = { r1: 'Le recuerdo su visita', vispera: 'Le recuerdo que es mañana', dia: 'Le pregunto si sigue en pie', dia_multi: 'Le digo que hoy lo esperamos', dia_ultimo: 'Le pregunto si alcanza a venir hoy', empujon: 'Le vuelvo a preguntar', marcar: 'Te aviso a ti para que le marques', marcar_pregunta: 'Te aviso a ti para que le marques', me_avisas: 'Le pido que avise cuando venga', revision_suave: 'Le recuerdo que hoy también puede pasar', vence: 'Se acaba su ventana sin que llegara', aclaracion: 'Le pregunto si fue o si todavía viene' };
-const SI = { r1: 'No sale si platicó hace poco', dia: 'No sale si ya confirmó', empujon: 'Solo si no contestó', marcar: 'Solo si sigue sin contestar', marcar_pregunta: 'Solo si no contestó', me_avisas: 'Solo si ya confirmó el día' };
+const ENTENDI = { agenda_o_cambio: 'Dijo cuándo viene', confirma: 'Confirmó que viene', se_retrasa: 'Va tarde', promete_avisar: 'Dijo “yo te aviso”', ya_voy: 'Ya viene en camino', ya_llegue: 'Ya llegó', ya_fue: 'Dice que ya fue', se_complico: 'No alcanza a venir', cancela: 'Canceló', cambia_auto: 'Quiere ver otro auto', incierto: 'No quedó claro si viene', no_es_de_cita: 'No habló de la visita', otra_cosa: 'Dijo algo de la visita que no sé resolver', intencion: 'Quiere venir, pero no dijo qué día' };
+const SIGUE = { r1: 'Le recuerdo su visita', vispera: 'Le recuerdo que es mañana', dia: 'Le pregunto si sigue en pie', dia_multi: 'Le digo que hoy lo esperamos', dia_ultimo: 'Le pregunto si alcanza a venir hoy', empujon: 'Le vuelvo a preguntar', marcar: 'Te aviso: márcale', marcar_pregunta: 'Te aviso: márcale', me_avisas: 'Le pido que avise cuando venga', revision_suave: 'Le recuerdo que hoy puede pasar', vence: 'Se acaba su ventana', aclaracion: 'Le pregunto si fue o si viene' };
 const corto = (x, n) => { x = String(x || '').replace(/\s*\n\s*/g, ' · '); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
+// tiempo de Monterrey (UTC-6 fijo, igual que el motor)
+const TZ = 6 * 3600000, DIA = 86400000, H0 = 7, H1 = 22;
+const dia0 = ts => Math.floor((ts - TZ) / DIA) * DIA + TZ;
+const horaF = ts => ((ts - TZ) % DIA + DIA) % DIA / 3600000;
+const DS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const fmt = ts => { const d = new Date(ts - TZ); let h = d.getUTCHours(); const m = d.getUTCMinutes(), ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return DS[d.getUTCDay()].slice(0, 3) + ' ' + d.getUTCDate() + ' · ' + h + (m ? ':' + String(m).padStart(2, '0') : '') + ' ' + ap; };
+const RH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--RH')) || 40;
 
-function pill(c){ if (!c) return '<span class="pill m">Sin visita</span>'; const venc = c.vencida || (c.banderas && c.banderas.ultima_palabra === 'ventana_vencida'); const cl = c.estado === 'realizada' ? '' : (['cancelada', 'no_llego'].includes(c.estado) ? 'b' : (c.estado === 'pospuesta' ? 'm' : (venc || c.en_duda ? 'w' : ''))); return '<span class="pill ' + cl + '">' + esc(venc ? 'Se venció sin que llegara' : (c.en_duda && c.estado === 'viva' ? 'Fecha por definir' : (EST_TXT[c.estado] || c.estado))) + '</span>'; }
-function resumenFoto(f){ if (!f) return 'sin visita'; if (f.estado === 'pospuesta') return 'sin fecha'; if (f.estado === 'realizada') return 'sí asistió'; if (f.estado === 'cancelada') return 'cancelada'; if (f.estado === 'no_llego') return 'no asistió'; const bd = f.banderas || {}; if (bd.ultima_palabra === 'ventana_vencida') return 'se venció sin que llegara'; if (bd.en_duda) return 'fecha por definir (ya no aplica ' + f.cuando + ')'; if (bd.ultima_palabra === 'se_retrasa' && f.estado !== 'en_camino') return 'hoy, hora por confirmar'; return (f.estado === 'en_camino' ? 'en camino · ' : '') + f.cuando + (f.auto ? ' · ' + f.auto : ''); }
+// ═══ CALENDARIO: puro reflejo de lo que devuelve el motor (citaf_estado). Aquí no se decide nada. ═══
+function items(r){ const c = r.cita; if (!c) return []; const a = [];
+  (r.casillas || []).forEach(k => { if (k.estado === 'cancelada' || k.estado === 'saltada') { if (k.version >= c.version - 1) a.push(Object.assign({ cls: 'muerto' }, k)); } else if (k.estado === 'enviada') a.push(Object.assign({ cls: 'salio' }, k)); else a.push(Object.assign({ cls: 'prog' }, k)); });
+  (r.proyeccion || []).forEach(k => a.push(Object.assign({ cls: 'futuro' }, k)));
+  a.sort((x, y) => x.due_ts - y.due_ts); const s = a.find(k => k.cls === 'prog'); if (s) s.cls = 'sig'; return a; }
+function pintarCal(){
+  const r = EST, el = $('cal'); if (!r || !r.ok) { el.innerHTML = '<div class="vacio" style="color:#666">' + esc((r && r.error) || 'Crea un cliente para empezar.') + '</div>'; return; }
+  const now = r.reloj.ahora_ts, c = r.cita, its = items(r); $('now').innerHTML = 'ahora en la prueba: <i>' + esc(r.reloj.ahora) + '</i>' + (r.reloj.virtual ? ' · tiempo adelantado' : '');
+  $('titulo').textContent = c ? ((c.vencida ? 'Se venció sin que llegara' : (EST_TXT[c.estado] || c.estado)) + (c.estado === 'pospuesta' ? '' : ' · ' + (c.vencida ? c.ventana : c.cuando))) : 'Todavía no hay visita';
+  const ts = [now]; if (c && c.estado !== 'pospuesta') ts.push(c.ini_ts, c.fin_ts, c.ini0_ts || c.ini_ts, c.fin0_ts || c.fin_ts); its.forEach(k => ts.push(k.due_ts)); (r.eventos || []).forEach(e => { if (e.ts > now - 4 * DIA) ts.push(e.ts); });
+  let d0 = dia0(Math.max(Math.min.apply(null, ts), now - 5 * DIA)), d1 = dia0(Math.max.apply(null, ts)); if (d1 - d0 < 4 * DIA) d1 = d0 + 4 * DIA; if (d1 - d0 > 13 * DIA) d1 = d0 + 13 * DIA;
+  const dias = []; for (let d = d0; d <= d1; d += DIA) dias.push(d); const rh = RH(), Y = ts => (Math.min(H1, Math.max(H0, horaF(ts))) - H0) * rh, alto = (H1 - H0) * rh;
+  GEO = { d0, dias, rh, now };
+  let h = '<div class="dh"><div class="g"></div>' + dias.map(d => { const x = new Date(d - TZ + 12 * 3600000); return '<div class="d' + (d === dia0(now) ? ' hoy' : '') + '">' + DS[x.getUTCDay()].slice(0, 3) + ' ' + x.getUTCDate() + '</div>'; }).join('') + '</div><div class="body" id="cbody" style="height:' + alto + 'px"><div class="gut">';
+  for (let hh = H0 + 1; hh < H1; hh++) h += '<span style="top:' + ((hh - H0) * rh) + 'px">' + (hh % 12 || 12) + (hh >= 12 ? ' pm' : ' am') + '</span>'; h += '</div>';
+  dias.forEach((d, di) => {
+    const dw = new Date(d - TZ + 12 * 3600000).getUTCDay(), hr = (r.horario || {})[dw]; let col = '';
+    if (hr) col += '<div class="cerrado" style="top:0;height:' + ((hr[0] - H0) * rh) + 'px"></div><div class="cerrado" style="top:' + ((hr[1] - H0) * rh) + 'px;bottom:0"></div>'; else col += '<div class="cerrado" style="top:0;bottom:0"></div>';
+    if (c && c.estado !== 'pospuesta') {
+      const tramo = (a, b, cls, txt) => { if (dia0(a) !== d && dia0(b) !== d) return ''; const y = Y(a), hh2 = Math.max(a === b ? rh : 18, Y(b) - y); return '<div class="visita ' + cls + '" data-v="1" style="top:' + y + 'px;height:' + hh2 + 'px">' + txt + '</div>'; };
+      const abre = d + (hr ? hr[0] : H0) * 3600000, cierra = d + (hr ? hr[1] : H1) * 3600000;
+      if (c.ventana_original && c.viva) { const o0 = Math.max(c.ini0_ts, abre), o1 = Math.min(c.fin0_ts, cierra); if (o1 > o0) col += tramo(o0, o1, 'orig', ''); }
+      const exacta = c.precision === 'hora'; const cls = c.vencida ? 'vencida' : (c.estado === 'en_camino' ? 'camino' : (!c.viva ? 'fin' : (exacta ? '' : 'abierta')));
+      const a0 = exacta ? c.ini_ts : Math.max(c.ini_ts, abre), a1 = exacta ? c.ini_ts : Math.min(c.fin_ts, cierra);
+      if (dia0(a0) === d && a1 >= a0) col += tramo(a0, a1, cls, 'VISITA' + (c.vencida ? ' VENCIDA' : '') + '<small>' + esc(exacta ? fmt(c.ini_ts).split(' · ')[1] : (c.precision === 'franja' ? 'entre ' + fmt(c.ini_ts).split(' · ')[1] + ' y ' + fmt(c.fin_ts).split(' · ')[1] : 'hora abierta')) + '</small><small>' + esc(c.auto || '') + '</small>');
+    }
+    const mios = its.map((k, i) => Object.assign({ i }, k)).filter(k => dia0(k.due_ts) === d);
+    const ys = mios.filter(k => k.cls !== 'muerto').map(k => Y(k.due_ts)); if (c && c.estado !== 'pospuesta' && dia0(c.ini_ts) === d) ys.push(Y(c.ini_ts)); if (ys.length > 1) col += '<div class="hilo" style="top:' + Math.min.apply(null, ys) + 'px;height:' + (Math.max.apply(null, ys) - Math.min.apply(null, ys)) + 'px"></div>';
+    let yPrev = -99, yPrevM = -99; mios.forEach(k => { let y = Y(k.due_ts); if (k.cls === 'muerto') { if (y - yPrevM < 20) y = yPrevM + 20; yPrevM = y; } else { if (y - yPrev < 24) y = yPrev + 24; yPrev = y; } col += '<div class="pt ' + k.cls + (k.para === 'vendedor' ? ' vend' : '') + '" data-k="' + k.i + '" style="top:' + y + 'px"></div><div class="ptl ' + k.cls + '" style="top:' + y + 'px">' + esc(fmt(k.due_ts).split(' · ')[1] + ' ' + (SIGUE[k.tipo] || k.tipo)) + '</div>'; });
+    (r.eventos || []).forEach((e, ei) => { if (dia0(e.ts) === d && e.dijo) col += '<div class="evt" data-e="' + ei + '" style="top:' + Y(e.ts) + 'px"></div>'; });
+    h += '<div class="dcol" data-d="' + di + '">' + col + '</div>';
+  });
+  h += '<div class="ahora" id="lnow" style="top:' + Y(now) + 'px"></div><div class="ahora fant" id="lfant" hidden></div><div class="perilla" id="perilla"></div></div>';
+  el.innerHTML = h; ponerPerilla(now, false); engancharCal(its);
+  const w = $('calwrap'); if (!w.dataset.visto) { w.dataset.visto = '1'; w.scrollTop = Math.max(0, Y(now) - 160); }
+}
+function xyDe(ts){ const b = $('cbody'); const cols = b.querySelectorAll('.dcol'); const di = Math.max(0, Math.min(GEO.dias.length - 1, Math.round((dia0(ts) - GEO.d0) / DIA))); const c = cols[di]; return { x: c.offsetLeft + c.offsetWidth / 2, y: (Math.min(H1, Math.max(H0, horaF(ts))) - H0) * GEO.rh }; }
+function ponerPerilla(ts, fant){ const p = $('perilla'), q = xyDe(ts); p.style.left = q.x + 'px'; p.style.top = q.y + 'px'; const f = $('lfant'); f.hidden = !fant; if (fant) f.style.top = q.y + 'px'; }
+function tsDeXY(cx, cy){ const b = $('cbody'), rc = b.getBoundingClientRect(), cols = [...b.querySelectorAll('.dcol')]; const x = cx - rc.left, y = cy - rc.top; let di = cols.findIndex(c => x >= c.offsetLeft && x < c.offsetLeft + c.offsetWidth); if (di < 0) di = x < cols[0].offsetLeft ? 0 : cols.length - 1; const hh = Math.min(H1, Math.max(H0, H0 + y / GEO.rh)); return Math.round((GEO.dias[di] + hh * 3600000) / 900000) * 900000; }
+function tip(html, x, y){ const t = $('tip'); t.innerHTML = html; t.hidden = false; const w = t.offsetWidth, hh = t.offsetHeight; t.style.left = Math.max(8, Math.min(innerWidth - w - 8, x + 14)) + 'px'; t.style.top = Math.max(8, Math.min(innerHeight - hh - 8, y + 14)) + 'px'; }
+const sinTip = () => { $('tip').hidden = true; };
+function engancharCal(its){
+  const b = $('cbody'); if (!b) return;
+  b.onclick = (e) => { if (e.target.closest('.perilla')) return; const k = e.target.closest('.pt'), ev = e.target.closest('.evt'), v = e.target.closest('.visita');
+    if (k) { const it = its[Number(k.dataset.k)]; const est = { sig: 'Es lo siguiente que va a pasar', prog: 'Programado', salio: 'Ya salió', muerto: 'Ya no aplica', futuro: 'Vendría después, si nadie dice nada' }[it.cls]; tip('<b>' + esc(SIGUE[it.tipo] || it.tipo) + '</b><span>' + esc(fmt(it.due_ts)) + ' · ' + esc(est) + ' · ' + (it.para === 'comprador' ? 'mensaje al cliente' : (it.para === 'vendedor' ? 'aviso a ti' : 'paso interno')) + '</span>' + (it.motivo ? '\n<span class="am">Por qué: ' + esc(it.motivo) + '</span>' : '') + (it.condicion ? '\n<span class="am">' + esc(it.condicion) + '</span>' : '') + ((it.texto || it.previa) ? '\n“' + esc(it.texto || it.previa) + '”' : '') + (it.efecto ? '\n<span>' + esc(it.efecto) + '</span>' : ''), e.clientX, e.clientY); e.stopPropagation(); return; }
+    if (ev) { const x = EST.eventos[Number(ev.dataset.e)]; tip('<b>El cliente dijo</b>“' + esc(x.dijo) + '”\n<span>' + esc(fmt(x.ts)) + ' · se entendió como: ' + esc(String(x.evento).replace(/_/g, ' ')) + (x.antes ? ' · antes: ' + esc(x.antes) : '') + '</span>', e.clientX, e.clientY); e.stopPropagation(); return; }
+    if (v) { const c = EST.cita; tip('<b>' + esc(EST_TXT[c.estado] || c.estado) + '</b><span>' + esc(c.situacion || '') + '\nVentana: ' + esc(c.ventana) + (c.ventana_original ? '\nVentana original: ' + esc(c.ventana_original) : '') + '</span>', e.clientX, e.clientY); e.stopPropagation(); return; }
+    sinTip(); };
+  // PERILLA: arrastrar = mirar; al soltar se ofrece llevar el reloj hasta ahí (eso sí ejecuta, con el reloj real del motor)
+  const p = $('perilla'); let T = null;
+  p.onpointerdown = (e) => { if (OCUPADO) return; p.setPointerCapture(e.pointerId); p.classList.add('arr'); sinTip(); e.preventDefault(); };
+  p.onpointermove = (e) => { if (!p.classList.contains('arr')) return; T = tsDeXY(e.clientX, e.clientY); ponerPerilla(T, true); const now = GEO.now; const sal = its.filter(k => (k.cls === 'sig' || k.cls === 'prog' || k.cls === 'futuro') && k.due_ts > now && k.due_ts <= T);
+    tip('<b>' + esc(fmt(T)) + '</b>' + (T <= now ? '<span>Eso ya pasó. El tiempo solo avanza.</span>' : '<span>Si nadie dice nada hasta aquí, pasaría:</span>\n' + (sal.length ? sal.map(k => '• ' + esc(fmt(k.due_ts).split(' · ').join(' ')) + ' — ' + esc(SIGUE[k.tipo] || k.tipo)).join('\n') : '• nada todavía')), e.clientX, e.clientY); };
+  p.onpointerup = () => { if (!p.classList.contains('arr')) return; p.classList.remove('arr'); const now = GEO.now; if (!T || T <= now) { ponerPerilla(now, false); sinTip(); T = null; return; } const t2 = T; T = null; const ti = $('tip'); ti.insertAdjacentHTML('beforeend', '<div class="bt"><button id="tIr">Llevar el tiempo hasta aquí</button><button class="s" id="tNo">Cancelar</button></div>'); $('tIr').onclick = () => { sinTip(); reloj({ accion: 'ir', ts: t2 }); }; $('tNo').onclick = () => { sinTip(); ponerPerilla(now, false); }; };
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('#tip') && !e.target.closest('#cbody')) sinTip(); });
 
-function turnoHTML(t, i){
-  const viejo = i > 0; let h = '', res = '';
-  const H = (txt, cita) => '<div class="h"><i>✓</i><span>' + txt + (cita ? ' <q>“' + esc(corto(cita, 150)) + '”</q>' : '') + '</span></div>';
+// ═══ FRANJA NEGRA: EVENTO → ESTADO → FLUJO (del turno que estás viendo) ═══
+function resumenFoto(f){ if (!f) return 'sin visita'; if (f.estado === 'pospuesta') return 'sin fecha'; if (f.estado === 'realizada') return 'sí asistió'; if (f.estado === 'cancelada') return 'cancelada'; if (f.estado === 'no_llego') return 'no asistió'; const bd = f.banderas || {}; if (bd.ultima_palabra === 'ventana_vencida') return 'se venció sin que llegara'; if (bd.en_duda) return 'fecha por definir'; if (bd.ultima_palabra === 'se_retrasa' && f.estado !== 'en_camino') return 'hoy, hora por confirmar'; return (f.estado === 'en_camino' ? 'en camino · ' : '') + f.cuando; }
+function pintarFranja(){
+  const el = $('franja'); if (!TURNOS.length) { el.innerHTML = '<div class="fr"><div class="fb ev"><label>EVENTO</label><div class="big" style="color:#555">—</div><div class="sub">lo que entendí de lo que pasó</div></div><div class="fl">→</div><div class="fb es"><label>ESTADO</label><div class="big" style="color:#555">—</div><div class="sub">cómo quedó la visita</div></div><div class="fl">→</div><div class="fb fj"><label>FLUJO</label><div class="big" style="color:#555">—</div><div class="sub">qué hice y qué quedó programado</div></div></div>'; return; }
+  const t = TURNOS[VER]; let ev = '', evs = '', es = '', ess = '', fj = [], det = [];
+  const sig = EST && EST.cita ? items(EST).find(k => k.cls === 'sig') : null; const sigTxt = VER === 0 ? (sig ? 'Sigue: ' + fmt(sig.due_ts) + ' — ' + (SIGUE[sig.tipo] || sig.tipo) : 'No queda nada programado') : '';
   if (t.tipo === 'mensaje') {
     const T = t.traza || {}, L = T.lectura || {}, A = T.acciones || {}; const deCita = t.evento && !['no_es_de_cita', 'intencion'].includes(t.evento);
-    let ent = ENTENDI[t.evento] || ENTENDI[L.evento] || 'No habló de la visita'; if (t.evento === 'agenda_o_cambio') ent = T.antes && T.antes.estado !== 'pospuesta' ? 'Cambió el cuándo' : (T.antes ? 'Ya dio fecha otra vez' : 'Agendó una visita');
-    h += '<div class="dijo"><span>El cliente dijo</span>“' + esc(t.texto) + '”</div>';
-    h += '<div class="fila"><label>ENTENDÍ</label><div><div class="ent">' + esc(ent) + '<small>' + esc(corto(L.razon || '', 170)) + '</small></div>' + ((T.ajustes || []).length ? '<div class="ojo">' + T.ajustes.map(esc).join('<br>') + '</div>' : '') + '</div></div>';
-    const a = resumenFoto(T.antes), d = resumenFoto(T.despues);
-    h += '<div class="fila"><label>LA VISITA</label><div>' + (!deCita ? '<div class="cam igual">No cambió' + (T.antes ? ' (' + esc(a) + ')' : '') + '</div>' : (a === d ? '<div class="cam igual">Sigue igual: ' + esc(d) + '<small>' + esc(T.despues ? T.despues.situacion : '') + '</small></div>' : '<div class="cam">' + (T.antes ? '<span class="a">' + esc(a) + '</span><span class="fl">→</span>' : '') + '<span class="d">' + esc(d) + '</span><small>' + esc(T.despues ? T.despues.situacion : '') + '</small></div>')) + '</div></div>';
-    let hice = '';
-    if (T.comercial) hice += T.comercial.respondida ? H('También preguntó “' + esc(corto(T.comercial.texto, 60)) + '” y Seb se lo contestó:', ((t.comercial && t.comercial.textos) || []).join(' · ')) : H('También preguntó “' + esc(corto(T.comercial.texto, 60)) + '”: te avisé para que se lo contestes tú');
-    if (deCita) {
-      const msgs = (A.mensajes || []).filter(x => !/^📍/.test(x)); if (msgs.length) hice += H('Le contesté:', msgs.join(' · ')); if ((A.mensajes || []).some(x => /^📍/.test(x))) hice += H('Le mandé la ubicación');
-      (A.avisos_vendedor || []).forEach(x => hice += H('Te avisé a ti:', x));
-      const nc = (A.recordatorios_cancelados || []).length, nn = (A.recordatorios_creados || []).length;
-      if (nc && nn) hice += H('Cancelé ' + nc + ' mensajes programados que ya no aplicaban y programé ' + nn + ' nuevos'); else if (nc) hice += H('Cancelé ' + nc + ' mensajes programados que ya no aplican'); else if (nn) hice += H('Programé ' + nn + ' mensajes (míralos en la columna 3)');
-      if (!hice) hice = '<div class="h no"><i>·</i><span>Nada: no hacía falta.</span></div>';
-    } else {
-      const sb = t.seb || {}; if ((sb.textos || []).length) hice += H('Seb le contestó:', sb.textos.join(' · ')); else if (sb.escalar) hice += H('No le contesté: te lo pasé a ti', sb.escala_motivo || ''); else hice += '<div class="h no"><i>·</i><span>Seb no contestó nada' + (sb.motivo ? ' (' + esc(sb.motivo) + ')' : '') + '.</span></div>';
-    }
-    h += '<div class="fila"><label>HICE</label><div>' + hice + '</div></div>';
-    const det = []; if (L.evento) det.push((T.sin_ia ? 'Lo resolvió una regla fija, sin gastar IA.' : 'Lo interpretó la IA (confianza ' + (L.confianza || '?') + ').') + ' Evento interno: ' + L.evento); ['dia_ini', 'dia_fin', 'hora_ini', 'hora_fin', 'franja', 'minutos_tarde', 'auto_texto', 'restriccion', 'asiste', 'condicion', 'motivo'].forEach(k => { if (L[k]) det.push(k + ': ' + L[k]); });
+    ev = ENTENDI[t.evento] || ENTENDI[L.evento] || 'No habló de la visita'; if (t.evento === 'agenda_o_cambio') ev = T.antes && T.antes.estado !== 'pospuesta' ? 'Cambió el cuándo' : (T.antes ? 'Dio fecha otra vez' : 'Agendó una visita');
+    evs = '“' + corto(t.texto, 90) + '”' + ((T.ajustes || []).length ? '\n⚠ ' + T.ajustes.join(' · ') : '');
+    const a = resumenFoto(T.antes), d = resumenFoto(T.despues); const eA = T.antes ? (EST_TXT[T.antes.estado] || T.antes.estado) : null, eD = T.despues ? (EST_TXT[T.despues.estado] || T.despues.estado) : 'Sin visita';
+    if (!deCita) { es = esc(T.antes ? eA : 'Sin visita'); ess = 'No cambió' + (T.antes ? ': ' + a : ''); } else { es = (eA && eA !== eD ? '<span class="a">' + esc(eA) + '</span> → ' : '') + esc(eD); ess = (T.antes && a !== d ? a + ' → ' : '') + d; }
+    if (T.comercial) fj.push(T.comercial.respondida ? 'Seb contestó la parte comercial (“' + corto(T.comercial.texto, 40) + '”)' : 'Te pasé la pregunta comercial a ti');
+    if (deCita) { const msgs = (A.mensajes || []).filter(x => !/^📍/.test(x)); if (msgs.length) fj.push('Le contesté: “' + corto(msgs.join(' · '), 110) + '”'); if ((A.mensajes || []).some(x => /^📍/.test(x))) fj.push('Le mandé la ubicación'); (A.avisos_vendedor || []).forEach(x => fj.push('Te avisé: “' + corto(x, 100) + '”')); const nc = (A.recordatorios_cancelados || []).length, nn = (A.recordatorios_creados || []).length; if (nc || nn) fj.push((nc ? 'Cancelé ' + nc + ' programados' : '') + (nc && nn ? ' · ' : '') + (nn ? 'Programé ' + nn + ' nuevos' : '')); }
+    else { const sb = t.seb || {}; fj.push((sb.textos || []).length ? 'Seb contestó: “' + corto(sb.textos.join(' · '), 120) + '”' : (sb.escalar ? 'No contesté: te lo pasé a ti (' + (sb.escala_motivo || '') + ')' : 'Seb no contestó nada')); }
+    if (L.evento) det.push((T.sin_ia ? 'Regla fija, sin gastar IA.' : 'Lo interpretó la IA (confianza ' + (L.confianza || '?') + ').') + ' Evento interno: ' + L.evento + (L.razon ? '\nRazón: ' + L.razon : '')); ['dia_ini', 'dia_fin', 'hora_ini', 'hora_fin', 'franja', 'minutos_tarde', 'auto_texto', 'restriccion', 'asiste', 'condicion', 'motivo'].forEach(k => { if (L[k]) det.push(k + ': ' + L[k]); });
     (A.recordatorios_cancelados || []).forEach(k => det.push('Cancelado: ' + (SIGUE[k.tipo] || k.tipo) + ' (' + k.cuando + ') — ' + (k.motivo || ''))); (A.recordatorios_creados || []).forEach(k => det.push('Programado: ' + (SIGUE[k.tipo] || k.tipo) + ' (' + k.cuando + ')'));
-    if (det.length) h += '<details><summary>Ver detalle técnico</summary><div>' + esc(det.join('\n')) + '</div></details>';
-    res = ent + (deCita && a !== d ? ' → ' + d : '');
   } else if (t.tipo === 'reloj') {
-    h += '<div class="dijo"><span>Pasó el tiempo</span>Ahora es ' + esc(t.ahora || '') + '</div>';
-    const sal = (t.hechas || []).filter(k => k.salio), no = (t.hechas || []).filter(k => !k.salio); let x = '';
-    sal.forEach(k => x += H(esc(SIGUE[k.tipo] || k.tipo) + (k.para === 'comprador' ? ':' : ''), k.para === 'comprador' ? k.texto : '')); no.forEach(k => x += '<div class="h no"><i>✕</i><span>No salió “' + esc(SIGUE[k.tipo] || k.tipo) + '”: ' + esc(k.motivo || '') + '</span></div>');
-    h += '<div class="fila"><label>PASÓ</label><div>' + (x || '<div class="h no"><i>·</i><span>Nada: todavía no tocaba ningún mensaje.</span></div>') + '</div></div>'; res = sal.length ? sal.map(k => SIGUE[k.tipo] || k.tipo).join(' · ') : 'no tocaba nada';
-  } else {
-    h += '<div class="dijo"><span>Tú, como vendedor</span>' + esc(t.titulo.replace(/^Vendedor: /, '')) + '</div><div class="fila"><label>RESULTADO</label><div>' + (t.ok ? '<div class="cam"><span class="d">' + esc(t.res && t.res.estado ? (EST_TXT[t.res.estado] || t.res.estado) : 'Listo') + '</span></div>' : '<div class="ojo">' + esc(t.error || 'No se pudo') + '</div>') + '</div></div>'; res = t.ok ? 'listo' : 'no se pudo';
-  }
-  return '<div class="t ' + (viejo ? 'viejo' : 'ult') + '">' + h + '<div class="res">' + esc(res) + '</div></div>';
-}
-function pintarOps(){ $('ops').innerHTML = TURNOS.length ? TURNOS.map(turnoHTML).join('') : '<div class="vacio">Escribe algo como cliente y aquí verás, en tres renglones, qué entendí, cómo quedó la visita y qué hice.</div>'; $('ops').scrollTop = 0; }
-
-function pintarFut(){
-  const r = EST, el = $('fut'); if (!r || !r.ok) { el.innerHTML = '<div class="vacio">' + esc((r && r.error) || 'Crea un cliente para empezar.') + '</div>'; return; }
-  $('reloj').innerHTML = 'En la prueba hoy es <b>' + esc(r.reloj.ahora) + '</b>';
-  const c = r.cita; let h = '';
-  if (!c) { el.innerHTML = '<div class="real">' + pill(null) + '<div class="big">Todavía no hay visita</div><div class="sit">Nace sola cuando el cliente dice un día: “voy el sábado”, “mañana en la tarde”, “entre viernes y sábado”.</div></div>' + masHTML(null); return; }
-  h += '<div class="real">' + pill(c) + '<div class="big">' + esc(c.estado === 'pospuesta' ? 'Sin fecha' : (c.vencida ? 'Era ' + c.ventana : (c.en_duda && c.estado === 'viva' ? 'Ya no aplica: ' + c.cuando : c.cuando))) + '</div><div class="sit">' + esc(c.auto || 'Sin auto') + (c.resultado ? ' · ' + esc(c.resultado) : '') + '</div><div class="sit" style="margin-top:6px">' + esc(c.situacion || '') + '</div></div>';
-  const lista = (r.casillas || []).filter(k => k.estado === 'pendiente').concat(r.proyeccion || []).sort((a, b) => a.due_ts - b.due_ts);
-  h += '<h3>Lo que sigue <small>si el cliente no dice nada</small></h3>';
-  if (!lista.length) h += '<p class="hint" style="margin-top:0">' + (c.estado === 'pospuesta' ? 'Nada. Sin fecha no se le persigue: vuelve a activarse cuando diga un día o diga “ya voy”.' : (c.vencida ? 'Nada más. Ya se le preguntó si fue o si todavía viene; si no contesta no se concluye nada. Decide él o decides tú con los botones.' : (c.viva ? 'Nada programado.' : 'Nada: esta visita ya terminó.'))) + '</p>';
-  lista.forEach((k, i) => { const p = String(k.cuando).split(' · '); h += '<div class="sg' + (i === 0 ? ' prox' : '') + '"><div class="cu"><b>' + esc(p[0] || '') + '</b>' + esc(p[1] || '') + '</div><div><div class="q">' + esc(SIGUE[k.tipo] || k.texto_tipo || k.tipo) + '</div>' + (k.previa && k.para === 'comprador' ? '<div class="tx">“' + esc(k.previa) + '”</div>' : (k.tipo === 'vence' ? '<div class="tx">La visita NO se cancela: sigue viva, te aviso a ti y a la mañana siguiente le pregunto.</div>' : '')) + (SI[k.tipo] ? '<div class="si">' + esc(SI[k.tipo]) + '</div>' : '') + '</div></div>'; });
-  if (lista.length) h += '<div class="btns" style="margin-top:14px"><button class="pri" data-r="siguiente">▶ Que pase lo siguiente</button><button data-m="86400000">+1 día</button><button data-r="reset">Volver a hoy</button></div><p class="hint">Adelanta el tiempo para ver qué sale. Lo que pase aparece en la columna 2.</p>';
-  if (c.viva || c.estado === 'realizada') h += '<h3>' + (c.estado === 'realizada' ? '¿Cómo le fue?' : '¿Llegó el cliente?') + '</h3><div class="btns">' + (c.estado === 'realizada' ? ['compró', 'apartó', 'no compró', 'sigue pensando'].map(x => '<button data-res="' + x + '"' + (c.resultado === x ? ' class="ok"' : '') + '>' + x.charAt(0).toUpperCase() + x.slice(1) + '</button>').join('') : '<button class="ok" data-v="llego">Sí llegó</button><button class="no" data-v="no_llego">No llegó</button>') + '</div>';
-  el.innerHTML = h + masHTML(c);
-}
-function masHTML(c){
-  const ev = (EST && EST.eventos) || [];
-  return '<details style="margin-top:22px"><summary>Más opciones</summary><h3 style="margin-top:14px">' + (c && c.viva ? 'Mover la visita yo' : 'Agendar yo la visita') + '</h3><div class="btns"><input type="date" id="fDia"><input type="time" id="fHora"><button data-ag="1">Guardar</button></div><p class="hint">La hora es opcional.</p>' +
-    (c && c.viva && c.estado !== 'pospuesta' ? '<h3>Otras acciones</h3><div class="btns"><button data-v="mueve">Dejarla sin fecha</button><button data-v="auto_vendido">El auto se vendió</button></div>' : '') +
-    '<h3>Reloj</h3><div class="btns"><button data-m="3600000">+1 hora</button><button data-m="21600000">+6 horas</button><button data-r="fin">Hasta que se venza</button></div>' +
-    (ev.length ? '<h3>Historia de esta visita</h3>' + ev.map(e => '<div class="sg"><div class="cu">' + esc(e.cuando) + '</div><div><div class="q" style="font-weight:500">' + esc(String(e.evento).replace(/_/g, ' ')) + '</div>' + (e.dijo ? '<div class="tx">“' + esc(e.dijo) + '”</div>' : '') + '</div></div>').join('') : '') + '</details>';
+    ev = 'Pasó el tiempo'; evs = 'ahora es ' + (t.ahora || ''); es = EST && EST.cita ? esc(EST.cita.vencida ? 'Se venció sin que llegara' : (EST_TXT[EST.cita.estado] || EST.cita.estado)) : '—'; ess = EST && EST.cita ? (EST.cita.situacion || '') : '';
+    (t.hechas || []).forEach(k => fj.push(k.salio ? (SIGUE[k.tipo] || k.tipo) + (k.para === 'comprador' && k.texto ? ': “' + corto(k.texto, 90) + '”' : '') : 'NO salió “' + (SIGUE[k.tipo] || k.tipo) + '”: ' + (k.motivo || ''))); if (!fj.length) fj.push('No tocaba nada todavía');
+  } else { ev = t.titulo; evs = 'acción tuya, por la misma puerta que la IA'; es = esc(t.ok ? (t.res && t.res.estado ? (EST_TXT[t.res.estado] || t.res.estado) : 'Listo') : 'No se pudo'); ess = t.ok ? '' : (t.error || ''); fj.push(t.ok ? 'Se recalculó lo programado' : '—'); }
+  if (sigTxt) fj.push(sigTxt);
+  el.innerHTML = '<div class="fr"><div class="fb ev"><label>EVENTO</label><div class="big">' + esc(ev) + '</div><div class="sub" style="white-space:pre-wrap">' + esc(evs) + '</div></div><div class="fl">→</div><div class="fb es"><label>ESTADO</label><div class="big">' + es + '</div><div class="sub">' + esc(ess) + '</div></div><div class="fl">→</div><div class="fb fj"><label>FLUJO</label>' + fj.map(x => '<div class="big" style="margin-bottom:3px">' + esc(x) + '</div>').join('') + '</div></div>' +
+    '<div class="fr2"><button id="fAnt"' + (VER >= TURNOS.length - 1 ? ' disabled' : '') + '>‹ anterior</button><span>paso ' + (TURNOS.length - VER) + ' de ' + TURNOS.length + (VER ? ' · estás viendo un paso anterior' : '') + '</span><button id="fSig"' + (VER <= 0 ? ' disabled' : '') + '>siguiente ›</button><div class="sp"></div>' + (det.length ? '<details><summary>Ver detalle técnico</summary><div>' + esc(det.join('\n')) + '</div></details>' : '') + '</div>';
+  const a = $('fAnt'), s = $('fSig'); if (a) a.onclick = () => { VER = Math.min(TURNOS.length - 1, VER + 1); pintarFranja(); }; if (s) s.onclick = () => { VER = Math.max(0, VER - 1); pintarFranja(); };
 }
 
+// ═══ chat y acciones (todas contra el motor real) ═══
 async function cargarChat(){
-  if (!CHAT) { $('chat').innerHTML = '<div class="vacio">Crea un cliente de prueba para empezar.</div>'; return; }
-  const r = await get('hilo', { chat_id: CHAT, antes: Date.now() + 86400000 * 400, limit: 60 }); if (!r.ok) return;
-  const ms = (r.mensajes || []).slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
-  $('chat').innerHTML = ms.map(m => { const sis = m.emisor === 'sistema'; const tx = m.media && m.media.tipo === 'ubicacion' ? '📍 Ubicación: ' + (m.media.nombre || '') + (m.media.url ? ' · ' + m.media.url : '') : (m.media && m.media.tipo === 'imagen' ? (/captura del punto/.test(String(m.texto || '')) ? '🖼 Captura del punto de venta' : '🖼 Foto') : String(m.texto || '')); if (sis) return ''; return '<div class="m ' + (m.dir === 'in' ? 'in' : 'out') + '">' + esc(/^ubic-img:/.test(tx) ? '🖼 Captura de ubicación' : (/\|\|\|/.test(tx) ? '📍 ' + tx.split('|||')[0] : tx)) + '</div>'; }).join('') || '<div class="vacio">Sin mensajes. Escribe abajo.</div>';
+  if (!CHAT) { $('chat').innerHTML = '<div class="vacio">Crea un cliente de prueba con “+ Cliente”.</div>'; return; }
+  const r = await get('hilo', { chat_id: CHAT, antes: Date.now() + DIA * 400, limit: 60 }); if (!r.ok) return;
+  const ms = (r.mensajes || []).slice().sort((a, b) => (a.ts || 0) - (b.ts || 0)).filter(m => m.emisor !== 'sistema');
+  $('chat').innerHTML = ms.map(m => { const tx = m.media && m.media.tipo === 'ubicacion' ? '📍 Ubicación: ' + (m.media.nombre || '') : (m.media && m.media.tipo === 'imagen' ? '🖼 Captura del punto de venta' : String(m.texto || '')); return '<div class="m ' + (m.dir === 'in' ? 'in' : 'out') + '"><small>' + (m.dir === 'in' ? 'cliente' : 'TERRA') + '</small>' + esc(tx) + '</div>'; }).join('') || '<div class="vacio">Sin mensajes. Escribe abajo.</div>';
   const s = $('chatScr'); s.scrollTop = s.scrollHeight;
 }
-async function cargarEstado(){ EST = CHAT ? await post('citaf_estado', { chat_id: CHAT }) : null; pintarFut(); }
-function bloquear(on){ OCUPADO = on; document.querySelectorAll('#send,#fut button,#chips button,#nuevo,#borrar').forEach(b => b.disabled = on); }
-const horaYa = () => new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
+async function cargarEstado(){ EST = CHAT ? await post('citaf_estado', { chat_id: CHAT }) : null; pintarCal(); }
+function bloquear(on){ OCUPADO = on; document.querySelectorAll('#send,.bar button,#chips button,#nuevo,#borrar').forEach(b => b.disabled = on); }
 async function enviar(texto){
-  texto = String(texto || '').trim(); if (!texto || OCUPADO || !CHAT) return; $('tx').value = ''; bloquear(true);
-  $('chat').insertAdjacentHTML('beforeend', '<div class="m in">' + esc(texto) + '</div><div class="m out pens" id="pens">Seb está pensando…</div>'); const s = $('chatScr'); s.scrollTop = s.scrollHeight;
-  try {
-    const a = await post('demo_responder', { chat_id: CHAT, texto }); if (!a.ok) throw new Error(a.error || 'no se registró el mensaje');
-    const r = await post('seb_turno', { chat_id: CHAT }); const cf = r.cita_flex || null;
-    TURNOS.unshift({ tipo: 'mensaje', titulo: 'Cliente: “' + texto.slice(0, 60) + (texto.length > 60 ? '…' : '') + '”', hora: horaYa(), texto, evento: cf ? cf.evento : null, traza: cf ? cf.traza : null, seb: r.seb || null, comercial: r.comercial || null });
-  } catch (e) { TURNOS.unshift({ tipo: 'vendedor', titulo: 'Error', hora: horaYa(), evento: 'error', ok: false, error: e.message }); }
-  await Promise.all([cargarChat(), cargarEstado()]); pintarOps(); bloquear(false); $('tx').focus();
+  texto = String(texto || '').trim(); if (!texto || OCUPADO || !CHAT) return; $('tx').value = ''; bloquear(true); sinTip();
+  $('chat').insertAdjacentHTML('beforeend', '<div class="m in"><small>cliente</small>' + esc(texto) + '</div><div class="m out pens">pensando…</div>'); const s = $('chatScr'); s.scrollTop = s.scrollHeight;
+  try { const a = await post('demo_responder', { chat_id: CHAT, texto }); if (!a.ok) throw new Error(a.error || 'no se registró el mensaje'); const r = await post('seb_turno', { chat_id: CHAT }); const cf = r.cita_flex || null; TURNOS.unshift({ tipo: 'mensaje', texto, evento: cf ? cf.evento : null, traza: cf ? cf.traza : null, seb: r.seb || null, comercial: r.comercial || null }); }
+  catch (e) { TURNOS.unshift({ tipo: 'vendedor', titulo: 'Error', ok: false, error: e.message }); }
+  VER = 0; await Promise.all([cargarChat(), cargarEstado()]); pintarFranja(); bloquear(false); $('tx').focus();
 }
-async function reloj(body){ if (OCUPADO || !CHAT) return; bloquear(true); const r = await post('citaf_reloj', Object.assign({ chat_id: CHAT }, body)); if (r.ok) { const mias = (r.hechas || []).map(k => Object.assign({ texto_tipo: ((EST && (EST.casillas || []).concat(EST.proyeccion || []).find(x => x.tipo === k.tipo)) || {}).texto_tipo || k.tipo }, k)); TURNOS.unshift({ tipo: 'reloj', titulo: r.sin_siguiente ? 'Reloj: no queda nada programado' : 'Reloj → ' + (r.reloj ? r.reloj.ahora : ''), hora: horaYa(), ahora: r.reloj ? r.reloj.ahora : '', hechas: mias }); EST = r; } else TURNOS.unshift({ tipo: 'vendedor', titulo: 'Reloj', hora: horaYa(), evento: 'reloj', ok: false, error: r.error }); await cargarChat(); if (!r.ok) await cargarEstado(); else pintarFut(); pintarOps(); bloquear(false); }
-async function vendedor(evento, extra){ if (OCUPADO || !CHAT) return; bloquear(true); const r = await post('citaf_vendedor', Object.assign({ chat_id: CHAT, evento }, extra || {})); TURNOS.unshift({ tipo: 'vendedor', titulo: 'Vendedor: ' + ({ llego: 'Marcaste que SÍ llegó', no_llego: 'Marcaste que NO llegó', mueve: 'La dejaste sin fecha', auto_vendido: 'Marcaste que el auto se vendió', agenda: 'Agendaste / moviste la visita', resultado: 'Anotaste cómo le fue' }[evento] || evento), hora: horaYa(), evento, datos: extra && (extra.datos || (extra.resultado ? { resultado: extra.resultado } : null)), ok: !!r.ok, res: r.vendedor || null, error: r.error }); if (r.ok) EST = r; await cargarChat(); if (!r.ok) await cargarEstado(); else pintarFut(); pintarOps(); bloquear(false); }
-
-async function cargarChats(sel){
-  const r = await get('inbox', { limit: 100, filtro: 'todos' }); const l = (r.chats || r.rows || r.conversaciones || []); const o = $('chats');
-  o.innerHTML = l.length ? l.map(c => '<option value="' + c.chat_id + '" data-tel="' + esc(String(c.telefono || '')) + '">' + esc((c.nombre && c.nombre !== '.' ? c.nombre : '+' + String(c.telefono || '')) + (c.cita ? ' · con visita' : '')) + '</option>').join('') : '<option value="">(sin clientes)</option>';
-  if (sel && l.some(c => Number(c.chat_id) === Number(sel))) o.value = String(sel); CHAT = o.value ? Number(o.value) : null;
-}
-async function abrir(){ TURNOS = []; pintarOps(); await Promise.all([cargarChat(), cargarEstado()]); }
+async function reloj(body){ if (OCUPADO || !CHAT) return; bloquear(true); sinTip(); const r = await post('citaf_reloj', Object.assign({ chat_id: CHAT }, body)); if (r.ok) { TURNOS.unshift({ tipo: 'reloj', ahora: r.reloj ? r.reloj.ahora : '', hechas: r.sin_siguiente ? [] : (r.hechas || []) }); EST = r; } else TURNOS.unshift({ tipo: 'vendedor', titulo: 'Reloj', ok: false, error: r.error }); VER = 0; await cargarChat(); if (!r.ok) await cargarEstado(); else pintarCal(); pintarFranja(); bloquear(false); }
+async function vendedor(evento, extra){ if (OCUPADO || !CHAT) return; bloquear(true); sinTip(); const r = await post('citaf_vendedor', Object.assign({ chat_id: CHAT, evento }, extra || {})); TURNOS.unshift({ tipo: 'vendedor', titulo: ({ llego: 'Marcaste que SÍ llegó', no_llego: 'Marcaste que NO llegó' }[evento] || evento), ok: !!r.ok, res: r.vendedor || null, error: r.error }); if (r.ok) EST = r; VER = 0; await cargarChat(); if (!r.ok) await cargarEstado(); else pintarCal(); pintarFranja(); bloquear(false); }
+async function cargarChats(sel){ const r = await get('inbox', { limit: 100, filtro: 'todos' }); const l = r.chats || []; const o = $('chats'); o.innerHTML = l.length ? l.map(c => '<option value="' + c.chat_id + '" data-tel="' + esc(String(c.telefono || '')) + '">' + esc((c.nombre && c.nombre !== '.' ? c.nombre : '+' + String(c.telefono || '')) + (c.cita ? ' · con visita' : '')) + '</option>').join('') : '<option value="">(sin clientes)</option>'; if (sel && l.some(c => Number(c.chat_id) === Number(sel))) o.value = String(sel); CHAT = o.value ? Number(o.value) : null; }
+async function abrir(){ TURNOS = []; VER = 0; delete $('calwrap').dataset.visto; pintarFranja(); await Promise.all([cargarChat(), cargarEstado()]); }
 async function nuevoCliente(){
   if (OCUPADO) return; bloquear(true); const autos = (TEN && TEN.autos) || []; if (!autos.length) { alert('Este universo no tiene autos.'); bloquear(false); return; }
   const usados = new Set([...$('chats').options].map(o => String(o.dataset.tel || '').slice(-2))); const libres = []; for (let n = 10; n <= 99; n++) { const x = String(n); if (!usados.has(x)) libres.push(x); } if (!libres.length) { alert('Ya hay 90 clientes de prueba: borra alguno.'); bloquear(false); return; }
-  const tel = '52100000000' + libres[Math.floor(Math.random() * libres.length)]; const nombre = 'Cliente ' + tel.slice(-2);
-  const r = await post('delegar_v2', { telefono: tel, nombre, auto_id: autos[0].id, entrada: { modo: 'silencio', entrante: true }, clave: clave('entrena') });
-  if (!r.ok || !r.chat_id) { alert(r.error || 'No pude crear el cliente'); bloquear(false); return; }
-  await cargarChats(r.chat_id); await abrir(); bloquear(false); $('tx').focus();
+  const tel = '52100000000' + libres[Math.floor(Math.random() * libres.length)];
+  const r = await post('delegar_v2', { telefono: tel, nombre: 'Cliente ' + tel.slice(-2), auto_id: autos[0].id, entrada: { modo: 'silencio', entrante: true }, clave: clave('entrena') });
+  if (!r.ok || !r.chat_id) { alert(r.error || 'No pude crear el cliente'); bloquear(false); return; } await cargarChats(r.chat_id); await abrir(); bloquear(false); $('tx').focus();
 }
 async function borrarCliente(){ if (OCUPADO || !CHAT) return; if (!confirm('¿Borrar este cliente de prueba con su chat y su visita?')) return; bloquear(true); await post('chat_borrar', { chat_id: CHAT }); await cargarChats(); await abrir(); bloquear(false); }
 
 (async () => {
   const t = await get('tenant_info', {});
-  if (!t.ok) { $('cols').innerHTML = '<div class="err" style="grid-column:1/-1"><b>' + (t._status === 401 || t.login ? 'Primero entra a FyraChat en este navegador' : 'No pude abrir el universo') + '</b>' + esc(t.error || '') + '<br><br><a href="/fyrachat.html?vendedor=' + encodeURIComponent(VEND) + '">Abrir FyraChat</a> y luego vuelve a esta página.</div>'; return; }
-  TEN = Object.assign({}, t.tenant, { autos: t.autos || [] });
-  if (!TEN.citas_flex) { $('cols').innerHTML = '<div class="err" style="grid-column:1/-1"><b>Este universo no tiene las visitas flexibles encendidas</b>El panel de entrenamiento es de TERRA MOTORS.</div>'; return; }
-    $('chips').innerHTML = FRASES.map(f => '<button>' + esc(f) + '</button>').join('');
-  $('chips').onclick = e => { const b = e.target.closest('button'); if (b) enviar(b.textContent); };
+  if (!t.ok) { $('app').innerHTML = '<div class="err" style="grid-column:1/-1"><b>' + (t._status === 401 || t.login ? 'Primero entra a FyraChat en este navegador' : 'No pude abrir el universo') + '</b>' + esc(t.error || '') + '<br><br><a href="/fyrachat.html?vendedor=' + encodeURIComponent(VEND) + '">Abrir FyraChat</a> y luego vuelve a esta página.</div>'; return; }
+  TEN = Object.assign({}, t.tenant, { autos: t.autos || [] }); if (!TEN.citas_flex) { $('app').innerHTML = '<div class="err" style="grid-column:1/-1"><b>Este universo no tiene las visitas flexibles encendidas</b>El playground es de TERRA MOTORS.</div>'; return; }
+  $('chips').innerHTML = FRASES.map(f => '<button>' + esc(f) + '</button>').join(''); $('chips').onclick = e => { const b = e.target.closest('button'); if (b) enviar(b.textContent); };
   $('send').onclick = () => enviar($('tx').value); $('tx').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar($('tx').value); } };
-  $('chats').onchange = () => { CHAT = $('chats').value ? Number($('chats').value) : null; abrir(); };
-  $('nuevo').onclick = nuevoCliente; $('borrar').onclick = borrarCliente;
-  $('fut').onclick = e => { const b = e.target.closest('button'); if (!b || b.disabled) return; if (b.dataset.r) return reloj({ accion: b.dataset.r }); if (b.dataset.m) return reloj({ accion: 'mas', ms: Number(b.dataset.m) }); if (b.dataset.v) return vendedor(b.dataset.v); if (b.dataset.res) return vendedor('resultado', { resultado: b.dataset.res }); if (b.dataset.ag) { const d = $('fDia').value; if (!d) return alert('Elige el día.'); return vendedor('agenda', { datos: { dia_ini: d, hora_ini: $('fHora').value || '' } }); } };
+  $('chats').onchange = () => { CHAT = $('chats').value ? Number($('chats').value) : null; abrir(); }; $('nuevo').onclick = nuevoCliente; $('borrar').onclick = borrarCliente;
+  $('bSig').onclick = () => reloj({ accion: 'siguiente' }); $('bHoy').onclick = () => reloj({ accion: 'reset' }); $('bLlego').onclick = () => vendedor('llego'); $('bNo').onclick = () => vendedor('no_llego');
+  addEventListener('resize', () => { if (EST) pintarCal(); });
   await cargarChats(Number(QS.get('chat')) || null); await abrir();
 })();
 </script>
