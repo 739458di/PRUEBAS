@@ -117,7 +117,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}button
 <body>
 <div class="app" id="app">
   <section class="chatcol">
-    <div class="chead"><select id="chats" title="Cliente de prueba"></select><button id="nuevo">+ Cliente</button><button class="x" id="borrar" title="Borrar este cliente">🗑</button></div>
+    <div class="chead"><select id="chats" title="Cliente de prueba"></select><button id="nuevo">+ Cliente</button><button class="x" id="reiniciar" title="Reiniciar: este mismo cliente vuelve a cero (chat, visita, recordatorios y reloj)">↺ Reiniciar</button><button class="x" id="borrar" title="Borrar este cliente">🗑</button></div>
     <div class="cscr" id="chatScr"><div class="chat" id="chat"></div></div>
     <div class="chips" id="chips"></div>
     <div class="comp"><textarea id="tx" rows="1" placeholder="Escribe como el cliente…"></textarea><button id="send" aria-label="Enviar">➤</button></div>
@@ -277,7 +277,7 @@ async function soltarEn(T){   // COMMIT: el motor real lleva a ESTE cliente a es
   el.addEventListener('pointermove', (e) => { if (arr) verEn(tDe(e)); });
   el.addEventListener('pointerup', (e) => { if (!arr) return; arr = false; el.classList.remove('arr'); soltarEn(tDe(e)); }); })();
 async function cargarEstado(){ EST = CHAT ? await post('citaf_estado', { chat_id: CHAT }) : null; pintarCal(); }
-function bloquear(on){ OCUPADO = on; document.querySelectorAll('#send,.bar button,.film button,#chips button,#nuevo,#borrar').forEach(b => b.disabled = on); }
+function bloquear(on){ OCUPADO = on; document.querySelectorAll('#send,.bar button,.film button,#chips button,#nuevo,#borrar,#reiniciar').forEach(b => b.disabled = on); }
 async function enviar(texto){
   texto = String(texto || '').trim(); if (!texto || OCUPADO || !CHAT) return; $('tx').value = ''; bloquear(true); sinTip();
   $('chat').insertAdjacentHTML('beforeend', '<div class="m in"><small>cliente</small>' + esc(texto) + '</div><div class="m out pens">pensando…</div>'); const s = $('chatScr'); s.scrollTop = s.scrollHeight;
@@ -301,6 +301,7 @@ async function nuevoCliente(){
   const r = await post('delegar_v2', { telefono: tel, nombre: 'Cliente ' + tel.slice(-2), auto_id: autos[0].id, entrada: { modo: 'silencio', entrante: true }, clave: clave('entrena') });
   if (!r.ok || !r.chat_id) { alert(r.error || 'No pude crear el cliente'); bloquear(false); return; } await cargarChats(r.chat_id); await abrir(); bloquear(false); $('tx').focus();
 }
+async function reiniciar(){ if (OCUPADO || !CHAT) return; if (MSGS.length && !confirm('¿Reiniciar este cliente? Se borra su chat, su visita y sus recordatorios, y el tiempo vuelve a hoy.')) return; bloquear(true); sinTip(); const r = await post('citaf_reiniciar', { chat_id: CHAT }); if (!r.ok) alert(r.error || 'No se pudo reiniciar'); await abrir(); bloquear(false); $('tx').focus(); }
 async function borrarCliente(){ if (OCUPADO || !CHAT) return; if (!confirm('¿Borrar este cliente de prueba con su chat y su visita?')) return; bloquear(true); await post('chat_borrar', { chat_id: CHAT }); await cargarChats(); await abrir(); bloquear(false); }
 
 (async () => {
@@ -309,7 +310,7 @@ async function borrarCliente(){ if (OCUPADO || !CHAT) return; if (!confirm('¿Bo
   TEN = Object.assign({}, t.tenant, { autos: t.autos || [] }); if (!TEN.citas_flex) { $('app').innerHTML = '<div class="err" style="grid-column:1/-1"><b>Este universo no tiene las visitas flexibles encendidas</b>El playground es de TERRA MOTORS.</div>'; return; }
   $('chips').innerHTML = FRASES.map(f => '<button>' + esc(f) + '</button>').join(''); $('chips').onclick = e => { const b = e.target.closest('button'); if (b) enviar(b.textContent); };
   $('send').onclick = () => enviar($('tx').value); $('tx').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar($('tx').value); } };
-  $('chats').onchange = () => { CHAT = $('chats').value ? Number($('chats').value) : null; abrir(); }; $('nuevo').onclick = nuevoCliente; $('borrar').onclick = borrarCliente;
+  $('chats').onchange = () => { CHAT = $('chats').value ? Number($('chats').value) : null; abrir(); }; $('nuevo').onclick = nuevoCliente; $('borrar').onclick = borrarCliente; $('reiniciar').onclick = reiniciar;
   $('bSig').onclick = () => reloj({ accion: 'siguiente' }); $('bAtras').onclick = deshacer; $('bHoy').onclick = () => reloj({ accion: 'reset' }); $('bLlego').onclick = () => vendedor('llego'); $('bNo').onclick = () => vendedor('no_llego');
   addEventListener('resize', () => { if (EST) pintarCal(); });
   await cargarChats(Number(QS.get('chat')) || null); await abrir();

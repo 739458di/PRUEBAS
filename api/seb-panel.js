@@ -295,7 +295,7 @@ module.exports = async function handler(req, res) {
         // ── CITAS FLEXIBLES: tubería (sandbox → hilo; real → WhatsApp por la puerta de mensajes) y auto del chat ──
         const ioCitaf = (tC, chC) => CITAF.ioPara(tC, chC);   // UNA sola tubería (panel, cron y pruebas): vive en lib/seb/citas-flex.js
         const autoCitaf = async (tC, chC) => { try { const f = await focoDe(tC, String(chC.telefono)); if (!f) return null; const inv = (await query('SELECT id, estado FROM inventario_autos WHERE id = ? LIMIT 1', [Number(f.id)]).catch(() => []))[0]; return { id: inv ? Number(inv.id) : null, nombre: f.nombre || null, vendido: !!(inv && String(inv.estado) !== 'activo') }; } catch (e) { return null; } };
-        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor', 'citaf_tablero', 'citaf_calendario'].includes(action) && req.method === 'POST') {
+        if (['citaf_estado', 'citaf_reloj', 'citaf_vendedor', 'citaf_tablero', 'citaf_calendario', 'citaf_reiniciar'].includes(action) && req.method === 'POST') {
             const tC = await tenantDeParam(VEND_PARAM || String(req.body.tenant_id || '') || String(SES ? SES.tenant_id : ''));
             if (!tC || !Number(tC.id) || !CITAF.activo(tC)) return res.status(403).json({ ok: false, error: 'las citas flexibles no están encendidas en este universo' });
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tC.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
@@ -304,6 +304,17 @@ module.exports = async function handler(req, res) {
             const chC = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chC || Number(chC.tenant_id) !== Number(tC.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const ioDe = async () => ioCitaf(tC, chC);   // el reloj de la prueba es POR CLIENTE: aquí solo corre lo de ESTE chat (jamás cae nada de otra visita)
             let hechas = [], rV = null;
+            // REINICIAR ESTE CLIENTE DE PRUEBA (solo sandbox): mismo cliente, mismo auto en foco, pero en CERO — sin mensajes, sin visita, sin recordatorios,
+            // reloj en la hora real y sin memoria de Seb. Lo que escriba después corre por el MISMO motor, como si fuera su primer mensaje.
+            if (action === 'citaf_reiniciar') {
+                if (!tC.demo) return res.status(400).json({ ok: false, error: 'reiniciar solo existe en el sandbox' });
+                const cid = Number(chC.id), telR = String(chC.telefono); const hecho = {};
+                await CITAF.borrarDeChat(cid); hecho.visita = 'ok';
+                for (const [k, sql, args] of [['mensajes', 'DELETE FROM mensajes WHERE conversacion_id = ?', [cid]], ['turnos', 'DELETE FROM seb_turnos WHERE chat_id = ?', [cid]], ['acciones', 'DELETE FROM acciones WHERE chat_id = ?', [cid]], ['envios', 'DELETE FROM envios WHERE chat_id = ?', [cid]], ['auto_boton', 'DELETE FROM auto_boton_log WHERE chat_id = ?', [cid]], ['programados', 'DELETE FROM mensajes_programados WHERE tenant_id = ? AND chat_id = ?', [Number(tC.id), cid]],
+                    ['escalas', 'DELETE FROM escalas_log WHERE telefono = ?', [telR]], ['anuncio', 'DELETE FROM ad_por_telefono WHERE telefono = ?', [telR]], ['marcas', 'DELETE FROM prueba_reset WHERE telefono = ?', [telR]],
+                    ['estado', 'UPDATE conversaciones SET estado_json = NULL, estado_bot = NULL, estado_ts = NULL, canal = NULL, ult_texto = NULL, ult_dir = NULL, ult_msg_ts = NULL, no_leidos = 0 WHERE id = ?', [cid]]]) { try { const r0 = await run(sql, args); hecho[k] = Number(r0.rowsAffected) || 0; } catch (e) { hecho[k] = 'n/a'; } }
+                const stR = await CITAF.estado({ tenant: tC, chat: chC }); return res.status(200).json(Object.assign({ reiniciado: hecho }, stR));
+            }
             if (action === 'citaf_reloj') {   // RELOJ DE ESTE CLIENTE DE PRUEBA (película): avanzar EJECUTA lo que tocaba; retroceder REBOBINA (regresa mensajes y estado)
                 if (!tC.demo) return res.status(400).json({ ok: false, error: 'el reloj de prueba solo existe en el sandbox' });
                 const acc = String(req.body.accion || ''); const off = await CITAF.offsetDe(chC.id); const ahoraV = Date.now() + off; let destino = null, rebobino = null;
