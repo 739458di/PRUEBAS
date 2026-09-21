@@ -66,7 +66,7 @@ async function caso(letra, titulo, tel, pasos) {
     ]);
     await caso('D', 'viernes-sábado, el viernes → "hoy no puedo": el sábado sigue vivo', '5210000000034', [
         { di: 'paso entre viernes y sábado', now: at(JUE, 11, 0), espera: { estado: 'viva', dia: [VIE, SAB] } },
-        { di: 'hoy no puedo', now: at(VIE, 10, 0), espera: { evento: ['se_complico', 'promete_avisar', 'agenda_o_cambio'], estado: 'viva', dia: [SAB], sinPlanEn: VIE, planEn: SAB, todasDeVersion: true, vendedor: 'actualizada' } },   // la IA puede leerlo de 3 formas; las 3 deben llegar a la MISMA realidad
+        { di: 'hoy no puedo', now: at(VIE, 10, 0), espera: { evento: ['se_complico', 'promete_avisar', 'agenda_o_cambio', 'confirma'], estado: 'viva', dia: [SAB], sinPlanEn: VIE, planEn: SAB, todasDeVersion: true, vendedor: 'sábado' } },   // la IA puede leerlo de 3 formas; las 3 deben llegar a la MISMA realidad
     ]);
     await caso('D2', 'viernes-sábado, el viernes → "se me atravesó un imprevisto": NO se destruye la ventana', '5210000000035', [
         { di: 'paso entre viernes y sábado', now: at(JUE, 11, 0), espera: { estado: 'viva', dia: [VIE, SAB] } },
