@@ -1,6 +1,7 @@
 // PRUEBAS DE LA REGLA GENERAL (orden owner 2026-09-21): REALIDAD ANTERIOR + EVIDENCIA → SOLO CAMBIA LA PARTE QUE LA EVIDENCIA TOCÓ.
 // Corre contra el motor REAL de TERRA (universo 9, sandbox: nada sale a WhatsApp). Teléfonos de prueba explícitos; limpia lo que crea.
 //   node scripts/citas-flex-evidencia.js            (todos)      node scripts/citas-flex-evidencia.js A,E   (algunos)
+process.env.CITAF_SIN_MAQUILLAJE = '1';   // estas pruebas verifican la MECÁNICA con las plantillas base (el maquillaje de la IA se prueba aparte)
 const fs = require('fs'); fs.readFileSync(__dirname + '/../.env', 'utf8').split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) process.env[l.slice(0, i).trim()] = process.env[l.slice(0, i).trim()] || l.slice(i + 1).trim(); });
 const DEMO = require('../lib/seb/demo.js'), C = require('../lib/seb/citas-flex.js'); const { query, run } = require('../lib/seb/db.js'); const { at, ymd } = C._t;
 const SOLO = (process.argv[2] || '').toUpperCase().split(',').filter(Boolean); let fallas = 0, total = 0;
@@ -57,7 +58,7 @@ async function caso(letra, titulo, tel, pasos) {
         { di: 'voy mañana a las 12', now: at(JUE, 18, 0), espera: { estado: 'viva', dia: [VIE], precision: 'hora' } },
         { lote: 'Buen día Juan. Hoy es tu cita a las 12 pm para ver el Nissan Sentra Sr 2023. ¿Seguimos en pie?' },
         { di: 'si, pero llego un poco mas tarde', now: at(VIE, 9, 30), espera: { evento: ['se_retrasa'], estado: 'viva', dia: [VIE], precision: 'dia' } },
-        { di: 'yo te aviso cuando vaya', now: at(VIE, 9, 31), espera: { evento: ['promete_avisar'], estado: 'viva', dia: [VIE], precision: 'dia', confirmada: 1, planSolo: ['vence'], todasDeVersion: true, responde: 'avísame' } },
+        { di: 'yo te aviso cuando vaya', now: at(VIE, 9, 31), espera: { evento: ['promete_avisar'], estado: 'viva', dia: [VIE], precision: 'dia', confirmada: 1, planSolo: ['vence'], todasDeVersion: true, responde: 'avisas' } },
     ]);
     await caso('C', 'sábado 5 pm → "yo te aviso la hora": el sábado sigue', '5210000000033', [
         { di: 'voy el sábado a las 5', now: at(JUE, 11, 0), espera: { estado: 'viva', dia: [SAB], precision: 'hora' } },
@@ -75,7 +76,7 @@ async function caso(letra, titulo, tel, pasos) {
         { di: 'voy el domingo', now: at(JUE, 11, 0), espera: { estado: 'viva', dia: [DOM] } },
         { vencer: at(DOM, 15, 30) },
         { lote: 'Hola Juan, ¿sí alcanzaste a pasar ayer o todavía tienes pensado venir a ver el Nissan Sentra Sr 2023?' },
-        { di: 'no pude, pero sí me interesa el auto', now: at(LUN, 9, 40), espera: { evento: ['se_complico'], estado: 'viva', vendedor: 'sigue interesado', responde: 'qué día' } },
+        { di: 'no pude, pero sí me interesa el auto', now: at(LUN, 9, 40), espera: { evento: ['se_complico'], estado: 'viva', vendedor: 'sigue interesado', responde: 'reagend' } },
         { di: 'el miércoles a las 5', now: at(LUN, 9, 45), espera: { evento: ['agenda_o_cambio'], estado: 'viva', dia: ['2026-09-30'], precision: 'hora', todasDeVersion: true } },
     ]);
     await caso('F', 'sábado → "mejor domingo 12" (el domingo TERRA cierra a las 3): misma visita, plan del sábado muerto, plan del domingo creado', '5210000000037', [

@@ -2,6 +2,7 @@
 //   cd /Users/Shared/PRUEBAS && node scripts/citas-flex-prueba.js [n,n,...]
 // Cada escenario usa su propio chat de prueba (números de prueba 52100000000NN libres) y un RELOJ FIJO (no toca el reloj virtual del universo ni los chats del owner).
 // En cada paso se verifican los INVARIANTES: 1 sola visita viva por chat · visita viva ⇒ próxima acción pendiente · toda casilla pendiente pertenece a la realidad actual.
+process.env.CITAF_SIN_MAQUILLAJE = '1';   // estas pruebas verifican la MECÁNICA con las plantillas base (el maquillaje de la IA se prueba aparte)
 const fs = require('fs'), path = require('path'); const RAIZ = path.join(__dirname, '..');
 fs.readFileSync(path.join(RAIZ, '.env'), 'utf8').split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) process.env[l.slice(0, i).trim()] = process.env[l.slice(0, i).trim()] || l.slice(i + 1).trim(); });
 const { query, run } = require('../lib/seb/db.js'); const DEMO = require('../lib/seb/demo.js'); const CITAF = require('../lib/seb/citas-flex.js');
@@ -84,9 +85,9 @@ const ESC = {
     }],
     6: ['"hoy no alcanzo" → se pregunta el nuevo cuándo → "jueves" → VIVA jueves sin pasar por pospuesta', async (ch) => {
         await di(ch, 'voy el sábado a las 5', at(MIE, 10)); await di(ch, 'hoy no alcanzo', at(SAB, 15)); let s = await sit(ch, at(SAB, 15));
-        ok(ch, s.c.estado === 'viva' && Number(s.c.en_duda) === 1 && /qué día te quedaría mejor/.test(ch.log.join('\n')), 'se le preguntó "¿qué día te quedaría mejor?"; NO entró a pospuesta'); ok(ch, (await nRec(ch)) === 0, 'los recordatorios de la fecha vieja ya no salen');
+        ok(ch, s.c.estado === 'viva' && Number(s.c.en_duda) === 1 && /reagend/i.test(ch.log.join('\n')), 'se le ofreció reagendar ("¿Gustas que te reagendemos?"); NO entró a pospuesta'); ok(ch, (await nRec(ch)) === 0, 'los recordatorios de la fecha vieja ya no salen');
         await di(ch, 'el jueves', at(SAB, 15, 10)); s = await sit(ch, at(SAB, 15, 10)); const pasoPorPos = (await query("SELECT COUNT(*) n FROM citaf_eventos WHERE chat_id = ? AND evento = 'sin_fecha'", [ch.id]))[0].n;
-        ok(ch, s.c.estado === 'viva' && CITAF._t.ymd(Number(s.c.ini_ts)) === JUE && Number(pasoPorPos) === 0, 'VIVA + jueves 1 oct, hora abierta; jamás pasó por pospuesta'); ok(ch, /Cita movida — .*s[áa]bado 5 pm → jueves, hora abierta/.test(ch.log.join('\n')), 'aviso: "Cita movida — … sábado 5 pm → jueves, hora abierta"');
+        ok(ch, s.c.estado === 'viva' && CITAF._t.ymd(Number(s.c.ini_ts)) === JUE && Number(pasoPorPos) === 0, 'VIVA + jueves 1 oct, hora abierta; jamás pasó por pospuesta'); ok(ch, /Nueva fecha — .*jueves, hora abierta/.test(ch.log.join('\n')), 'aviso: "Nueva fecha — … jueves, hora abierta" (la fecha vieja ya había caído: no es "mover")');
     }],
     7: ['"hoy no alcanzo" → "yo te aviso" → POSPUESTA → ningún rescate automático', async (ch) => {
         await di(ch, 'voy el sábado a las 5', at(MIE, 10)); await di(ch, 'hoy no alcanzo', at(SAB, 15)); await di(ch, 'yo te aviso', at(SAB, 15, 10)); const s = await sit(ch, at(SAB, 15, 10));
@@ -120,7 +121,7 @@ const ESC = {
         await di(ch, 'voy mañana a las 4', now); const x = await turno(ch, 'No puedo mañana, mejor el ' + nomDia + ' a las 5. ¿Aceptan crédito?'); const s = await sit(ch, now + 5 * MIN);
         ok(ch, s.c.estado === 'viva' && Number(s.c.ini_ts) === at(d3, 17) && s.c.precision === 'hora', 'cita: la de mañana dejó de aplicar → VIVA + ' + nomDia + ' 5 pm');
         ok(ch, x.r && x.r.comercial && x.r.comercial.ok && x.outs.some(o => /cr[eé]dito|financ|banco|enganche/i.test(o)), 'la pregunta de crédito la contestó el flujo comercial (' + ((x.r && x.r.comercial && x.r.comercial.tipo) || '?') + ')');
-        ok(ch, x.outs.some(o => /ya quedó movida tu cita/i.test(o)), 'y además salió el acuse del cambio de cita'); const evs = (await query("SELECT evento FROM citaf_eventos WHERE chat_id = ? ORDER BY id", [ch.id])).map(e => e.evento); ok(ch, !evs.some(e => /credito|comercial/i.test(e)), 'la pregunta comercial NO se volvió evento ni estado de la cita (' + evs.join(' → ') + ')');
+        ok(ch, x.outs.some(o => /te muevo la cita/i.test(o)), 'y además salió el acuse del cambio de cita'); const evs = (await query("SELECT evento FROM citaf_eventos WHERE chat_id = ? ORDER BY id", [ch.id])).map(e => e.evento); ok(ch, !evs.some(e => /credito|comercial/i.test(e)), 'la pregunta comercial NO se volvió evento ni estado de la cita (' + evs.join(' → ') + ')');
     }],
     14: ['EXTRA · IA y vendedor actualizan a la vez + nacimiento simultáneo', async (ch) => {
         await di(ch, 'voy el sábado a las 4', at(MIE, 10)); await DEMO.responder({ tenant: T, tel: ch.tel, texto: 'mejor el domingo a las 11' }); ch.log.push('👤 mejor el domingo a las 11   ‖   🧑‍💼 vendedor agenda lunes 5 pm (simultáneo)');
