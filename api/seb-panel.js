@@ -111,7 +111,7 @@ async function cargarResets() {
 // ══════════ CLASIFICACIÓN DE ACCIONES (blindaje 2026-09-10, spec docs/seguridad-acceso-spec-2026-09-10.md) ══════════
 // PÚBLICA: sin nada. K_PUENTE: solo el puente (header x-api-key). K_PANEL: servidores propios (web, SB, Claude/scripts).
 // Las de K_PUENTE y K_PANEL también las abre la sesión MAESTRA (el owner desde su navegador). Todo lo no listado = SESIÓN.
-const ACC_PUBLICAS = new Set(['tenant_marca', 'acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
+const ACC_PUBLICAS = new Set(['acceso_entrar_usuario', 'tenant_marca', 'acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
 // CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
 const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
 const ACC_PUENTE = new Set(['entrante_v2', 'opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
@@ -355,6 +355,21 @@ module.exports = async function handler(req, res) {
             if (telM.length < 10) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
             if ((await ACC.contarLimite('modo:ip:' + IP, 60, 10 * 60 * 1000)).excedido) return res.status(429).json({ ok: false, error: 'Demasiados intentos. Espera unos minutos.' });
             return res.status(200).json(await ACC.modoAcceso(telM));
+        }
+        // ══ INICIAR SESIÓN CON ID + CONTRASEÑA (orden owner 2026-09-22): como cualquier página — usuario del universo (config.usuario) + su contraseña (scrypt) ══
+        if (action === 'acceso_entrar_usuario' && req.method === 'POST') {
+            const usuario = String(req.body.usuario || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, ''); const contrasena = String(req.body.contrasena || '');
+            const ERRU = { ok: false, error: 'Usuario o contraseña incorrectos.' };
+            if (!usuario || !contrasena) return res.status(401).json(ERRU);
+            if ((await ACC.contarLimite('usuario:ip:' + IP, 20, 10 * 60 * 1000)).excedido || (await ACC.contarLimite('usuario:u:' + usuario, 8, 10 * 60 * 1000)).excedido) return res.status(429).json({ ok: false, error: 'Demasiados intentos. Espera 10 minutos.' });
+            const todos = await query('SELECT id, nombre, telefono, config_json FROM tenants WHERE activo = 1').catch(() => []);
+            const tU = todos.find(x => { try { const c = JSON.parse(x.config_json || '{}'); return String(c.usuario || '').toLowerCase() === usuario; } catch (e) { return false; } });
+            if (!tU || !(await ACC.verificarContrasena(tU.id, contrasena))) return res.status(401).json(ERRU);
+            const tFull = await ACC.tenantPorId(tU.id); const r = await ACC.abrirSesion(tFull || tU, req.headers['user-agent'], IP, 'usuario');
+            if (!r.ok) return res.status(401).json(ERRU);
+            ACC.ponerCookie(res, r.token);
+            await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar_usuario', ip: IP });
+            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: !!r.maestra });
         }
         if (action === 'acceso_entrar_contrasena' && req.method === 'POST') {
             const r = await ACC.entrarConContrasena(req.body.telefono, req.body.contrasena, req.headers['user-agent'], IP);
@@ -2460,7 +2475,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
+        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -2912,6 +2927,49 @@ module.exports = async function handler(req, res) {
             }
 
             // 11) AUTOS_MIOS — autos del universo (t0 = inventario activo completo, límite 200) con portada, km, fotos y estado
+            // ══ PANEL DEL UNIVERSO (orden owner 2026-09-22): resumen, autos, calendario de citas, miembros (vendedores del lote), número ══
+            const ensureMiembros = async () => { await run('CREATE TABLE IF NOT EXISTS vendedores_universo (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, nombre TEXT, telefono TEXT, codigo_hash TEXT, codigo_expira INTEGER, activo INTEGER DEFAULT 0, created INTEGER)'); await run('CREATE INDEX IF NOT EXISTS idx_vend_univ ON vendedores_universo(tenant_id, telefono)'); };
+            const shaC = x => require('crypto').createHash('sha256').update(String(x)).digest('hex');
+            if (action === 'panel_info') {
+                if (!TV) return err(400, 'el panel es por universo');
+                await ensureMiembros();
+                const miembros = (await query('SELECT id, nombre, telefono, activo, created FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV])).map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, activo: Number(m.activo) === 1, created: Number(m.created) }));
+                let citas = { filas: [], cerradas: [] }; try { if (CITAF.activo(tV)) citas = await CITAF.tablero({ tenant: tV }); } catch (e) { }
+                const chats = (await query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]))[0];
+                return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
+                    citas: (citas.filas || []).concat(citas.cerradas || []).map(f => ({ cita_id: f.cita_id, chat_id: f.chat_id, nombre: f.nombre, auto: f.auto, estado: f.estado, cuando: f.cuando, ini_ts: f.ini_ts, fin_ts: f.fin_ts, situacion: f.situacion, precision: f.precision || null, hora: f.hora || null, dias: f.dias || [], proxima: f.proxima || null })),
+                    miembros, chats_delegados: Number(chats.n) || 0 });
+            }
+            if (action === 'miembro_agregar' && req.method === 'POST') {
+                if (!TV) return err(400, 'el panel es por universo');
+                await ensureMiembros();
+                const nombreM = String(req.body.nombre || '').trim().slice(0, 60); let telM = String(req.body.telefono || '').replace(/\D/g, ''); if (telM.length === 10) telM = '521' + telM;
+                if (!nombreM) return err(400, 'Escribe el nombre.'); if (!/^521\d{10}$/.test(telM)) return err(400, 'Escribe un WhatsApp de 10 dígitos.');
+                const codigo = String(Math.floor(100000 + Math.random() * 900000)); const ahora = Date.now();
+                const ex = (await query('SELECT id, activo FROM vendedores_universo WHERE tenant_id = ? AND telefono = ?', [TV, telM]))[0];
+                if (ex && Number(ex.activo) === 1) return err(409, 'Ese número ya es miembro.');
+                if (ex) await run('UPDATE vendedores_universo SET nombre = ?, codigo_hash = ?, codigo_expira = ? WHERE id = ?', [nombreM, shaC(codigo), ahora + 15 * 60000, Number(ex.id)]);
+                else await run('INSERT INTO vendedores_universo (tenant_id, nombre, telefono, codigo_hash, codigo_expira, activo, created) VALUES (?,?,?,?,?,0,?)', [TV, nombreM, telM, shaC(codigo), ahora + 15 * 60000, ahora]);
+                const marcaM = (tV.config && tV.config.marca) || tV.nombre || 'el panel';
+                let enviado = false; if (!DEMO.esDemo(tV)) { try { enviado = !!(await citasVivas.enviarWA(telM, 'Tu código para entrar a ' + marcaM + ' es ' + codigo + '. Vence en 15 minutos.', 0)); } catch (e) { } }
+                await ACCIONES.registrar({ tenant_id: TV, chat_id: null, tipo: 'miembro_codigo', meta: { telefono: telM, nombre: nombreM, enviado }, actor: 'vendedor', sesion_id: SID }).catch(() => { });
+                return okJ({ telefono: telM, nombre: nombreM, enviado, codigo_prueba: DEMO.esDemo(tV) ? codigo : undefined });   // sandbox: el código se muestra aquí (no hay WhatsApp)
+            }
+            if (action === 'miembro_confirmar' && req.method === 'POST') {
+                if (!TV) return err(400, 'el panel es por universo');
+                await ensureMiembros();
+                let telM = String(req.body.telefono || '').replace(/\D/g, ''); if (telM.length === 10) telM = '521' + telM; const codigo = String(req.body.codigo || '').replace(/\D/g, '');
+                const m = (await query('SELECT id, codigo_hash, codigo_expira FROM vendedores_universo WHERE tenant_id = ? AND telefono = ? AND activo = 0', [TV, telM]))[0];
+                if (!m) return err(404, 'Ese número no está pendiente.');
+                if (Number(m.codigo_expira) < Date.now()) return err(410, 'El código venció. Vuelve a agregarlo.');
+                if (shaC(codigo) !== m.codigo_hash) return err(401, 'Código incorrecto.');
+                await run('UPDATE vendedores_universo SET activo = 1, codigo_hash = NULL WHERE id = ?', [Number(m.id)]);
+                return okJ({ id: Number(m.id), activo: true });
+            }
+            if (action === 'miembro_quitar' && req.method === 'POST') {
+                if (!TV) return err(400, 'el panel es por universo');
+                await ensureMiembros(); await run('DELETE FROM vendedores_universo WHERE tenant_id = ? AND id = ?', [TV, Number(req.body.id) || 0]); return okJ({ borrado: true });
+            }
             if (action === 'autos_mios') {
                 let rows;
                 if (!TV) rows = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio, kilometraje, estado FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE LIMIT 200");
