@@ -305,7 +305,7 @@ module.exports = async function handler(req, res) {
             const catalogo = (await autosDeTenant(tS)).map(a => ({ id: Number(a.id), web: a.fyradrive_web_id == null ? null : Number(a.fyradrive_web_id) }));
             let out = null, status = 200; const enviados = [];
             const resFalso = { _h: {}, setHeader() { }, status(c) { status = c; return this; }, json(j) { out = j; return this; }, end() { return this; } };
-            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS, citas_flex: CITAF.activo(tS), solo_texto: soloTexto || undefined }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
+            const reqFalso = { method: 'POST', query: { action: 'opener_auto' }, body: { telefono: telS, citas_flex: CITAF.activo(tS), solo_texto: soloTexto || undefined, sin_gancho: !!soloTexto }, headers: { 'x-api-key': process.env.K_PUENTE || process.env.K_PANEL || '', 'user-agent': 'seb_turno' } };
             try { await CTX.correr(Number(tS.id), catalogo, () => module.exports(reqFalso, resFalso)); } catch (e) { out = { ok: false, motivo: 'error: ' + e.message }; }
             out = out || { ok: false, motivo: 'sin respuesta' };
             if (out.cita_datos && CITAF.activo(tS)) {   // el cerebro cerró una cita (día + hora en sus letras) → entra por la MISMA puerta de cuándo; el acuse lo da esa puerta
@@ -1192,7 +1192,7 @@ module.exports = async function handler(req, res) {
                     const estG = await require('../lib/seb/etapa3.js').estadoConv(convId, filasEstado);   // con las filas ya leídas: el chat no se lee dos veces
                     const textoG = entrantes[entrantes.length - 1].mensaje;
                     const _json = res.json.bind(res);
-                    res.json = (payload) => { try { payload = LIB_GOBERNADOR.gobernarSalida(payload, { texto: textoG, est: estG }); } catch (e) { console.error('[gobernador salida]', e.message); } return _json(payload); };
+                    res.json = (payload) => { try { payload = LIB_GOBERNADOR.gobernarSalida(payload, { texto: textoG, est: req.body && req.body.sin_gancho ? Object.assign({}, estG, { cita_viva: true }) : estG }); /* sin_gancho: la máquina de citas contesta en este mismo turno → aquí ningún gancho */ } catch (e) { console.error('[gobernador salida]', e.message); } return _json(payload); };
                 } catch (e) { console.error('[gobernador estado]', e.message); }
             }
             // ══ VENDEDOR ASIGNADO (staff, orden owner 2026-08-25): si este tel tiene una
@@ -1280,7 +1280,7 @@ module.exports = async function handler(req, res) {
             // todo lo que llegue del comprador mientras tanto se te escala.
             try {
                 const { esStandby, ACUSE_STANDBY } = LIB_DOCTRINA;
-                const manualesSb = mensajes.filter(m => m.direccion === 'out' && !m.ai);
+                const manualesSb = TSEB ? [] : mensajes.filter(m => m.direccion === 'out' && !m.ai);   // universos con voz (voz.js): sin STANDBY deducido
                 const ultManualSb = manualesSb.length ? manualesSb[manualesSb.length - 1] : null;
                 if (ultManualSb && esStandby(ultManualSb.mensaje) && (Date.now() - Number(ultManualSb.ts)) < 7 * 86400000) {
                     // ── EXCEPCIÓN RECEPCIÓN (orden owner 2026-07-16): en un chat de VENDEDOR
@@ -1363,7 +1363,7 @@ module.exports = async function handler(req, res) {
                 const { herramientaPura, posesionOwner } = LIB_DOCTRINA;
                 let escalasPos = [];
                 try { escalasPos = (await query("SELECT motivo, ts FROM escalas_log WHERE telefono=? AND ts > ?", [tel, Date.now() - 24 * 3600000])).map(e => ({ motivo: e.motivo, ts: Number(e.ts) })); } catch (e) { }
-                if (bursts >= 2 && posesionOwner(mensajes, escalasPos)) {
+                if (!TSEB && bursts >= 2 && posesionOwner(mensajes, escalasPos)) {   // la POSESIÓN deducida es solo del número principal; en universos manda la VOZ (escala o no escala)
                     // en posesión el silencio es NORMAL → el backlog de entrantes crece; la
                     // herramienta se evalúa sobre la ÚLTIMA ráfaga (2 min), no el acumulado
                     // (bug sandbox: "agendar cita" viejo ahogaba al "cotizar" nuevo).
@@ -1419,6 +1419,7 @@ module.exports = async function handler(req, res) {
             //    más opciones → clasificar → mesa → dudas generales → el perro (herramientas). Devuelve { done } si ya contestó, o { followup, clasif }.
             const capasComunes = async (followup0) => {
                 let followup = followup0;
+                if (LIB_REGEX_COMUNES.RE_RELLENO.test(String(followup || '').trim())) return { done: { ok: false, motivo: 'relleno_silencio', silencio: true } };   // "mmm" no es una petición ni una duda: silencio
                 // 📷 LA IMAGEN SE LEE (owner 2026-07-22): con URL se identifica el auto y
                 // entra al texto; sin URL y sin texto útil → aviso al owner, jamás silencio.
                 {
@@ -2657,8 +2658,9 @@ module.exports = async function handler(req, res) {
                 const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
                 const texto = String(req.body.texto || '').trim(); if (!texto) return err(400, 'texto vacío');
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
-                if (!TV) { try { await citasVivas.senalManual(c.telefono, texto); } catch (e) { console.error('[senalManual v2]', e.message); } }   // "cita confirmada/cancelada" en el chat del dueño (t0)
                 const env = await MSJ.enviar({ tenantId: TV, chatId: c.id, origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
+                // "cita confirmada/cancelada" en el chat del dueño (t0): la señal va DESPUÉS de la puerta y solo si no es un reintento repetido de la misma clave (antes se disparaba dos veces al reintentar)
+                if (!TV && !env.repetido) { try { await citasVivas.senalManual(c.telefono, texto); } catch (e) { console.error('[senalManual v2]', e.message); } }
                 if (env.ok && TV && !env.repetido && tV.config && Number(tV.config.seb_auto) === 1) { try { await VOZ.entregar({ tenant: tV, chat: c, motivo: 'contestaste tú', avisar: false, fuente: 'vendedor' }); } catch (e) { } }   // escribir a mano = tomar la voz
                 if (!env.ok) return res.status(env.status && env.status >= 400 ? env.status : 502).json({ ok: false, error: env.error || 'no se pudo mandar', chat_id: Number(c.id), clave, en_vuelo: !!env.en_vuelo });
                 return okJ({ mensaje: env.mensaje, chat_id: Number(c.id), clave, simulado: !!env.simulado, repetido: !!env.repetido });

@@ -1161,13 +1161,13 @@ function mezclar(h, mensajes){
 }
 async function cargarHilo(id, opts = {}){
   const h = hiloDe(id);
-  return correr('hilo:' + id, async () => {
+  return correr('hilo:' + id + (opts.previo ? ':p' : ''), async () => {   // el prefetch (sin marcar leído) NO sustituye a la apertura real (que sí marca leído)
     const params = { chat_id: id, limit: 40 };
     if (opts.previo) params.antes = Date.now() + 1000;                 // prefetch: sin marcar leído
     else if (h.cargado && h.ult_ts) params.desde = h.ult_ts;           // ya tengo el hilo: pido solo lo nuevo (si el servidor ignora `desde`, el merge dedup lo resuelve)
     const r = await apiGet('hilo', params);
     if (!r.ok) return r;
-    if (r.chat) { h.chat = r.chat; sincronizarFilaConChat(r.chat); }
+    if (r.chat) { const antesBot = h.chat && h.chat.bot; h.chat = r.chat; sincronizarFilaConChat(r.chat); if (CHAT_ID === id && r.chat.bot !== antesBot) pintarCabecera(r.chat); }   // la VOZ puede cambiar en cualquier turno (escala → 'Estás atendiendo tú'): la cabecera se repinta con cada refresco
     if (!h.cargado) { h.hay_mas = !!r.hay_mas; }
     const nuevos = mezclar(h, r.mensajes || []);
     h.cargado = true;
@@ -1175,6 +1175,16 @@ async function cargarHilo(id, opts = {}){
     return { ok: true, nuevos, hay_mas: r.hay_mas };
   });
 }
+// RECARGA COMPLETA del hilo (reloj del sandbox hacia atrás / rebobinar borra o reordena mensajes: el `desde` incremental no los vería)
+async function recargarHilo(id){
+  try { await (INFLIGHT.get('hilo:' + id) || Promise.resolve()); } catch (e) {}
+  const h = hiloDe(id); h.msgs = []; h.keys = new Set(); h.porMid = new Map(); h.ult_ts = 0; h.cargado = false; h.hay_mas = true;
+  const r = await cargarHilo(id);
+  if (CHAT_ID === id && r && r.ok) { pintarMensajes(h); if (!h.msgs.length) $('msgs').innerHTML = '<div class="vacio"><b>Sin mensajes todavía</b>Escribe abajo o usa una acción.</div>'; }
+  return r;
+}
+// refresco incremental del hilo abierto (lo nuevo se inserta; los ecos actualizan su burbuja)
+function refrescarHilo(id){ if (CHAT_ID !== id) return Promise.resolve(); return cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); return x; }).catch(() => {}); }
 function sincronizarFilaConChat(ch){
   const c = INBOX.rows.get(ch.chat_id); if (!c) return;
   let cambio = false;
@@ -1336,20 +1346,37 @@ let QUIEN = 'vendedor';
 function pintarQuien(){ const b = $('quien'); if (!b) return; const on = !!(TENANT && TENANT.demo); b.hidden = !on; if (!on) return; const nom = (TENANT.nombre || 'Vendedor').split(/\s+/)[0]; b.textContent = QUIEN === 'comprador' ? 'Comprador' : nom; b.classList.toggle('comp', QUIEN === 'comprador'); TX.placeholder = QUIEN === 'comprador' ? 'Escribe como el comprador…' : 'Escribe un mensaje...'; }
 function pintarPensando(on){ const e = $('ch-estado'); if (!e) return; if (on) { e.dataset.prev = e.textContent; e.textContent = 'Seb está pensando…'; e.classList.add('ok'); } else if (e.dataset.prev != null) { e.textContent = e.dataset.prev; delete e.dataset.prev; pintarCabecera((hiloDe(CHAT_ID) || {}).chat || INBOX.rows.get(CHAT_ID)); } }
 function toggleQuien(){ QUIEN = QUIEN === 'comprador' ? 'vendedor' : 'comprador'; pintarQuien(); TX.focus(); }
-async function enviarComoComprador(id, texto){
+// UNA COLA POR CHAT: dos mensajes seguidos del comprador se registran y corren su turno EN ORDEN (jamás dos `seb_turno` en paralelo
+// ni un "pensando" que se apaga mientras el otro sigue). Cada llamada devuelve { ok } para que quien la invoque pueda reaccionar.
+const COLA_COMP = new Map();
+function enviarComoComprador(id, texto){
+  const prev = COLA_COMP.get(id) || Promise.resolve();
+  const p = prev.catch(() => {}).then(() => enviarComoCompradorYa(id, texto)).catch(e => ({ ok: false, error: e && e.message }));
+  COLA_COMP.set(id, p); p.finally(() => { if (COLA_COMP.get(id) === p) COLA_COMP.delete(id); });
+  return p;
+}
+async function enviarComoCompradorYa(id, texto){
   const h = hiloDe(id); const local = clave('comp', id);
   const m = { local, dir: 'in', emisor: 'comprador', texto, ts: Date.now(), estado: 'enviado' };
-  h.keys.add(keyDe(m)); h.msgs.push(m); insertarBurbuja(m); actualizarFilaLocal(id, m);
+  h.keys.add(keyDe(m)); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); actualizarFilaLocal(id, m);
   const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
   const r = await apiPost('demo_responder', { chat_id: id, telefono: tel, texto });
-  if (!r.ok) return avisoError(r.error || 'No se pudo');
+  if (!r.ok) {   // no se registró: la burbuja optimista se quita (no existe en el servidor) y se avisa
+    h.msgs = h.msgs.filter(x => x !== m); h.keys.delete(keyDe(m));
+    const el = $('msgs').querySelector('[data-k="' + CSS.escape(m._kDom || keyDe(m)) + '"]'); if (el && CHAT_ID === id) el.remove();
+    avisoError(r.error || 'No se pudo registrar el mensaje'); return { ok: false, error: r.error };
+  }
   // la burbuja local adopta el folio del servidor → al recargar el hilo se FUNDE con su renglón (jamás doble, aunque el reloj del teléfono difiera)
-  if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) m.ts = r.ts; h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); }
-  const refrescarYa = () => { if (CHAT_ID !== id) return Promise.resolve(); return cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
+  if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) m.ts = r.ts; h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); h.keys.add('mid:' + r.msg_id); }
   // SEB AUTÓNOMO (universos con seb_auto): tras registrar el entrante se pide el turno completo del cerebro (opener → continuación → etapa 3)
-  if (r.seb_auto) { pintarPensando(true); try { await apiPost('seb_turno', { chat_id: id }); } finally { pintarPensando(false); } await refrescarYa(); cfBarra(id); return; }
-  const refrescar = () => { if (CHAT_ID !== id) return; cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }); };
-  setTimeout(refrescar, 700); setTimeout(refrescar, 3500);
+  if (r.seb_auto) {
+    pintarPensando(true); let t;
+    try { t = await apiPost('seb_turno', { chat_id: id }); } finally { pintarPensando(false); }
+    if (!t || !t.ok) avisoError('Seb no pudo contestar: ' + ((t && t.error) || 'sin respuesta del servidor'));
+    await refrescarHilo(id); cfBarra(id); return { ok: true, turno: t };
+  }
+  setTimeout(() => refrescarHilo(id), 700); setTimeout(() => refrescarHilo(id), 3500);
+  return { ok: true };
 }
 function enviarTexto(){
   const id = CHAT_ID; if (!id) return;
@@ -1365,36 +1392,49 @@ function enviarTexto(){
 async function mandar(id, m){
   const h = hiloDe(id);
   await correr('enviar:' + m.clave, async () => {
-    const r = await apiPost('enviar', { chat_id: id, texto: m.texto, clave: m.clave });
-    if (r.ok && r.mensaje) {
-      const sk = 'id:' + r.mensaje.id;
-      if (h.keys.has(sk) && !m.id) { // el eco del timbre llegó antes que la respuesta → quitar el optimista, quedarse con el del servidor
-        const dup = h.msgs.find(x => x !== m && keyDe(x) === sk); if (dup) { dup.estado = 'entregado'; h.msgs = h.msgs.filter(x => x !== m); const el = $('msgs').querySelector('[data-k="' + CSS.escape('l:' + m.local) + '"]'); if (el) el.remove(); if (CHAT_ID === id) actualizarBurbuja(dup); return; }
-      }
-      m.id = r.mensaje.id; m.msg_id = r.mensaje.msg_id; if (r.mensaje.ts) m.ts = r.mensaje.ts; m.estado = m.estado === 'entregado' ? 'entregado' : (r.mensaje.estado === 'error' ? 'error' : 'enviado'); h.keys.add(sk);
-    } else { m.estado = 'error'; m._err = r.error || 'No se pudo enviar'; }
+    try {
+      const r = await apiPost('enviar', { chat_id: id, texto: m.texto, clave: m.clave });
+      if (r.ok) {
+        const rm = r.mensaje || {}; const conId = rm.id != null && rm.id !== ''; const sk = conId ? 'id:' + rm.id : null;
+        h.porMid = h.porMid || new Map();
+        const dup = h.msgs.find(x => x !== m && ((sk && keyDe(x) === sk) || (rm.msg_id && x.msg_id === rm.msg_id)));
+        if (dup && !m.id) { // el eco del timbre llegó antes que la respuesta → quitar el optimista, quedarse con el del servidor
+          if (dup.estado !== 'error') dup.estado = 'entregado'; h.msgs = h.msgs.filter(x => x !== m); h.keys.delete('l:' + m.local); const el = $('msgs').querySelector('[data-k="' + CSS.escape(m._kDom || ('l:' + m.local)) + '"]'); if (el) el.remove(); if (CHAT_ID === id) actualizarBurbuja(dup); return;
+        }
+        if (conId) m.id = rm.id; if (rm.msg_id) m.msg_id = rm.msg_id; if (rm.ts) m.ts = rm.ts; m.estado = m.estado === 'entregado' ? 'entregado' : (rm.estado === 'error' ? 'error' : 'enviado');
+        // la burbuja queda registrada con TODAS sus llaves (id, msg_id): el eco del timbre (id null + msg_id) o del hilo (id + msg_id) la FUNDE en vez de duplicarla
+        if (sk) h.keys.add(sk); if (m.msg_id) { h.keys.add('mid:' + m.msg_id); h.porMid.set(m.msg_id, m); }
+      } else { m.estado = 'error'; m._err = r.error || 'No se pudo enviar'; }
+    } catch (e) { m.estado = 'error'; m._err = (e && e.message) || 'No se pudo enviar'; }
     if (CHAT_ID === id) actualizarBurbuja(m);
     if (m.estado === 'error') avisoError('No se envió: ' + (m._err || '') + ' — toca Reintentar en el mensaje');
   });
 }
-function reintentar(local){ const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const m = h.msgs.find(x => x.local === local); if (!m || m.estado !== 'error') return; m.estado = 'enviando'; m.ts = Date.now(); actualizarBurbuja(m); mandar(id, m); }   // MISMA clave → idempotente
+function reintentar(local){ const id = CHAT_ID; if (!id) return; const h = hiloDe(id); const m = h.msgs.find(x => x.local === local); if (!m || m.estado !== 'error' || !m.clave) return; if (INFLIGHT.has('enviar:' + m.clave)) return; m.estado = 'enviando'; m.ts = Date.now(); actualizarBurbuja(m); mandar(id, m); }   // MISMA clave → idempotente; solo mensajes del composer (con clave)
 function actualizarFilaLocal(id, m){ const c = INBOX.rows.get(id); if (!c) return; c.ult_texto = textoDe(m); c.ult_dir = m.dir; c.ult_emisor = m.emisor; c.ult_ts = m.ts; pintarFila(c, { arriba: true }); }
 // nota local (solo tú la ves) para acciones cuyo resultado no vuelve como texto
 function notaLocal(id, texto){ const h = hiloDe(id); const m = { local: 'nota:' + uuid(), dir: 'out', emisor: 'sistema', texto, ts: Date.now() }; h.keys.add(keyDe(m)); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); }
-function burbujaSalida(id, texto, r){ const h = hiloDe(id); const m = { local: 'acc:' + uuid(), dir: 'out', emisor: 'dueno', texto, ts: Date.now(), estado: (r && r.enviado === false) ? 'error' : 'enviado' }; h.keys.add(keyDe(m)); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); actualizarFilaLocal(id, m); }
+function burbujaSalida(id, texto, r){
+  const h = hiloDe(id); const m = { local: 'acc:' + uuid(), dir: 'out', emisor: 'dueno', texto, ts: Date.now(), estado: (r && r.enviado === false) ? 'error' : 'enviado' };
+  // si el servidor devolvió el folio del renglón, la burbuja local lo adopta: el eco (timbre / hilo) la FUNDE por msg_id, jamás la duplica
+  if (r && r.msg_id) { m.msg_id = String(r.msg_id); h.porMid = h.porMid || new Map(); h.porMid.set(m.msg_id, m); h.keys.add('mid:' + m.msg_id); }
+  m._kDom = keyDe(m); h.keys.add(m._kDom); h.keys.add('l:' + m.local); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); actualizarFilaLocal(id, m);
+}
 
 // ══════════ ACCIONES DEL CHAT ══════════
 async function cambiarBot(estado, btn){
   const id = CHAT_ID; if (!id) return; bloquear(btn, true);
-  const r = await apiPost('bot_estado', { chat_id: id, estado });
-  bloquear(btn, false);
-  if (!r.ok) return avisoError(r.error || 'No se pudo cambiar el estado del bot');
-  const h = hiloDe(id); if (h.chat) h.chat.bot = r.bot || estado; const c = INBOX.rows.get(id); if (c) c.bot = r.bot || estado; pintarCabecera(h.chat || c);
+  let r;
+  try { r = await correr('bot:' + id, () => apiPost('bot_estado', { chat_id: id, estado })); } finally { bloquear(btn, false); }
+  if (!r || !r.ok) return avisoError((r && r.error) || 'No se pudo cambiar el estado del bot');
+  const h = hiloDe(id); if (h.chat) h.chat.bot = r.bot || estado; const c = INBOX.rows.get(id); if (c) { c.bot = r.bot || estado; pintarFila(c); } pintarCabecera(h.chat || c);
+  if (r.reanudo && r.reanudo !== 'nada') refrescarHilo(id);   // al devolverle la voz, Seb pudo contestar (turno pendiente / gancho): que se vea sin esperar al timbre
 }
 async function reactivar(btn){
   const id = CHAT_ID; if (!id) return; bloquear(btn, true);
-  const r = await apiPost('reactivar', { chat_id: id, clave: clave('reactivar', id) });
-  if (!r.ok) { bloquear(btn, false); return avisoError(r.error || 'No se pudo programar la reactivación'); }
+  let r;
+  try { r = await correr('reactivar:' + id, () => apiPost('reactivar', { chat_id: id, clave: clave('reactivar', id) })); } finally { bloquear(btn, false); }
+  if (!r || !r.ok) return avisoError((r && r.error) || 'No se pudo programar la reactivación');
   notaLocal(id, 'Reactivación programada' + (r.programado_ts ? ' · sale ' + fechaCorta(r.programado_ts) : ''));
   const h = hiloDe(id); if (h.chat) h.chat.ghost_dias = 0; const c = INBOX.rows.get(id); if (c) c.ghost_dias = 0; pintarCabecera(h.chat || c); if (c) pintarFila(c);
 }
@@ -1433,9 +1473,9 @@ function abrirCotizar(){
     const n = Number(eng.value.replace(/\D/g, '')) || 0; ferr.textContent = ''; gerr.textContent = '';
     if (!n) { ferr.textContent = 'Escribe el enganche.'; eng.classList.add('err'); eng.focus(); return; }
     bloquear(go, true);
-    const r = await correr('cotizar:' + cl, () => apiPost('cotizar_v2', { chat_id: id, enganche: n, plazo, clave: cl }));
-    bloquear(go, false);
-    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } if (r.necesita === 'enganche') { ferr.textContent = r.error || 'Falta el enganche'; return; } gerr.textContent = r.error || 'No se pudo cotizar'; return; }
+    let r;
+    try { r = await correr('cotizar:' + cl, () => apiPost('cotizar_v2', { chat_id: id, enganche: n, plazo, clave: cl })); } finally { bloquear(go, false); }
+    if (!r || !r.ok) { r = r || {}; if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } if (r.necesita === 'enganche') { ferr.textContent = r.error || 'Falta el enganche'; return; } gerr.textContent = r.error || 'No se pudo cotizar'; return; }
     s.cerrar();
     burbujaSalida(id, r.texto_tarjeta || textoEnviado(r, 'Cotización enviada'), r);
   };
@@ -1464,21 +1504,21 @@ function abrirCita(){
   const s = sheet({ titulo: 'Agendar cita', html: '<div class="pillz">' + (auto ? autoEnHojaHTML(auto) : '<p class="hint">Sin auto en foco: el servidor lo pedirá si hace falta.</p>') + citaFormHTML('') + '</div>',
     pie: '<button class="cta" id="ci-go">Agendar</button><button class="cta sec" id="ci-sin">' + ico('clock') + 'Aún sin horario · proponerle día y hora</button><div class="g-err" id="ci-gerr"></div>' });
   autoEnHojaWire(s);
-  const st = citaFormWire(s.body); const go = s.pie.querySelector('#ci-go'), sin = s.pie.querySelector('#ci-sin'), gerr = s.pie.querySelector('#ci-gerr'); const cl = clave('cita', id);
+  const st = citaFormWire(s.body); const go = s.pie.querySelector('#ci-go'), sin = s.pie.querySelector('#ci-sin'), gerr = s.pie.querySelector('#ci-gerr'); const cl = clave('cita', id), clP = clave('citaprop', id);   // claves fijas para esta hoja: reintentar = mismo resultado
   // AÚN SIN HORARIO (owner 2026-09-12): manda la propuesta (busca día y hora) sin crear la cita
   sin.onclick = async () => {
-    const clP = clave('citaprop', id); bloquear(sin, true);
-    const r = await correr('citaprop:' + clP, () => apiPost('accion_v2', { chat_id: id, accion: 'cita_propuesta', clave: clP }));
-    bloquear(sin, false);
-    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo mandar'; return; }
+    gerr.textContent = ''; bloquear(sin, true); bloquear(go, true);
+    let r;
+    try { r = await correr('citaprop:' + clP, () => apiPost('accion_v2', { chat_id: id, accion: 'cita_propuesta', clave: clP })); } finally { bloquear(sin, false); bloquear(go, false); }
+    if (!r || !r.ok) { r = r || {}; if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo mandar'; return; }
     s.cerrar(); burbujaSalida(id, textoEnviado(r, 'Propuesta de cita enviada'), r);
   };
   go.onclick = async () => {
     if (!st.valida()) return; gerr.textContent = '';
-    bloquear(go, true);
-    const r = await correr('cita:' + cl, () => apiPost('cita_v2', { chat_id: id, fecha_iso: st.fecha, hora: st.hora, clave: cl }));
-    bloquear(go, false);
-    if (!r.ok) { if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo agendar'; return; }
+    bloquear(go, true); bloquear(sin, true);
+    let r;
+    try { r = await correr('cita:' + cl, () => apiPost('cita_v2', { chat_id: id, fecha_iso: st.fecha, hora: st.hora, clave: cl })); } finally { bloquear(go, false); bloquear(sin, false); }
+    if (!r || !r.ok) { r = r || {}; if (r.necesita === 'auto') { s.cerrar(); return abrirSelectorAuto(); } gerr.textContent = r.error || 'No se pudo agendar'; return; }
     s.cerrar();
     const c = r.cita || {}; burbujaSalida(id, textoEnviado(r, 'Cita agendada · ' + (c.fecha || st.fecha) + ' ' + (c.hora || st.hora) + (c.auto ? ' · ' + c.auto : '')), r);
     const row = INBOX.rows.get(id); if (row) { const cf = r.cita || {}; const dts = citaFecha({ fecha: cf.fecha || st.fecha, hora: cf.hora || st.hora }); row.cita = { cita_ts: dts ? dts.getTime() : null, auto: cf.auto || (auto && auto.nombre) || null, estado: 'confirmada' }; pintarFila(row, { arriba: true }); }
@@ -1547,10 +1587,15 @@ function abrirRecordatorio(){
     const cuando = new Date(f + 'T' + hh + ':00').getTime(); if (cuando < Date.now()) { err.textContent = 'Esa hora ya pasó.'; return; }
     bloquear(go, true);
     // SUPUESTO: `recordatorio_v2 {chat_id, fecha_iso, hora, texto, clave}`; si no existe → `prog_crear` actual (telefono)
-    let r = await apiPost('recordatorio_v2', { chat_id: id, fecha_iso: f, hora: hh, texto: t, cuando_ts: cuando, clave: cl });
-    if (accionDesconocida(r)) { const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, ''); r = await apiPost('prog_crear', { telefono: tel.slice(-10), texto: t, cuando_ts: cuando, con_foto: true }); }
-    bloquear(go, false);
-    if (!r.ok) { err.textContent = r.error || 'No se pudo programar'; return; }
+    let r;
+    try {
+      r = await correr('recordatorio:' + cl, async () => {
+        let x = await apiPost('recordatorio_v2', { chat_id: id, fecha_iso: f, hora: hh, texto: t, cuando_ts: cuando, clave: cl });
+        if (accionDesconocida(x)) { const h = hiloDe(id); const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, ''); x = await apiPost('prog_crear', { telefono: tel.slice(-10), texto: t, cuando_ts: cuando, con_foto: true }); }
+        return x;
+      });
+    } finally { bloquear(go, false); }
+    if (!r || !r.ok) { err.textContent = (r && r.error) || 'No se pudo programar'; return; }
     try { const l = recPendientes(id); l.push(cuando); localStorage.setItem(recKey(id), JSON.stringify(l)); } catch(e){}
     s.cerrar(); notaLocal(id, 'Recordatorio programado · ' + fechaCorta(cuando) + '\n«' + t + '»');
   };
@@ -1621,13 +1666,12 @@ function abrirSimular(){
   const go = s.body.querySelector('#si-go');
   go.onclick = async () => {
     const t = s.body.querySelector('#si-t').value.trim(); if (!t) return;
-    bloquear(go, true);
-    const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
-    const r = await apiPost('demo_responder', { chat_id: id, telefono: tel, texto: t });
-    bloquear(go, false);
-    if (!r.ok) { s.body.querySelector('#si-err').textContent = r.error || 'No se pudo'; return; }
+    bloquear(go, true); s.body.querySelector('#si-err').textContent = '';
+    // MISMA puerta que el composer como comprador: registra el entrante, corre el turno de Seb si el universo lo tiene y refresca el hilo (sin esto Seb no contestaba)
+    let r;
+    try { r = await enviarComoComprador(id, t); } finally { bloquear(go, false); }
+    if (!r || !r.ok) { s.body.querySelector('#si-err').textContent = (r && r.error) || 'No se pudo'; return; }
     s.cerrar();
-    setTimeout(() => { if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }, 900);   // respaldo si el timbre tarda
   };
   setTimeout(() => s.body.querySelector('#si-t').focus(), 80);
 }
@@ -1735,24 +1779,30 @@ function abrirNuevoComprador(){
       if (chk && chk.checked) { textoEntrante = (inb.value || '').trim(); if (!textoEntrante) { gerr.textContent = 'Escribe lo que dice el comprador.'; inb.focus(); return; } entrada = { modo: 'silencio', entrante: true }; st.modo = 'entrante'; }
       else { entrada = { modo: 'instruccion', texto: (ins.value || '').trim() }; st.modo = 'instruccion'; }
       bloquear(go, true);
-      const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, auto_id: st.auto.id, entrada, clave: cl }));
-      bloquear(go, false);
-      if (!r.ok) { gerr.textContent = r.error || 'No se pudo delegar'; return; }
-      const id = r.chat_id; if (!id) { gerr.textContent = 'Delegado, pero el servidor no devolvió el chat.'; cargarInbox({ reset: true }); return; }
-      let c = INBOX.rows.get(id); if (!c) c = await filaDesdeServidor(id);
-      if (c) { c.delegado = true; c.nombre = r.nombre || c.nombre; c.auto = c.auto || { id: st.auto.id, nombre: st.auto.nombre, precio: st.auto.precio, portada: st.auto.portada }; pintarFila(c, { arriba: true }); pintarBell(); }
-      if (textoEntrante != null) {   // entra el mensaje del comprador y se abre el chat directo
-        const rIn = await apiPost('demo_responder', { chat_id: id, texto: textoEntrante });
-        if (!rIn.ok) { gerr.textContent = rIn.error || 'No pude registrar el mensaje del comprador'; return; }
-        HILOS.delete(id); s.cerrar(); irTab('inicio'); QUIEN = 'comprador'; pintarQuien(); abrirChat(id);
-        if (rIn.seb_auto) { pintarPensando(true); apiPost('seb_turno', { chat_id: id }).finally(() => { pintarPensando(false); if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }); }
-        setTimeout(() => { if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }, 2500);
-        cargarInbox({ reset: true });
-        return;
-      }
-      notaLocal(id, (r.ya_delegado ? 'Ya estaba delegado · ' : 'Delegado · ') + 'seguimiento' + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : '') + ((r.errores || []).length ? ' · no se pudo: ' + r.errores.join('; ') : ''));
-      if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r);
-      if ((r.hechas || []).includes('cita')) citasInvalidar();
+      let r;
+      try {
+        r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, auto_id: st.auto.id, entrada, clave: cl }));
+        if (!r || !r.ok) { gerr.textContent = (r && r.error) || 'No se pudo delegar'; return; }
+        const id = r.chat_id; if (!id) { gerr.textContent = 'Delegado, pero el servidor no devolvió el chat.'; cargarInbox({ reset: true }); return; }
+        let c = INBOX.rows.get(id); if (!c) c = await filaDesdeServidor(id);
+        if (c) { c.delegado = true; c.nombre = r.nombre || c.nombre; c.auto = c.auto || { id: st.auto.id, nombre: st.auto.nombre, precio: st.auto.precio, portada: st.auto.portada }; pintarFila(c, { arriba: true }); pintarBell(); }
+        HILOS.delete(id);   // el puente y las herramientas ya quedaron guardados en el servidor: el hilo se repinta desde ahí (sin burbuja local = sin 'doble')
+        if (textoEntrante != null) {   // entra el mensaje del comprador (por la MISMA cola que el composer: registra + turno de Seb + refresco) y se abre el chat directo
+          s.cerrar(); irTab('inicio'); QUIEN = 'comprador'; pintarQuien(); abrirChat(id);
+          const rIn = await enviarComoComprador(id, textoEntrante);
+          if (!rIn || !rIn.ok) avisoError((rIn && rIn.error) || 'No pude registrar el mensaje del comprador');
+          setTimeout(() => refrescarHilo(id), 2500);
+          cargarInbox({ reset: true });
+          return;
+        }
+        // la nota local se escribe DESPUÉS de tirar el caché (antes se borraba con él y los errores parciales nunca se veían)
+        const errs = Array.isArray(r.errores) ? r.errores : [];
+        notaLocal(id, (r.ya_delegado ? 'Ya estaba delegado · ' : 'Delegado · ') + 'seguimiento' + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : '') + (errs.length ? ' · no se pudo: ' + errs.join('; ') : ''));
+        if (errs.length) avisoError('Delegado, pero no se pudo: ' + errs.join('; '));
+        if ((r.hechas || []).includes('cita')) citasInvalidar();
+      } finally { bloquear(go, false); }
+      if (!r || !r.ok || !r.chat_id || textoEntrante != null) return;
+      const id = r.chat_id, c = INBOX.rows.get(id);
       st.listo = { id, nombre: r.nombre || (c && c.nombre) || '' };
       paso3();
     };
@@ -2111,7 +2161,8 @@ async function cfAccion(tipo, v){
   if (r.sin_siguiente) aviso('No queda ningún mensaje programado.');
   else if (r.hechas && r.hechas.length) aviso(r.hechas.map(x => (CF_TIPOS[x.tipo] || x.tipo) + (x.salio ? '' : ' (no salió)')).join(' · '));
   if (CF) { CF.cursor = null; CF.sel = null; cfPintar(r); } cfPintarBarra(r);
-  if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); }).catch(() => {});
+  // el reloj del sandbox puede ir hacia atrás (reset / rebobinar borra mensajes) o insertar con ts menores al último visto: recarga completa, no incremental
+  if (CHAT_ID === id) { if (tipo === 'reloj' || tipo === 'mas') recargarHilo(id).then(() => cfChat()).catch(() => {}); else refrescarHilo(id); }
 }
 
 function abrirSubirAuto(){
