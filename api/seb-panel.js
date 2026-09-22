@@ -24,7 +24,6 @@ const citasVivas = require('../lib/seb/citas-vivas.js');
 const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
-const AUTOBOTON = require('../lib/seb/auto-boton.js');
 const CITAF = require('../lib/seb/citas-flex.js');   // CITAS FLEXIBLES (ventana + eventos + reloj virtual) — solo universos con config.citas_flex=1 (TERRA MOTORS)
 const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
@@ -32,14 +31,36 @@ const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebr
 // teléfono real → delegación viva → carril de pruebas → idempotencia por `clave` (tabla envios) → puente → recibo.
 const MSJ = require('../lib/seb/mensajeria.js');
 const ACCIONES = require('../lib/seb/acciones.js');
+// módulos usados dentro de los handlers (antes: 80+ require() en línea; Node los cachea, pero era ruido) — limpieza 2026-09-22
+const LIB_AD_ESPIA = require('../lib/seb/ad-espia.js');
+const LIB_APARADOR = require('../lib/seb/aparador.js');
+const LIB_CAMPANA = require('../lib/seb/campana.js');
+const LIB_CANAL_MESSENGER = require('../lib/seb/canal-messenger.js');
+const LIB_CARGA_LOTE = require('../lib/seb/carga-lote.js');
+const LIB_CLASIFICADOR = require('../lib/seb/clasificador.js');
+const LIB_DOCTRINA = require('../lib/seb/doctrina.js');
+const LIB_GHOSTING = require('../lib/seb/ghosting.js');
+const LIB_GOBERNADOR = require('../lib/seb/gobernador.js');
+const LIB_HERRAMIENTAS = require('../lib/seb/herramientas.js');
+const LIB_JUEZ = require('../lib/seb/juez.js');
+const LIB_MACHOTE = require('../lib/seb/machote.js');
+const LIB_MEMO = require('../lib/seb/memo.js');
+const LIB_MESA = require('../lib/seb/mesa.js');
+const LIB_OPENER = require('../lib/seb/opener.js');
+const LIB_PROGRAMADOS = require('../lib/seb/programados.js');
+const LIB_RECEPCION = require('../lib/seb/recepcion.js');
+const LIB_REGEX_COMUNES = require('../lib/seb/regex-comunes.js');
+const LIB_RESCATE = require('../lib/seb/rescate.js');
+const LIB_RUTEADOR = require('../lib/seb/ruteador.js');
+const LIB_TIMBRE = require('../lib/seb/timbre.js');
 // 🚩fyrachat#7: al confirmarse una cita, la fecha/hora del CERRADOR quedan como
 // CANÓNICAS (deterministas, sin IA) — el cita-extractor las usa tal cual.
 // ══ BITÁCORA DE ESCALADAS (opción A del owner, 2026-07-13): las escaladas de
 // CRITERIO abren la puerta a que su primer manual tome posesión (ver doctrina).
 // ══ APARADOR DE CARRUSEL (orden owner 2026-07-20) — la lógica vive en la FUENTE
 // ÚNICA lib/seb/aparador.js (el sandbox usa LA MISMA): aquí solo se importa.
-const { intentarEleccionAparador, arranqueCarrusel, opcionesEnFlujo } = require('../lib/seb/aparador.js');
-const { RE_PETICION_POS, RE_HERR_SIN_DATOS } = require('../lib/seb/regex-comunes.js');
+const { intentarEleccionAparador, arranqueCarrusel, opcionesEnFlujo } = LIB_APARADOR;
+const { RE_PETICION_POS, RE_HERR_SIN_DATOS } = LIB_REGEX_COMUNES;
 
 
 async function logEscala(tel, motivo) {
@@ -194,16 +215,6 @@ module.exports = async function handler(req, res) {
             let autoBoton = null;
             const sebAuto = !!(tDm.config && Number(tDm.config.seb_auto) === 1);
             if (sebAuto && r.ok) return res.status(200).json(Object.assign({ simulado: true, chat_id: Number(r.chat_id), seb_auto: true }, r));   // el cerebro completo corre en `seb_turno`
-            if (r.ok && r.chat_id && process.env.K_PANEL && req.body.sin_auto_boton !== true) {
-                try {
-                    const chatAB = await U.chatPorId(Number(r.chat_id));
-                    // POSESIÓN (misma regla que en universos reales): si el vendedor escribió a mano hace < 15 min, la IA calla (y lo dice)
-                    const um = (await query("SELECT MAX(ts) t FROM envios WHERE chat_id = ? AND accion = 'manual' AND estado <> 'error'", [Number(r.chat_id)]).catch(() => [{ t: null }]))[0];   // solo lo TECLEADO en el composer (un botón o el primer mensaje no dan posesión)
-                    if (um && um.t && (Date.now() - Number(um.t)) < 15 * 60000) { await DEMO.sistema(tDm, telDm, '🤖 Seb calló: escribiste a mano hace menos de 15 min (posesión del vendedor)'); return res.status(200).json(Object.assign({ simulado: true, chat_id: Number(r.chat_id), auto_boton: { resultado: 'posesion' } }, r)); }
-                    const puerta = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tDm.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tDm.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
-                    autoBoton = await AUTOBOTON.correr({ tenant: tDm, chat: chatAB, texto: req.body.texto, msgId: r.msg_id, puerta, rastro: (txt) => DEMO.sistema(tDm, telDm, txt) });
-                } catch (e) { autoBoton = { resultado: 'error', error: e.message }; }
-            }
             return res.status(r.ok ? 200 : 400).json(Object.assign({ simulado: true, chat_id: req.body.chat_id ? Number(req.body.chat_id) : undefined, auto_boton: autoBoton }, r));
         }
         // ══ ENTRANTE DE UNIVERSO → AUTO-BOTÓN (orden owner 2026-09-18): el puente avisa cada mensaje del comprador en un chat delegado de un
@@ -213,17 +224,7 @@ module.exports = async function handler(req, res) {
             if (!conPuente && !conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
             const tE = await tenantDeParam(String(req.body.tenant_id || '')); if (!tE || !Number(tE.id)) return res.status(404).json({ ok: false, error: 'universo inexistente' });
             if (!(tE.config && Number(tE.config.auto_boton) === 1)) return res.status(200).json({ ok: true, ignorado: 'auto_boton apagado en este universo' });
-            const chE = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chE || Number(chE.tenant_id) !== Number(tE.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en ese universo' });
-            const POSESION_MS = 15 * 60000;
-            const ultManual = (await query("SELECT MAX(ts) t FROM envios WHERE chat_id = ? AND accion = 'manual' AND estado <> 'error'", [Number(chE.id)]).catch(() => [{ t: null }]))[0];   // composer de FyraChat; lo tecleado en el teléfono llega en ultimo_from_me
-            const tManual = Math.max(Number(ultManual && ultManual.t) || 0, Number(req.body.ultimo_from_me) || 0);
-            if (tManual && (Date.now() - tManual) < POSESION_MS) return res.status(200).json({ ok: true, ignorado: 'posesión del vendedor (escribió hace < 15 min)' });
-            const puertaE = async (a, body) => { const rr = await fetch(ORIGEN_PROPIO + '/api/seb-panel?action=' + a + '&vendedor=' + encodeURIComponent(String(tE.id)), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.K_PANEL }, body: JSON.stringify(Object.assign({}, body, { vendedor: String(tE.id) })) }); return rr.json().catch(() => ({ ok: false, error: 'respuesta inválida ' + rr.status })); };
-            const rastroE = async (txt) => { const ts = Date.now(), msgId = 'auto:' + Number(chE.id) + ':' + ts; await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chE.id), msgId, ts, 'out', 'sistema', txt, 'text', 1, ts]).catch(() => { }); try { await MSJ.timbreMensaje({ tenant_id: Number(tE.id), chat_id: Number(chE.id), telefono: chE.telefono, simulado: false, mensaje: { id: null, msg_id: msgId, dir: 'out', emisor: 'sistema', texto: txt, ts, media: null, estado: 'enviado' } }); } catch (e) { } };
-            let rE = null;
-            try { rE = await AUTOBOTON.correr({ tenant: tE, chat: chE, texto: req.body.texto, msgId: req.body.msg_id, puerta: puertaE, rastro: rastroE, dry: req.body.dry === true }); }
-            catch (e) { rE = { resultado: 'error', error: e.message }; }
-            return res.status(200).json({ ok: true, auto_boton: rE });
+            return res.status(200).json({ ok: true, ignorado: 'auto-botón retirado (2026-09-22): el cerebro de Seb ya aprieta las herramientas por la misma puerta' });
         }
         // ── CITAS FLEXIBLES: tubería (sandbox → hilo; real → WhatsApp por la puerta de mensajes) y auto del chat ──
         const ioCitaf = (tC, chC) => CITAF.ioPara(tC, chC);   // UNA sola tubería (panel, cron y pruebas): vive en lib/seb/citas-flex.js
@@ -644,7 +645,7 @@ module.exports = async function handler(req, res) {
             // ══ LA MÁQUINA DE RESCATE EN VIVO (owner 2026-07-23): este es el canal por
             // el que el puente ya manda toques cada ~15 min. El anti-ghost VIEJO de 3h
             // queda APAGADO (GHOST_VIEJO=1 lo revive) — jamás doble-push.
-            const resc = require('../lib/seb/rescate.js');
+            const resc = LIB_RESCATE;
             const enviar = [];
             // PUERTA DE MENSAJES (FyraChat v2, 2026-09-10): los rescates y los programados YA NO regresan como lista para
             // que el puente los mande — salen desde aquí por mensajeria.enviar (idempotente por clave, primero la puerta y
@@ -652,11 +653,11 @@ module.exports = async function handler(req, res) {
             // `enviar` queda vacío salvo el ghosting viejo (GHOST_VIEJO=1).
             let rescates = null, programados = null;
             try { rescates = await resc.despachar({ ahora: Date.now() }); } catch (e) { rescates = { error: e.message }; }
-            try { programados = await require('../lib/seb/programados.js').despachar({ ahora: Date.now() }); } catch (e) { programados = { error: e.message }; }
+            try { programados = await LIB_PROGRAMADOS.despachar({ ahora: Date.now() }); } catch (e) { programados = { error: e.message }; }
             const avisos = await resc.preAvisos({ ahora: Date.now() });
             let reporte = avisos.length ? avisos.join('\n\n') : null;
             if (process.env.GHOST_VIEJO === '1') {
-                const { ghostScan } = require('../lib/seb/ghosting.js');
+                const { ghostScan } = LIB_GHOSTING;
                 const duenos = await telefonosDueno();
                 const rV = await ghostScan({ duenos, dry: !!(req.body && req.body.dry) });
                 for (const g of (rV.enviar || [])) enviar.push(g);
@@ -669,7 +670,7 @@ module.exports = async function handler(req, res) {
             const telR = String(req.body.telefono || '').replace(/\D/g, '');
             if (!telR) return res.status(400).json({ ok: false, error: 'telefono' });
             // CANDADO DE CAMPAÑA 📢: una respuesta a la campaña NO crea folios de rescate
-            try { if (await require('../lib/seb/campana.js').esMudo(telR)) return res.status(200).json({ ok: true, rescate: { skip: 'campana_muda' } }); } catch (e) { }
+            try { if (await LIB_CAMPANA.esMudo(telR)) return res.status(200).json({ ok: true, rescate: { skip: 'campana_muda' } }); } catch (e) { }
             try {
                 // la ráfaga entrante = lo que él dijo desde nuestra última salida
                 const cvT = await query("SELECT id FROM conversaciones WHERE channel_thread_id=?", ['whatsapp:' + telR]);
@@ -680,7 +681,7 @@ module.exports = async function handler(req, res) {
                     for (const m of ms) { if (m.direccion === 'out') break; rafaga.unshift(m.texto); }
                     textoIn = rafaga.join('\n');
                 }
-                const resc2 = require('../lib/seb/rescate.js');
+                const resc2 = LIB_RESCATE;
                 const rT2 = await resc2.registrarTurno({ tel: telR, textoIn, ruta: 'real', segmentos: req.body.segmentos || [], pin: !!req.body.pin, ahora: Date.now() });
                 return res.status(200).json({ ok: true, rescate: rT2 });
             } catch (e) { return res.status(200).json({ ok: false, error: e.message }); }
@@ -690,8 +691,8 @@ module.exports = async function handler(req, res) {
             if (!telM) return res.status(400).json({ ok: false, error: 'telefono' });
             // CANDADO DE CAMPAÑA 📢: tu mensaje manual desde el teléfono = RETOMASTE
             // el chat → el candado se libera y todo vuelve a la normalidad.
-            try { await require('../lib/seb/campana.js').liberar(telM); } catch (e) { }
-            const resc3 = require('../lib/seb/rescate.js');
+            try { await LIB_CAMPANA.liberar(telM); } catch (e) { }
+            const resc3 = LIB_RESCATE;
             const rM = await resc3.registrarSalidaManual({ tel: telM, texto: String(req.body.texto || ''), esPin: !!req.body.es_pin, ahora: Date.now() });
             return res.status(200).json({ ok: true, rescate: rM });
         }
@@ -771,7 +772,7 @@ module.exports = async function handler(req, res) {
                 const cA = await U.chatDe(tA.id, telA);
                 if (!cA) return res.status(200).json({ ok: true, acciones: [] });
                 const desdeA = Number(req.query.desde) || 0;   // epoch en segundos (como FyraChat) o en ms
-                const filas = await require('../lib/seb/acciones.js').listar({ chat_id: cA.id, desde: desdeA > 1e12 ? desdeA : desdeA * 1000, limite: Number(req.query.limite) || 200 });
+                const filas = await ACCIONES.listar({ chat_id: cA.id, desde: desdeA > 1e12 ? desdeA : desdeA * 1000, limite: Number(req.query.limite) || 200 });
                 return res.status(200).json({ ok: true, chat_id: cA.id, acciones: filas.map(a => ({ id: a.id, tipo: a.tipo, ref_id: a.ref_id, meta: (() => { try { return JSON.parse(a.meta_json || 'null'); } catch (e) { return null; } })(), ts: Number(a.ts), actor: a.actor, delegacion_id: a.delegacion_id })) });
             } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
         }
@@ -892,7 +893,7 @@ module.exports = async function handler(req, res) {
             const inv = cat.find(a => Number(a.id) === idF || Number(a.fyradrive_web_id) === idF);
             if (!inv) return res.status(403).json({ ok: false, error: 'ese auto no está habilitado para este usuario' });
             await ponerFoco(tF, telF, inv);
-            try { const dF = await citasVivas.direccionDe(tF.id, telF); await require('../lib/seb/acciones.js').registrar({ tenant_id: tF.id, chat_id: dF.chat_id, delegacion_id: dF.delegacion_id, tipo: 'foco_cambiado', ref_id: inv.id, meta: { auto: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ') }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
+            try { const dF = await citasVivas.direccionDe(tF.id, telF); await ACCIONES.registrar({ tenant_id: tF.id, chat_id: dF.chat_id, delegacion_id: dF.delegacion_id, tipo: 'foco_cambiado', ref_id: inv.id, meta: { auto: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ') }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
             return res.status(200).json({ ok: true, foco: { id: inv.id, web_id: inv.fyradrive_web_id, nombre: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' '), precio: inv.precio } });
         }
         if (action === 'tenant_info') {
@@ -950,7 +951,7 @@ module.exports = async function handler(req, res) {
             if (!t.id) {
                 // ETAPA 2: el chat nace en su universo (0) y la delegación (chat → auto) queda con historial; espejo a wa_conversations
                 chatD0 = await U.chatDe(0, telD, { crear: true, visible: true, nombre: nomC || null });
-                try { await require('../lib/seb/canal-messenger.js').marcarOwner(telD); } catch (e) { }
+                try { await LIB_CANAL_MESSENGER.marcarOwner(telD); } catch (e) { }
                 try { if (chatD0) await U.delegar(chatD0, { auto_id: auto.fyradrive_web_id || auto.id, auto_nombre: autoNombre, activado_por: 'fyrachat' }); } catch (e) { }
             }
             let r = null;
@@ -1040,7 +1041,7 @@ module.exports = async function handler(req, res) {
                 } else if (nombreN && !String(ex[0].nombre || '').trim()) {
                     await run("UPDATE conversaciones SET nombre=? WHERE id=?", [nombreN, ex[0].id]);
                 }
-                try { await require('../lib/seb/canal-messenger.js').marcarOwner(telN); } catch (e) { }
+                try { await LIB_CANAL_MESSENGER.marcarOwner(telN); } catch (e) { }
                 return res.status(200).json({ ok: true, telefono: telN, nombre: nombreN || (ex[0] && ex[0].nombre) || null, creado });
             } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
         }
@@ -1145,11 +1146,11 @@ module.exports = async function handler(req, res) {
             // Con VISITA VIVA no se vuelve a empujar a cita; sin visita, el gancho sale eventualmente (enfriamiento), nunca en cada turno.
             if (convId) {
                 try {
-                    try { require('../lib/seb/memo.js').olvidar('estadoConv:' + convId); } catch (e) { }   // siempre fresco: el gancho recién enviado debe contar (mensajes seguidos en < 20 s)
+                    try { LIB_MEMO.olvidar('estadoConv:' + convId); } catch (e) { }   // siempre fresco: el gancho recién enviado debe contar (mensajes seguidos en < 20 s)
                     const estG = await require('../lib/seb/etapa3.js').estadoConv(convId, filasEstado);   // con las filas ya leídas: el chat no se lee dos veces
                     const textoG = entrantes[entrantes.length - 1].mensaje;
                     const _json = res.json.bind(res);
-                    res.json = (payload) => { try { payload = require('../lib/seb/gobernador.js').gobernarSalida(payload, { texto: textoG, est: estG }); } catch (e) { console.error('[gobernador salida]', e.message); } return _json(payload); };
+                    res.json = (payload) => { try { payload = LIB_GOBERNADOR.gobernarSalida(payload, { texto: textoG, est: estG }); } catch (e) { console.error('[gobernador salida]', e.message); } return _json(payload); };
                 } catch (e) { console.error('[gobernador estado]', e.message); }
             }
             // ══ VENDEDOR ASIGNADO (staff, orden owner 2026-08-25): si este tel tiene una
@@ -1178,7 +1179,7 @@ module.exports = async function handler(req, res) {
             // Lo que contesten SOLO se escala al owner. Se libera cuando él escribe a
             // mano en ese chat (manual ai=0 posterior al candado, o eco del teléfono).
             try {
-                const camp = require('../lib/seb/campana.js');
+                const camp = LIB_CAMPANA;
                 const mudo = TSEB ? null : await camp.esMudo(tel);
                 if (mudo) {
                     const manualDespues = mensajes.some(m => m.direccion === 'out' && !m.ai && Number(m.ts) > Number(mudo.ts));
@@ -1200,7 +1201,7 @@ module.exports = async function handler(req, res) {
             // habla (solo lee y registra), el funnel ya quedó adelantado a calificación,
             // y el "cita confirmada ✅" sigue entrando por su timbre de siempre.
             try {
-                const cm = require('../lib/seb/canal-messenger.js');
+                const cm = LIB_CANAL_MESSENGER;
                 const telCM = tel.replace(/\D/g, '');
                 const conClave = TSEB ? false : cm.tieneClave(mensajes);
                 // ARRANQUE ATÍPICO: solo cuenta si el lead NO viene de un anuncio
@@ -1236,7 +1237,7 @@ module.exports = async function handler(req, res) {
             // citas — hasta que TÚ vuelvas a escribir a mano. Acusa recibo UNA sola vez;
             // todo lo que llegue del comprador mientras tanto se te escala.
             try {
-                const { esStandby, ACUSE_STANDBY } = require('../lib/seb/doctrina.js');
+                const { esStandby, ACUSE_STANDBY } = LIB_DOCTRINA;
                 const manualesSb = mensajes.filter(m => m.direccion === 'out' && !m.ai);
                 const ultManualSb = manualesSb.length ? manualesSb[manualesSb.length - 1] : null;
                 if (ultManualSb && esStandby(ultManualSb.mensaje) && (Date.now() - Number(ultManualSb.ts)) < 7 * 86400000) {
@@ -1247,7 +1248,7 @@ module.exports = async function handler(req, res) {
                     // auditoría #13: también exime al DUEÑO CONOCIDO que vuelve por otro
                     // auto (aún sin sesión) — tu standby no congela la recepción.
                     try {
-                        const recSb = require('../lib/seb/recepcion.js');
+                        const recSb = LIB_RECEPCION;
                         enRecepcionSb = !!(await recSb.sesionActiva(tel)) || !!(await recSb.duenoConocido(tel));
                     } catch (e) { }
                     if (!enRecepcionSb) {
@@ -1281,7 +1282,7 @@ module.exports = async function handler(req, res) {
             // Interruptor global: IGNACIO_RECEPCION=0. Cerebro: lib/seb/recepcion.js (paridad sandbox).
             try {
                 if (process.env.IGNACIO_RECEPCION !== '0' && !TSEB) {
-                    const recepcion = require('../lib/seb/recepcion.js');
+                    const recepcion = LIB_RECEPCION;
                     // ══ FUENTE ÚNICA (orden owner 2026-07-16): el turno COMPLETO de Ignacio
                     // (ráfaga, historial, último manual, compuerta de despertar) vive en
                     // turnoIgnacio (lib/seb/recepcion.js) — el sandbox llama LA MISMA función.
@@ -1304,7 +1305,7 @@ module.exports = async function handler(req, res) {
             // pregunta el auto en vez de afirmar uno equivocado. Persiste; todas las etapas
             // (opener/continuación/etapa3) lo heredan vía [DESC: …].
             try {
-                const { sanearContexto } = require('../lib/seb/ad-espia.js');
+                const { sanearContexto } = LIB_AD_ESPIA;
                 adCtx = await sanearContexto(tel, adCtx, mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
             } catch (e) { console.error('[ad-espia]', e.message); }
             const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
@@ -1317,7 +1318,7 @@ module.exports = async function handler(req, res) {
             // el CIERRE es tuyo ("cita confirmada + día + hora + auto + precio" — el cron
             // lo interpreta determinista y ejecuta la máquina); lo demás = SILENCIO.
             try {
-                const { herramientaPura, posesionOwner } = require('../lib/seb/doctrina.js');
+                const { herramientaPura, posesionOwner } = LIB_DOCTRINA;
                 let escalasPos = [];
                 try { escalasPos = (await query("SELECT motivo, ts FROM escalas_log WHERE telefono=? AND ts > ?", [tel, Date.now() - 24 * 3600000])).map(e => ({ motivo: e.motivo, ts: Number(e.ts) })); } catch (e) { }
                 if (bursts >= 2 && posesionOwner(mensajes, escalasPos)) {
@@ -1334,7 +1335,7 @@ module.exports = async function handler(req, res) {
                     let followupP = ultimoSolo;
                     // "mándame la información del X" = herramienta DIRECTA (leer ficha) — sin
                     // gancho, y si nombra otro auto ese se abre (orden owner 2026-07-21)
-                    const infoP = await require('../lib/seb/mesa.js').herramientaEnPosesion({ tel, texto: ultimoSolo }).catch(() => null);
+                    const infoP = await LIB_MESA.herramientaEnPosesion({ tel, texto: ultimoSolo }).catch(() => null);
                     if (infoP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (infoP.universo || 'info_auto'), segmentos: infoP.segmentos, fotos: infoP.fotos || null, fotos_after_index: (infoP.fotos_after_index != null ? infoP.fotos_after_index : 0), ubicacion_auto_id: infoP.ubicacion_auto_id || null, pin_after_index: (infoP.pin_after_index != null ? infoP.pin_after_index : null) });
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + ultimoSolo : ultimoSolo;
                     const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
@@ -1379,7 +1380,7 @@ module.exports = async function handler(req, res) {
                 // 📷 LA IMAGEN SE LEE (owner 2026-07-22): con URL se identifica el auto y
                 // entra al texto; sin URL y sin texto útil → aviso al owner, jamás silencio.
                 {
-                    const absI = await require('../lib/seb/aparador.js').absorberImagen({ texto: followup, urls: req.body.imagenes });
+                    const absI = await LIB_APARADOR.absorberImagen({ texto: followup, urls: req.body.imagenes });
                     if (absI.imagen && absI.sinUrl && !absI.textoUtil) {
                         await logEscala(tel, '📷 mandó una IMAGEN que el bot no puede ver — revísala tú');
                         return { done: { ok: false, escalar_owner: true, escala_motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: followup } };
@@ -1399,20 +1400,20 @@ module.exports = async function handler(req, res) {
                 const mc = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
                 const clasif = await entender({ mensaje: mc, historial: histCorto, estado: {} });
                 // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
-                clasif.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followup, clasif: clasif });
+                clasif.auto_id = await LIB_MESA.alinearAuto({ tel, texto: followup, clasif: clasif });
                 // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
                 // con 2-3 en mesa lo general se contesta para todos, lo de uno en ese.
                 // DUDAS GENERALES (crédito/requisitos/tasas) → su carril, no la mesa
-                const dg = await require('../lib/seb/mesa.js').dudaGeneral({ tel, texto: followup, nombre: nombreChat, clasif: clasif, convId });
+                const dg = await LIB_MESA.dudaGeneral({ tel, texto: followup, nombre: nombreChat, clasif: clasif, convId });
                 if (dg) return { done: { ok: true, modo: 'duda_general', tipo: dg.tipo, segmentos: dg.segmentos } };
-                const mesaR = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasif, convId });
+                const mesaR = await LIB_MESA.responderMesa({ tel, texto: followup, clasif: clasif, convId });
                 if (mesaR && mesaR.segmentos) return { done: { ok: true, modo: 'mesa', tipo: mesaR.tipo, segmentos: mesaR.segmentos, fotos: mesaR.fotos || null, fotos_after_index: (mesaR.fotos_after_index != null ? mesaR.fotos_after_index : null), ubicacion_auto_id: mesaR.ubicacion_auto_id || null, pin_after_index: (mesaR.pin_after_index != null ? mesaR.pin_after_index : null) } };
                 if (mesaR && mesaR.auto_id) clasif.auto_id = mesaR.auto_id;
                 // ══ EL PERRO (owner 2026-07-21): Haiku elige herramientas (combinadas o
                 // no), el código ejecuta con machotes — mata el parche-por-parche.
                 {
                     const histTxtP = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
-                    const perro = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followup, historial: histTxtP, convId });
+                    const perro = await LIB_RUTEADOR.rutear({ tel, texto: followup, historial: histTxtP, convId });
                     if (perro && perro.escalar_owner) {
                         await logEscala(tel, perro.escala_motivo);
                         return { done: { ok: !!(perro.segmentos && perro.segmentos.length), modo: 'perro', tipo: perro.tipo, segmentos: perro.segmentos || [], fotos: perro.fotos || null, fotos_after_index: (perro.fotos_after_index != null ? perro.fotos_after_index : null), escalar_owner: true, escala_motivo: perro.escala_motivo, escala_ultimo: followup } };
@@ -1426,7 +1427,7 @@ module.exports = async function handler(req, res) {
                 if (ccC.done) return res.status(200).json(ccC.done);
                 const followup = ccC.followup, clasifC = ccC.clasif;
                 const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses, intencion: clasifC.intencion_principal, conv_id: convId, clasif: clasifC });
-                const escNomC = require('../lib/seb/opener.js').nombreReal(nombreChat) || nombreChat || null;
+                const escNomC = LIB_OPENER.nombreReal(nombreChat) || nombreChat || null;
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
                 if (cont && cont.escalar) {
                     await logEscala(tel, cont.motivo);
@@ -1446,13 +1447,13 @@ module.exports = async function handler(req, res) {
                 // con una FAMILIA ("el mazda" y hay 2 Mazda) → se le presentan y se
                 // pregunta cuál — esto NO es "fuera de lista blanca", es leer inventario.
                 try {
-                    const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
+                    const { candidatosDeAuto } = LIB_CLASIFICADOR;
                     const aActC = await memoQuery(INV_TTL, "SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                     const candC = candidatosDeAuto(followup, aActC.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                     if (candC) {
                         return res.status(200).json({
                             ok: true, modo: 'continuacion', tipo: 'cont_desambiguar', segmentos: [
-                                require('../lib/seb/aparador.js').introFamilia(followup, candC) + '\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
+                                LIB_APARADOR.introFamilia(followup, candC) + '\n' + candC.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
                                 'Cuál te interesa?'
                             ]
                         });
@@ -1471,7 +1472,7 @@ module.exports = async function handler(req, res) {
                 let autoE = clasifE.auto_id;
                 if (!autoE) { try { autoE = await U.autoActivoDe(0, tel); } catch (e) { } }
                 const { responderEtapa3 } = require('../lib/seb/etapa3.js');
-                const { nombreReal } = require('../lib/seb/opener.js');
+                const { nombreReal } = LIB_OPENER;
                 const e3 = await responderEtapa3({ texto: followupE, auto_id: autoE, conv_id: convId, clasif: clasifE });
                 const escNom = nombreReal(nombreChat) || nombreChat || null;
                 if (e3 && e3.escalar) {
@@ -1506,13 +1507,13 @@ module.exports = async function handler(req, res) {
             // además venía OTRA pregunta se contestan AMBAS (nota de la foto + el flujo).
             let notaFoto = null;
             try {
-                const apF = require('../lib/seb/aparador.js');
+                const apF = LIB_APARADOR;
                 const absF = await apF.absorberImagen({ texto: textoFamilia });
                 if (absF && absF.auto) {
                     const autosF = await apF.inventarioActivo();
                     const rowF = autosF.find(a => a.id === absF.auto.auto_id);
                     if (rowF) {
-                        const { guardarMesa } = require('../lib/seb/mesa.js');
+                        const { guardarMesa } = LIB_MESA;
                         const ejF2 = (await U.leerEstado(0, tel)).ej;
                         ejF2.escena = [rowF.id];
                         await guardarMesa(tel, ejF2, [rowF.id], rowF.id);
@@ -1537,7 +1538,7 @@ module.exports = async function handler(req, res) {
             // → no es interés: se anula para que jamás se pitchee ni se siente
             if (clasif.auto_id) {
                 try {
-                    const apNeg = require('../lib/seb/aparador.js');
+                    const apNeg = LIB_APARADOR;
                     const rowsNeg = await query("SELECT marca, modelo, version, anio FROM inventario_autos WHERE id=?", [Number(clasif.auto_id)]);
                     if (rowsNeg.length && apNeg.esNegado(textoFamilia, [rowsNeg[0].marca, rowsNeg[0].modelo, rowsNeg[0].version, rowsNeg[0].anio].filter(Boolean).join(' '))) clasif.auto_id = null;
                     // GEMELOS también en el opener (red team r2 #4): dos altas casi
@@ -1558,7 +1559,7 @@ module.exports = async function handler(req, res) {
                         let famOk = true;
                         if (rFamO && rFamO.pregunta && rFamO.via === 'nombre_ambiguo') {
                             try {
-                                const { juezNombroAuto } = require('../lib/seb/juez.js');
+                                const { juezNombroAuto } = LIB_JUEZ;
                                 const jF = await juezNombroAuto({ texto: textoFamilia, candidatos: rFamO.pregunta });
                                 famOk = !jF || jF.nombro !== false;
                             } catch (e) { }
@@ -1567,7 +1568,7 @@ module.exports = async function handler(req, res) {
                             const idsF = rFamO.pregunta.map(x => x.id);
                             const ejF = JSON.stringify({ mesa_familia: idsF });
                             await U.guardarEstado(0, tel, { estado_json: ejF, estado: 'mesa' }).catch(() => { });
-                            const { nombreReal: nrF, saludoHora: shF } = require('../lib/seb/opener.js');
+                            const { nombreReal: nrF, saludoHora: shF } = LIB_OPENER;
                             const nmF = nrF(nombreChat);
                             return res.status(200).json({ ok: true, modo: 'mesa', tipo: 'mesa_pregunta_cual', segmentos: [`Qué tal${nmF ? ' ' + nmF : ''} ${shF()}!`, 'De esos tenemos estos — ¿cuál te interesa?\n' + rFamO.pregunta.map((x, i) => `${i + 1}) ${x.nombre}`).join('\n')] });
                         }
@@ -1589,19 +1590,11 @@ module.exports = async function handler(req, res) {
             // ══ ENTRADA MÚLTIPLE (red team #3): abre nombrando 2-3 autos → todos a la
             // mesa desde el saludo (ficha + portada + punto de cada uno → a la cita)
             try {
-                const emP = await require('../lib/seb/mesa.js').entradaMultiple({ tel, texto: textoFamilia, nombre: nombreChat });
+                const emP = await LIB_MESA.entradaMultiple({ tel, texto: textoFamilia, nombre: nombreChat });
                 if (emP) { const oP = conFoto({ ok: true, modo: 'mesa', tipo: emP.tipo, segmentos: emP.segmentos, fotos: emP.fotos || null, fotos_after_index: (emP.fotos_after_index != null ? emP.fotos_after_index : null), ubicacion_auto_id: emP.ubicacion_auto_id || null, pin_after_index: (emP.pin_after_index != null ? emP.pin_after_index : null) }); if (notaFoto && oP.fotos_after_index != null && oP.fotos_after_index >= 2) oP.fotos_after_index++; return res.status(200).json(oP); }
             } catch (e) { console.error('[mesa multi opener]', e.message); }
 
-            // MULTI-PREGUNTA o pregunta RARA/long-tail → que conteste el CEREBRO (loop) en la
-            // voz del owner (nucleo), en vez de deflectar a "info" genérico.
-            if (clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
-                try {
-                    const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
-                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: partirRafaga(p.borrador), tipo: 'cerebro' });
-                } catch (e) { /* si el cerebro falla, cae al opener */ }
-            }
-
+            // (antes: cerebro Sonnet para long-tail — retirado 2026-09-22: el bot no improvisa; lo que el opener no reconoce, lo ves tú)
             // Opener determinístico (familias claras, voz exacta).
             const op = await responderOpener({
                 texto: textoFamilia, nombre: nombreChat,
@@ -1610,13 +1603,8 @@ module.exports = async function handler(req, res) {
             if (op && op.segmentos && op.segmentos.length) { const oOp = conFoto({ ok: true, segmentos: op.segmentos, tipo: op.tipo, fotos: op.fotos || null, fotos_after_index: (op.fotos_after_index != null ? op.fotos_after_index : null) }); if (notaFoto && oOp.fotos_after_index != null && oOp.fotos_after_index >= 2) oOp.fotos_after_index++; return res.status(200).json(oOp); }
             // El opener no supo (vendedor → null) → si es vendedor/junk, no autopilot.
             if (clasif.escalar) return res.status(200).json({ ok: false, motivo: 'escala_vendedor' });
-            // Hay auto y es comprador, pero el opener no tiene familia → al CEREBRO (voz del owner).
-            if (clasif.auto_id) {
-                try {
-                    const p = await pensar({ telefono: tel, mensaje: textoFamilia, clasificacion: clasif, estado: {} });
-                    if (p && p.ok && p.borrador) return res.status(200).json({ ok: true, segmentos: partirRafaga(p.borrador), tipo: 'cerebro' });
-                } catch (e) { /* sin cerebro → no_aplica */ }
-            }
+            // Hay auto y es comprador, pero el opener no tiene familia → lo ves tú (antes: Sonnet; retirado 2026-09-22)
+            if (clasif.auto_id) { await logEscala(tel, 'primer contacto sin familia clara — lo ves tú'); return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: 'primer contacto sin familia clara — lo ves tú', escala_nombre: nombreChat || null, escala_ultimo: textoFamilia }); }
             // FALLBACK UNIVERSAL (caso Sahara): es COMPRADOR pero no se pudo resolver QUÉ auto
             // (anuncio viejo, texto raro, sin [DESC]). Antes → silencio (apagón). Ahora se
             // contesta SIEMPRE con la pregunta del owner (su frase real de la data) — cualquier
@@ -1624,12 +1612,12 @@ module.exports = async function handler(req, res) {
             {
                 const intOk = ['info_inicial', 'disponibilidad', 'estado_auto', 'cotizar_credito', 'cita_ubicacion', 'precio_negociacion', 'fotos_videos', 'otro'].includes(clasif.intencion_principal);
                 if (intOk && !clasif.escalar) {
-                    const { nombreReal, saludoHora } = require('../lib/seb/opener.js');
+                    const { nombreReal, saludoHora } = LIB_OPENER;
                     const nm = nombreReal(nombreChat);
                     // DESAMBIGUAR (orden owner 2026-07-15): nombró una FAMILIA con varios
                     // ("el mazda" y hay 2 Mazda) → se le presentan y se pregunta cuál.
                     try {
-                        const { candidatosDeAuto } = require('../lib/seb/clasificador.js');
+                        const { candidatosDeAuto } = LIB_CLASIFICADOR;
                         const aAct = await memoQuery(INV_TTL, "SELECT id, marca, modelo, version, anio, precio FROM inventario_autos WHERE estado='activo'");
                         const cand = candidatosDeAuto(textoFamilia, aAct.map(a => ({ id: a.id, nombre: [a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' '), precio: a.precio })));
                         if (cand) {
@@ -1637,7 +1625,7 @@ module.exports = async function handler(req, res) {
                                 ok: true, tipo: 'opener_desambiguar', segmentos: [
                                     `Qué tal${nm ? ' ' + nm : ''} ${saludoHora()}!`,
                                     'Mucho gusto, mi nombre es Sebastián Romero, para servirte',
-                                    require('../lib/seb/aparador.js').introFamilia(textoFamilia, cand) + '\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
+                                    LIB_APARADOR.introFamilia(textoFamilia, cand) + '\n' + cand.map(a => '• ' + a.nombre + (a.precio ? ' — $' + Number(a.precio).toLocaleString('es-MX') : '')).join('\n'),
                                     'Cuál te interesa?'
                                 ]
                             }));
@@ -1655,7 +1643,7 @@ module.exports = async function handler(req, res) {
                     // rol ("cómo funcionan", "info de su negocio") → se pregunta el CAJÓN
                     // directo; la respuesta la resuelve dudaGeneral (comprar/vender).
                     try {
-                        if (require('../lib/seb/aparador.js').rolAmbiguo({ texto: textoFamilia, adCtx })) {
+                        if (LIB_APARADOR.rolAmbiguo({ texto: textoFamilia, adCtx })) {
                             const ejRol = (await U.leerEstado(0, tel)).ej;
                             ejRol.pregunta_rol = 1;
                             await U.guardarEstado(0, tel, { estado_json: ejRol, estado: 'opener' }).catch(() => { });
@@ -1747,7 +1735,7 @@ module.exports = async function handler(req, res) {
                     // mismo saneamiento que opener_auto (portada de carrusel NO afirma el auto)
                     let ctxOk = adRow[0].ad_context;
                     try {
-                        const { sanearContexto } = require('../lib/seb/ad-espia.js');
+                        const { sanearContexto } = LIB_AD_ESPIA;
                         ctxOk = await sanearContexto(tel, ctxOk, conv.mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
                     } catch (eSan) { console.error('[ad-espia sugerir]', eSan.message); }
                     if (ctxOk) mensajeCerebro = '[DESC: ' + ctxOk + ']\n' + lastMsg;
@@ -2023,7 +2011,7 @@ module.exports = async function handler(req, res) {
         // y el botón APROBAR ejecuta LA MISMA PUERTA que el "publícalo" de WhatsApp
         // (publicarSesion + recibo al owner + plantilla al vendedor + arrancar parqueado).
         if (action === 'recepcion_pendientes') {
-            const rec = require('../lib/seb/recepcion.js');
+            const rec = LIB_RECEPCION;
             await rec.ensureRecepcion();
             const rsP = await query("SELECT telefono, datos, fotos, updated FROM recepcion_sesiones WHERE estado='revision' ORDER BY updated DESC");
             const pendientes = rsP.map(r => {
@@ -2038,8 +2026,8 @@ module.exports = async function handler(req, res) {
         if (action === 'recepcion_publicar' && req.method === 'POST') {
             const telP = String(req.body.telefono || '').replace(/\D/g, '');
             if (!telP) return res.status(400).json({ ok: false, error: 'telefono requerido' });
-            const rec = require('../lib/seb/recepcion.js');
-            const { enviarWA } = require('../lib/seb/citas-vivas.js');
+            const rec = LIB_RECEPCION;
+            const { enviarWA } = citasVivas;
             const OWNER_WA = '5218120066355';
             const rP = await rec.publicarSesion(telP);
             if (!rP.ok) return res.status(200).json({ ok: false, error: rP.error || 'no se pudo publicar' });
@@ -2068,7 +2056,7 @@ module.exports = async function handler(req, res) {
         // de descargar/subir una foto — así las fotos de compradores no se tocan)
         // ══════════ 🛟 LA GUARDIA — agenda de rescate para el calendario ══════════
         if (action === 'rescate_agenda') {
-            const resc = require('../lib/seb/rescate.js');
+            const resc = LIB_RESCATE;
             const incluirPruebas = String(req.query.incluir_pruebas || '') === '1';
             const desde = Date.now() - 48 * 3600000;
             // POR UNIVERSO (2026-09-10): la agenda es del universo del request (VEND_PARAM / sesión; sin él = 0). Los folios
@@ -2098,7 +2086,7 @@ module.exports = async function handler(req, res) {
             // MENSAJES PROGRAMADOS A MANO (owner 2026-08-03): van en la misma agenda
             let programados = [];
             try {
-                const prog = require('../lib/seb/programados.js');
+                const prog = LIB_PROGRAMADOS;
                 programados = (await prog.listar({ incluirPruebas, tenantId: Number(tAg.id) || 0 })).map(p => ({
                     id: p.id, telefono: p.telefono, nombre: p.nombre || '', texto: p.texto,
                     con_foto: Number(p.con_foto) || 0, cuando_ts: Number(p.cuando_ts), estado: p.estado
@@ -2118,7 +2106,7 @@ module.exports = async function handler(req, res) {
             if (esDemoB) telFullB = DEMO.telComprador(telFullB);
             const catalogoT = TID ? await autosDeTenant(tAcc) : null;
             const enCatalogo = a => !catalogoT || esDemoB || catalogoT.some(c => Number(c.id) === Number(a.id));   // demo: cualquier auto activo del inventario (solo lectura)
-            const H = require('../lib/seb/herramientas.js');
+            const H = LIB_HERRAMIENTAS;
             const normB = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
             // ── 1) RESOLVER EL AUTO (fila de inventario) ──
             let inv = null;
@@ -2172,7 +2160,7 @@ module.exports = async function handler(req, res) {
                 if (accB === 'info') {
                     // 📄 ENVIAR INFO (owner 2026-08-07): el machote COMPLETO del auto,
                     // copy-paste literal (mismo generador del "más información" del bot)
-                    const { machoteDe } = require('../lib/seb/machote.js');
+                    const { machoteDe } = LIB_MACHOTE;
                     const mch = await machoteDe(inv.id);
                     if (!mch) return R(200, { ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
                     const env = await mandar({ texto: mch });
@@ -2295,7 +2283,7 @@ module.exports = async function handler(req, res) {
         }
         // ══ MENSAJES PROGRAMADOS (owner 2026-08-03): el Calendar agenda a mano ══
         if (action === 'prog_crear' && req.method === 'POST') {
-            const prog = require('../lib/seb/programados.js');
+            const prog = LIB_PROGRAMADOS;
             const tP = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tP) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             if (tP.demo) {   // MODO PRUEBA: no se programa nada (el cron no lo toca); queda como renglón 'sistema' en el hilo
@@ -2305,11 +2293,11 @@ module.exports = async function handler(req, res) {
                 return res.status(rP.ok ? 200 : 400).json({ ok: !!rP.ok, simulado: true, id: null, error: rP.ok ? undefined : rP.error });
             }
             const r = await prog.crear({ tel: req.body.telefono, nombre: req.body.nombre, texto: req.body.texto, cuandoTs: Number(req.body.cuando_ts), conFoto: req.body.con_foto !== false && req.body.con_foto !== 0, tenantId: tP.id });
-            if (r.ok) { try { let telPg = String(req.body.telefono || '').replace(/\D/g, ''); if (telPg.length === 10) telPg = '521' + telPg; const dP = await citasVivas.direccionDe(tP.id, telPg); await require('../lib/seb/acciones.js').registrar({ tenant_id: tP.id, chat_id: dP.chat_id, delegacion_id: dP.delegacion_id, tipo: 'programado', ref_id: r.id, meta: { cuando_ts: Number(req.body.cuando_ts) }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { } }
+            if (r.ok) { try { let telPg = String(req.body.telefono || '').replace(/\D/g, ''); if (telPg.length === 10) telPg = '521' + telPg; const dP = await citasVivas.direccionDe(tP.id, telPg); await ACCIONES.registrar({ tenant_id: tP.id, chat_id: dP.chat_id, delegacion_id: dP.delegacion_id, tipo: 'programado', ref_id: r.id, meta: { cuando_ts: Number(req.body.cuando_ts) }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { } }
             return res.status(r.ok ? 200 : 400).json(r);
         }
         if (action === 'prog_cancelar' && req.method === 'POST') {
-            const prog = require('../lib/seb/programados.js');
+            const prog = LIB_PROGRAMADOS;
             // POR UNIVERSO (2026-09-10): solo cancela un programado de SU universo (VEND_PARAM → tenant; sin él = 0)
             const tPc = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : { id: 0 };
             if (!tPc) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
@@ -2319,7 +2307,7 @@ module.exports = async function handler(req, res) {
             // prellenado del popup: nombre + auto en foco → machote editable
             const telM2 = String(req.query.telefono || '').replace(/\D/g, '');
             if (!telM2) return res.status(400).json({ ok: false, error: 'telefono' });
-            const resc = require('../lib/seb/rescate.js');
+            const resc = LIB_RESCATE;
             const telFull = telM2.length === 10 ? '521' + telM2 : telM2;
             const ctx = await resc.ctxDe(telFull, 1, Date.now()).catch(() => ({}));
             let nombre = ctx && ctx.nombre;
@@ -2334,7 +2322,7 @@ module.exports = async function handler(req, res) {
             const idR = Number(req.body.id || 0);
             if (!idR) return res.status(400).json({ ok: false, error: 'id requerido' });
             await run("UPDATE rescates SET estado='cerrado', motivo_cierre='cancelado por el owner', updated=? WHERE id=?", [Date.now(), idR]);
-            await require('../lib/seb/timbre.js').tocar({ entidad: 'rescate', id: idR, accion: 'cancelado' });
+            await LIB_TIMBRE.tocar({ entidad: 'rescate', id: idR, accion: 'cancelado' });
             return res.status(200).json({ ok: true });
         }
         if (action === 'rescate_reactivar' && req.method === 'POST') {
@@ -2345,13 +2333,13 @@ module.exports = async function handler(req, res) {
             let prox = Number(rowR[0].proxima_ts) || 0;
             if (prox < Date.now()) prox = Date.now() + 60 * 60000;   // ya pasó → reloj fresco de 60 min
             await run("UPDATE rescates SET estado='vivo', motivo_cierre='', proxima_ts=?, updated=? WHERE id=?", [prox, Date.now(), idR]);
-            await require('../lib/seb/timbre.js').tocar({ entidad: 'rescate', id: idR, accion: 'reactivado' });
+            await LIB_TIMBRE.tocar({ entidad: 'rescate', id: idR, accion: 'reactivado' });
             return res.status(200).json({ ok: true, proxima_ts: prox });
         }
         if (action === 'recepcion_activa') {
             const tR = String((req.query && req.query.telefono) || (req.body && req.body.telefono) || '').replace(/\D/g, '');
             if (!tR) return res.status(400).json({ ok: false, error: 'telefono requerido' });
-            const recepcion = require('../lib/seb/recepcion.js');
+            const recepcion = LIB_RECEPCION;
             const sR = await recepcion.sesionActiva(tR).catch(() => null);
             let activa = !!(sR && sR.estado === 'recepcion');
             // ══ FOTOS COMO INICIADOR (orden owner 2026-07-16): en PRIMER contacto
@@ -2387,7 +2375,7 @@ module.exports = async function handler(req, res) {
                             // el rol; SOLO 'comprador' frena a Ignacio (vendedor/duda pasan).
                             if (activa && insR.length) {
                                 try {
-                                    const { juezRol } = require('../lib/seb/juez.js');
+                                    const { juezRol } = LIB_JUEZ;
                                     const jR = await juezRol({ mensajes: insR.map(x => x.texto) });
                                     if (jR && jR.rol === 'comprador') activa = false;
                                 } catch (e) { }
@@ -2404,7 +2392,7 @@ module.exports = async function handler(req, res) {
             const tF = String(req.body.telefono || '').replace(/\D/g, '');
             const urlF = String(req.body.url || '');
             if (!tF || !urlF) return res.status(400).json({ ok: false, error: 'telefono y url requeridos' });
-            const recepcion = require('../lib/seb/recepcion.js');
+            const recepcion = LIB_RECEPCION;
             const rF = await recepcion.agregarFotos({ telefono: tF, urls: [urlF] });
             // auditoría #10: mandar SIEMPRE lo que el cerebro diga (el saludo del
             // fotos-iniciador se quedaba mudo en real — solo salía con nacimiento).
@@ -2415,7 +2403,7 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'carga_pieza' && req.method === 'POST') {
-            const { pieza } = require('../lib/seb/carga-lote.js');
+            const { pieza } = LIB_CARGA_LOTE;
             const rp = await pieza({ remitente: req.body.remitente, tipo: req.body.tipo, texto: req.body.texto, url: req.body.url });
             return res.status(200).json(rp || { ok: false });
         }
@@ -2489,7 +2477,7 @@ module.exports = async function handler(req, res) {
             function botEstadoT0(c, msgsAsc) {
                 if (c.canal === 'owner' || c.canal === 'messenger') return 'humano';
                 try {
-                    const { esStandby, posesionOwner } = require('../lib/seb/doctrina.js');
+                    const { esStandby, posesionOwner } = LIB_DOCTRINA;
                     const outsMan = msgsAsc.filter(m => m.direccion === 'out' && !Number(m.ai_generated) && m.emisor !== 'sistema');
                     const ult = outsMan[outsMan.length - 1];
                     if (ult && esStandby(String(ult.texto || '')) && Date.now() - Number(ult.ts) < 7 * 86400000) return 'pausado';
@@ -2705,9 +2693,9 @@ module.exports = async function handler(req, res) {
                 const cuRaw = Number(req.body.cuando_ts) || 0; const cuando = cuRaw > 1e12 ? cuRaw : cuRaw * 1000;
                 if (!cuando || cuando < Date.now() - 60000) return err(400, 'cuando_ts debe ser una hora futura', { campo: 'cuando_ts' });
                 const r = await MSJ.conClave(clave, { tenantId: TV, chatId: c.id, accion: 'recordatorio_v2', sesionId: SID }, async () => {
-                    const prog = require('../lib/seb/programados.js');
+                    const prog = LIB_PROGRAMADOS;
                     let nombreR = (c.nombre && c.nombre !== '.') ? c.nombre : null;
-                    try { if (nombreR) nombreR = require('../lib/seb/opener.js').nombreReal(nombreR) || nombreR; } catch (e) { }
+                    try { if (nombreR) nombreR = LIB_OPENER.nombreReal(nombreR) || nombreR; } catch (e) { }
                     const rp = await prog.crear({ tel: c.telefono, nombre: nombreR, texto, cuandoTs: cuando, conFoto: !TV && req.body.con_foto === true, tenantId: TV });
                     if (!rp.ok) return { ok: false, status: 409, error: rp.error, tope: rp.tope || undefined };
                     const deleg = await U.delegacionActiva(c.id).catch(() => null);
@@ -2723,7 +2711,7 @@ module.exports = async function handler(req, res) {
             }
             if (action === 'recordatorio_cancelar_v2' && req.method === 'POST') {
                 const idR = Number(req.body.id) || 0; if (!idR) return err(400, 'id requerido');
-                const rC = await require('../lib/seb/programados.js').cancelar(idR, TV);   // acotado al universo de la sesión
+                const rC = await LIB_PROGRAMADOS.cancelar(idR, TV);   // acotado al universo de la sesión
                 return res.status(rC.ok ? 200 : 400).json(rC);
             }
 
@@ -2817,10 +2805,10 @@ module.exports = async function handler(req, res) {
                 const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
                 const r = await MSJ.conClave(clave, { tenantId: TV, chatId: c.id, accion: 'reactivar', sesionId: SID }, async () => {
-                    const resc = require('../lib/seb/rescate.js'); const prog = require('../lib/seb/programados.js');
+                    const resc = LIB_RESCATE; const prog = LIB_PROGRAMADOS;
                     const ctx = TV ? {} : await resc.ctxDe(c.telefono, 1, Date.now()).catch(() => ({}));   // t0: auto en foco + portada
                     let nombre = (ctx && ctx.nombre) || null;
-                    if (!nombre && c.nombre && c.nombre !== '.') { try { nombre = require('../lib/seb/opener.js').nombreReal(c.nombre) || null; } catch (e) { } }
+                    if (!nombre && c.nombre && c.nombre !== '.') { try { nombre = LIB_OPENER.nombreReal(c.nombre) || null; } catch (e) { } }
                     let autoN = (ctx && ctx.auto && ctx.auto.nombre) || null;
                     if (TV) { const f = await focoDe(tV, c.telefono).catch(() => null); autoN = (f && f.nombre) || null; }
                     const saludo = (() => { const h = new Date(Date.now() - 6 * 3600000).getUTCHours(); return h < 12 ? 'buen día' : (h < 19 ? 'buenas tardes' : 'buenas noches'); })();

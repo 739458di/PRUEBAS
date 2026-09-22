@@ -17,7 +17,6 @@ const U = require('../lib/seb/universo.js');   // ETAPA 2 (paridad: el mismo cer
 // CUOTA TURSO (2026-09-08): inventario activo cacheado 15 s; estadoConv por request (ver olvidar en el handler)
 const { memoQuery, olvidar, INV_TTL } = require('../lib/seb/memo.js');
 const { entender } = require('../lib/seb/clasificador.js');
-const { pensar } = require('../lib/seb/loop.js');
 const { responder: responderOpener, necesitaCerebro, nombreReal, saludoHora } = require('../lib/seb/opener.js');
 const { responderCont } = require('../lib/seb/continuacion.js');
 const { responderEtapa3 } = require('../lib/seb/etapa3.js');
@@ -482,17 +481,12 @@ module.exports = async function handler(req, res) {
                         if (emSb) { out = { segmentos: emSb.segmentos, tipo: emSb.tipo, fotos: emSb.fotos || null, fotos_after_index: (emSb.fotos_after_index != null ? emSb.fotos_after_index : null) }; }
                     } catch (e) { }
                 }
-                if (!out && clasif.auto_id && !clasif.escalar && necesitaCerebro(textoFamilia)) {
-                    try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
-                }
                 if (!out) {
                     const op = await responderOpener({ texto: textoFamilia, nombre: NOMBRE_COMPRADOR, auto_id: clasif.auto_id, intencion: clasif.intencion_principal });
                     if (op && op.segmentos && op.segmentos.length) out = op;
                 }
                 if (!out && clasif.escalar) out = { escala: true, motivo: 'vendedor / fuera de alcance' };
-                if (!out && clasif.auto_id) {
-                    try { const p = await pensar({ telefono: SANDBOX_TEL, mensaje: textoFamilia, clasificacion: clasif, estado: {} }); if (p && p.ok && p.borrador) out = { segmentos: String(p.borrador||'').split(/\|\|SEQ\|\||\n\s*\n/).map(x=>x.trim()).filter(Boolean), tipo: 'cerebro' }; } catch (e) { }
-                }
+                if (!out && clasif.auto_id) out = { escala: true, motivo: 'primer contacto sin familia clara — lo ves tú (antes: Sonnet; retirado 2026-09-22)' };
                 if (!out) {
                     const intOk = ['info_inicial', 'disponibilidad', 'estado_auto', 'cotizar_credito', 'cita_ubicacion', 'precio_negociacion', 'fotos_videos', 'otro'].includes(clasif.intencion_principal);
                     if (intOk && !clasif.escalar) {
