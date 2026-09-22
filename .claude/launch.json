@@ -10,7 +10,7 @@
     {
       "name": "fyrachat-copiloto",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["lib/seb/_dev-server.js", "3210"],
+      "runtimeArgs": ["scripts/dev/_dev-server.js", "3210"],
       "port": 3210
     }
   ]

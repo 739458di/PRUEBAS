@@ -39,7 +39,7 @@ const ACCIONES = require('../lib/seb/acciones.js');
 // ══ APARADOR DE CARRUSEL (orden owner 2026-07-20) — la lógica vive en la FUENTE
 // ÚNICA lib/seb/aparador.js (el sandbox usa LA MISMA): aquí solo se importa.
 const { intentarEleccionAparador, arranqueCarrusel, opcionesEnFlujo } = require('../lib/seb/aparador.js');
-const RE_PETICION_POS = /(fotos?|im[aá]genes|videos?|ubicaci[oó]n|direcci[oó]n|d[oó]nde|mapa|precio|cu[aá]nto|cotiza|enganche|mensualidad|cita|agenda|disponible|informaci[oó]n|detalles|ficha)/i;
+const { RE_PETICION_POS, RE_HERR_SIN_DATOS } = require('../lib/seb/regex-comunes.js');
 
 
 async function logEscala(tel, motivo) {
@@ -79,52 +79,6 @@ function partirRafaga(borrador) {
 
 // telefonosDueno() vive en lib/seb/memo.js (cacheado 5 min; misma consulta de siempre).
 
-// Convierte el "yyyy" string time de cleaned_text ("15/6/2026, 14:22:57") a epoch segundos.
-function timeAEpoch(s, fallback) {
-    if (!s) return fallback || 0;
-    const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if (!m) return fallback || 0;
-    // El string "time" viene en hora de MONTERREY (UTC-6). Lo parseamos como tal —
-    // no como hora del servidor (UTC) — para no correrlo 6 horas (bug del 3:55 a.m.).
-    const iso = `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}T${String(m[4]).padStart(2, '0')}:${m[5]}:${String(m[6] || '0').padStart(2, '0')}-06:00`;
-    const t = Math.floor(new Date(iso).getTime() / 1000);
-    return isFinite(t) && t > 0 ? t : (fallback || 0);
-}
-
-// FUENTE ÚNICA: arma una conversación desde raw_conversations.cleaned_text.
-// Devuelve { telefono, nombre, mensajes:[{mensaje,direccion,timestamp}] }.
-// direccion: 'out' si el emisor es el vendedor (nosotros), 'in' si es el comprador.
-// Maneja DOS formatos de cleaned_text:
-//   nuevo: { messages:[{em,ds,t,time}], actores:[{nombre,lado,...}] }
-//   viejo: [ {em,ds,t,time,_timestamp}, ... ]  (array directo, sin actores)
-const VENDEDOR_COD = 'SRS010904';   // código fijo del vendedor (Sebastián)
-function parseConversacion(row) {
-    let data;
-    try { data = JSON.parse(row.cleaned_text || '{}'); } catch (e) { data = {}; }
-    const msgsRaw = Array.isArray(data) ? data : (Array.isArray(data.messages) ? data.messages : []);
-    const actores = (!Array.isArray(data) && Array.isArray(data.actores)) ? data.actores : [];
-    // lado del emisor: por actores, o por heurística (el vendedor es SRS010904)
-    const ladoDe = (nombre) => {
-        const a = actores.find(x => x.nombre === nombre);
-        if (a) return a.lado;
-        return nombre === VENDEDOR_COD ? 'vendedor' : 'comprador';
-    };
-    const comprador = actores.find(x => x.lado === 'comprador' && x.es_principal) || actores.find(x => x.lado === 'comprador');
-    // nombre del comprador: de actores, o del primer emisor que no sea el vendedor
-    let nombreComp = comprador ? comprador.nombre : null;
-    if (!nombreComp) { const m = msgsRaw.find(x => x.em && x.em !== VENDEDOR_COD); nombreComp = m ? m.em : null; }
-    if (nombreComp === '.' || nombreComp === VENDEDOR_COD) nombreComp = null;
-    const fallbackTs = row.last_ingested_at ? Math.floor(Number(row.last_ingested_at) / 1000) : 0;
-    const mensajes = msgsRaw.map(m => ({
-        mensaje: m.t || '',
-        direccion: (ladoDe(m.em) === 'vendedor') ? 'out' : 'in',
-        timestamp: m._timestamp ? Math.floor(Number(m._timestamp) / 1000) : timeAEpoch(m.time, fallbackTs)
-    }));
-    const externalId = (row.channel_thread_id || '').split(':')[1]
-        || (comprador && comprador.telefono) || '';
-    return { telefono: externalId, nombre: nombreComp, mensajes };
-}
-
 // MODO PRUEBA: mapa telefono → reset_ts (ms). Solo se ven mensajes posteriores al reinicio.
 async function cargarResets() {
     try {
@@ -132,27 +86,6 @@ async function cargarResets() {
         const m = {}; r.forEach(x => { m[String(x.telefono)] = Number(x.reset_ts); }); return m;
     } catch (e) { return {}; }
 }
-// Filtra los mensajes de una conversación para mostrar solo los posteriores al reinicio.
-function aplicarReset(c, resets) {
-    const ms = resets[c.telefono];
-    if (ms) c.mensajes = c.mensajes.filter(m => (m.timestamp * 1000) >= ms);
-    return c;
-}
-
-// Guarda qué OFRECIÓ Seb en su última respuesta ("¿te mando las fotos?") para que
-// un "sí" del comprador lo ejecute (orden owner 2026-07-21).
-async function guardarOferta(telO, segs) {
-    try {
-        const mm = require('../lib/seb/mesa.js');
-        const of = mm.ofertaDeSegmentos(segs);
-        const stO = await U.leerEstado(0, telO);
-        if (!stO.existe) return;
-        const ej = stO.ej;
-        if (of) ej.oferta = of; else delete ej.oferta;
-        await U.guardarEstado(0, telO, { estado_json: ej });
-    } catch (e) { }
-}
-
 // ══════════ CLASIFICACIÓN DE ACCIONES (blindaje 2026-09-10, spec docs/seguridad-acceso-spec-2026-09-10.md) ══════════
 // PÚBLICA: sin nada. K_PUENTE: solo el puente (header x-api-key). K_PANEL: servidores propios (web, SB, Claude/scripts).
 // Las de K_PUENTE y K_PANEL también las abre la sesión MAESTRA (el owner desde su navegador). Todo lo no listado = SESIÓN.
@@ -1191,9 +1124,9 @@ module.exports = async function handler(req, res) {
             // un número de prueba que contesta un anuncio cuenta como PRIMER CONTACTO fresco.
             const resetsOA = await cargarResets();
             const resetTsOA = Number(resetsOA[tel] || 0);
-            let mensajes = [];
+            let mensajes = []; let filasEstado = null;
             if (convId) {
-                let mr = await query("SELECT direccion, texto, ts, ai_generated, emisor FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]);
+                let mr = await query("SELECT direccion, texto, ts, ai_generated, emisor, tipo FROM mensajes WHERE conversacion_id=? ORDER BY ts ASC, id ASC", [convId]); filasEstado = mr;
                 // UNIVERSO CON SEB AUTÓNOMO: los renglones grises de rastro ('sistema': lector de cita, "Seb escaló", "Seb calló", avisos al vendedor) NO son
                 // palabra de Seb. Si contaran, una nota escrita entre el mensaje del comprador y el turno haría creer que ya contestamos (caso 2026-09-18
                 // "donde lo puedo ver" → calló). 
@@ -1213,7 +1146,7 @@ module.exports = async function handler(req, res) {
             if (convId) {
                 try {
                     try { require('../lib/seb/memo.js').olvidar('estadoConv:' + convId); } catch (e) { }   // siempre fresco: el gancho recién enviado debe contar (mensajes seguidos en < 20 s)
-                    const estG = await require('../lib/seb/etapa3.js').estadoConv(convId);
+                    const estG = await require('../lib/seb/etapa3.js').estadoConv(convId, filasEstado);   // con las filas ya leídas: el chat no se lee dos veces
                     const textoG = entrantes[entrantes.length - 1].mensaje;
                     const _json = res.json.bind(res);
                     res.json = (payload) => { try { payload = require('../lib/seb/gobernador.js').gobernarSalida(payload, { texto: textoG, est: estG }); } catch (e) { console.error('[gobernador salida]', e.message); } return _json(payload); };
@@ -1421,7 +1354,6 @@ module.exports = async function handler(req, res) {
                     // la herramienta QUISO servir pero le falta un dato (ej. punto de venta
                     // sin configurar) → eso SÍ se te escala con la causa, no silencio mudo.
                     // (el wrapper poda el universo en escaladas → se detecta por MOTIVO)
-                    const RE_HERR_SIN_DATOS = /(punto de venta configurado|no se pudo cotizar|arma t[uú] la cotizaci[oó]n|hey no lo financia)/i;
                     if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) {
                         const nomPos = (convRow.length && convRow[0].nombre) || null;
                         return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '🔧 herramienta sin datos: ' + (eP.motivo || ''), escala_nombre: nomPos, escala_ultimo: followupP });
@@ -1546,7 +1478,6 @@ module.exports = async function handler(req, res) {
                     await logEscala(tel, e3.motivo);
                     // Escala: si hay PUENTE, se lo mandamos al comprador (no queda colgado) y te avisamos;
                     // si no hay puente, solo te avisamos (tú contestas).
-                    if (e3.puente) return res.status(200).json({ ok: true, modo: 'etapa3', segmentos: [e3.puente], escalar_owner: true, escala_motivo: e3.motivo, escala_nombre: escNom, escala_ultimo: followupE });
                     return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: e3.motivo, escala_nombre: escNom, escala_ultimo: followupE });
                 }
                 if (e3 && e3.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
@@ -1885,7 +1816,6 @@ module.exports = async function handler(req, res) {
                     if (e3 && e3.escalar) {
                         // ESCALA CON PUENTE: se PROPONE el puente como borrador (el comprador no
                         // se queda colgado) y se avisa que además escala al owner para lo que sigue.
-                        if (e3.puente) return res.status(200).json({ ok: true, borrador: e3.puente, tools_usadas: [], escala_ademas: 'etapa 3: ' + e3.motivo, estado_nuevo: { ...estado, auto_id_activo: clasif.auto_id || estado.auto_id_activo || null } });
                         return res.status(200).json({ ok: false, escalar: true, intencion: clasif.intencion_principal, motivo: 'etapa 3: ' + e3.motivo });
                     }
                     if (e3 && e3.silencio) {

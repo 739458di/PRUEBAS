@@ -416,7 +416,7 @@ module.exports = async function handler(req, res) {
             if (outStandby) {
                 etapa = 'STANDBY';
                 out = outStandby;
-                ruta = out.puente ? 'escala_puente' : 'escala';
+                ruta = 'escala';
             } else if (escalaImagen) {
                 etapa = 'IMAGEN';
                 out = escalaImagen;
@@ -458,7 +458,7 @@ module.exports = async function handler(req, res) {
                     if (hP2) { eP = eP2; hP = hP2; }
                     else if ((!eP || !eP.escalar) && eP2 && eP2.escalar) eP = eP2;
                 }
-                const RE_HERR_SIN_DATOS = /(punto de venta configurado|no se pudo cotizar|arma t[uú] la cotizaci[oó]n|hey no lo financia)/i;
+                const { RE_HERR_SIN_DATOS, RE_PETICION_POS } = require('../lib/seb/regex-comunes.js');
                 if (out) { /* la info directa ya salió */ }
                 else if (hP) { out = hP; ruta = 'herramienta'; universo = hP.universo || ''; }
                 else if (eP && eP.escalar && RE_HERR_SIN_DATOS.test(String(eP.motivo || ''))) { out = { escala: true, motivo: '🔧 herramienta sin datos: ' + (eP.motivo || '') }; ruta = 'escala'; }
@@ -607,7 +607,7 @@ module.exports = async function handler(req, res) {
                 const e3 = out ? null : await responderEtapa3({ texto: textoFamilia, auto_id: autoActivo, conv_id: convId, clasif });
                 universo = (e3 && e3.universo) || '';
                 if (out) { /* la mesa contestó */ }
-                else if (e3 && e3.escalar) { out = { escala: true, motivo: e3.motivo, puente: e3.puente || null }; ruta = e3.puente ? 'escala_puente' : 'escala'; }
+                else if (e3 && e3.escalar) { out = { escala: true, motivo: e3.motivo }; ruta = 'escala'; }
                 else if (e3 && e3.silencio) { out = { silencio: true, motivo: e3.motivo }; ruta = 'silencio'; }
                 else if (e3 && e3.segmentos && e3.segmentos.length) { out = e3; ruta = 'banco_etapa3'; }
                 else {
@@ -619,12 +619,7 @@ module.exports = async function handler(req, res) {
 
             // Registrar lo que Seb "mandó" (para que el estado avance igual que en WhatsApp)
             let segmentos = [], fotos = null, pin = null, citaDueno = null;
-            if (out && out.escala && out.puente) {
-                // ESCALA CON PUENTE (regla de oro): el comprador SÍ recibe el puente ("dame un
-                // momento y te mando…"), y en paralelo se escala al humano para lo que sigue.
-                segmentos = [out.puente];
-                await guardarMsg(convId, 'out', out.puente, 'text');
-            } else if (out && out.escala && out.segmentos && out.segmentos.length) {
+            if (out && out.escala && out.segmentos && out.segmentos.length) {
                 // escala CON mensaje honesto: el comprador SÍ lo recibe (CON sus fotos/pin
                 // — jamás decir "ahí te van" sin mandarlas) y en paralelo se te escala.
                 segmentos = out.segmentos;
@@ -733,8 +728,7 @@ module.exports = async function handler(req, res) {
                 auto_id: autoActivo || null,
                 segmentos, fotos, pin, cita_dueno: citaDueno,
                 escala: !!(out && out.escala),
-                puente: (out && out.puente) || null,
-                silencio: (!out || !!out.silencio) && !(out && out.escala && out.puente),
+                silencio: (!out || !!out.silencio),
                 motivo: (out && out.motivo) || (!out ? 'ningún banco/cerebro aplicó — en WhatsApp Seb se queda callado' : null),
                 ruta, universo, turno_id: turnoId, rescate: rescateInfo
             });
