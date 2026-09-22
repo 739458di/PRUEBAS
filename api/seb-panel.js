@@ -1413,12 +1413,12 @@ module.exports = async function handler(req, res) {
                 // no), el código ejecuta con machotes — mata el parche-por-parche.
                 {
                     const histTxtP = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
-                    const perro = await LIB_RUTEADOR.rutear({ tel, texto: followup, historial: histTxtP, convId });
+                    const perro = await LIB_RUTEADOR.rutear({ tel, texto: followup, historial: histTxtP, convId, clasif });
                     if (perro && perro.escalar_owner) {
                         await logEscala(tel, perro.escala_motivo);
                         return { done: { ok: !!(perro.segmentos && perro.segmentos.length), modo: 'perro', tipo: perro.tipo, segmentos: perro.segmentos || [], fotos: perro.fotos || null, fotos_after_index: (perro.fotos_after_index != null ? perro.fotos_after_index : null), escalar_owner: true, escala_motivo: perro.escala_motivo, escala_ultimo: followup } };
                     }
-                    if (perro) return { done: { ok: true, modo: 'perro', tipo: perro.tipo, segmentos: perro.segmentos, fotos: perro.fotos || null, fotos_after_index: (perro.fotos_after_index != null ? perro.fotos_after_index : null) } };
+                    if (perro) return { done: { ok: true, modo: 'perro', tipo: perro.tipo, segmentos: perro.segmentos, fotos: perro.fotos || null, fotos_after_index: (perro.fotos_after_index != null ? perro.fotos_after_index : null), ubicacion_auto_id: perro.ubicacion_auto_id || null, pin_after_index: (perro.pin_after_index != null ? perro.pin_after_index : null) } };
                 }
                 return { followup, clasif };
             };

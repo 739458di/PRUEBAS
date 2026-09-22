@@ -548,7 +548,7 @@ module.exports = async function handler(req, res) {
                 if (!out) {
                     try {
                         const histTxtSb = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
-                        const perroSb = await require('../lib/seb/ruteador.js').rutear({ tel: SANDBOX_TEL, texto: textoFamilia, historial: histTxtSb, convId });
+                        const perroSb = await require('../lib/seb/ruteador.js').rutear({ tel: SANDBOX_TEL, texto: textoFamilia, historial: histTxtSb, convId, clasif });
                         if (perroSb) {
                             out = { segmentos: perroSb.segmentos || [], tipo: perroSb.tipo, fotos: perroSb.fotos || null, fotos_after_index: (perroSb.fotos_after_index != null ? perroSb.fotos_after_index : null) };
                             if (perroSb.escalar_owner) { out.escala = true; out.motivo = perroSb.escala_motivo; }
@@ -590,7 +590,7 @@ module.exports = async function handler(req, res) {
                 if (!out) {
                     try {
                         const histTxtSb3 = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
-                        const perroSb3 = await require('../lib/seb/ruteador.js').rutear({ tel: SANDBOX_TEL, texto: textoFamilia, historial: histTxtSb3, convId });
+                        const perroSb3 = await require('../lib/seb/ruteador.js').rutear({ tel: SANDBOX_TEL, texto: textoFamilia, historial: histTxtSb3, convId, clasif });
                         if (perroSb3) {
                             out = { segmentos: perroSb3.segmentos || [], tipo: perroSb3.tipo, fotos: perroSb3.fotos || null, fotos_after_index: (perroSb3.fotos_after_index != null ? perroSb3.fotos_after_index : null) };
                             if (perroSb3.escalar_owner) { out.escala = true; out.motivo = perroSb3.escala_motivo; }
