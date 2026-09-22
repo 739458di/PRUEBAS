@@ -14,6 +14,9 @@
     },
     "api/vps-exec.js": {
       "maxDuration": 60
+    },
+    "api/hazlo.js": {
+      "maxDuration": 30
     }
   },
   "headers": [
