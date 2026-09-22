@@ -557,8 +557,8 @@ select.inp option{background:#09183F;color:#fff}
     <div class="wm">Fyra<b>drive</b></div>
     <div id="acc-p1">
       <h2>Entra a tu FyraChat</h2>
-      <p>Escribe el WhatsApp que vinculaste.</p>
-      <input id="acc-tel" class="inp" inputmode="numeric" maxlength="12" placeholder="10 dígitos" autocomplete="tel" enterkeyhint="next">
+      <p>Escribe el WhatsApp que vinculaste o tu usuario.</p>
+      <input id="acc-tel" class="inp" maxlength="40" placeholder="WhatsApp o usuario" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next">
       <button class="cta" onclick="accContinuar()">Continuar</button>
       <div id="acc-demo1">Modo prueba: usuario PRUEBAS# (8888888888). No llega ningún WhatsApp.</div>
       <div class="err" id="acc-err1"></div>
@@ -797,7 +797,11 @@ let TENANT = null;   // { id, nombre, telefono, demo, autos[] }
 let BIENVENIDA = false;   // ?bienvenida=1 (recién entró con código); se captura en cargarTenant antes de limpiar la URL
 const $a = $;
 async function accContinuar(){
-  const tel = ($a('acc-tel').value || '').replace(/\D/g,''); $a('acc-err1').textContent = '';
+  const crudo = ($a('acc-tel').value || '').trim(); $a('acc-err1').textContent = '';
+  // USUARIO (orden owner 2026-09-22): un universo con usuario (TERRA = terrachepevera) entra con usuario + contraseña y cae directo en SU universo
+  if (/[a-z]/i.test(crudo)) { const u = crudo.toLowerCase().replace(/[^a-z0-9._-]/g, ''); sessionStorage.setItem('acc_usuario', u); sessionStorage.removeItem('acc_tel'); $a('acc-p1').style.display = 'none'; $a('acc-p3').style.display = ''; $a('acc-sub3').textContent = 'Escribe la contraseña de ' + u + '.'; setTimeout(() => $a('acc-pw').focus(), 50); return; }
+  sessionStorage.removeItem('acc_usuario');
+  const tel = crudo.replace(/\D/g,'');
   if (tel.length < 10) { $a('acc-err1').textContent = 'Son 10 dígitos.'; return; }
   const r = await fetch(API+'?action=acceso_modo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
   if (!r.ok) { $a('acc-err1').textContent = r.error || 'No se pudo.'; return; }
@@ -808,6 +812,12 @@ async function accContinuar(){
 async function accEntrarContrasena(){
   const tel = sessionStorage.getItem('acc_tel') || ''; const pw = $a('acc-pw').value || ''; $a('acc-err3').textContent = '';
   if (!pw) { $a('acc-err3').textContent = 'Escribe tu contraseña.'; return; }
+  const usuario = sessionStorage.getItem('acc_usuario') || '';
+  if (usuario) {
+    const ru = await fetch(API+'?action=acceso_entrar_usuario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario, contrasena: pw})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
+    if (!ru.ok) { $a('acc-err3').textContent = ru.error || 'No se pudo.'; return; }
+    sessionStorage.removeItem('acc_usuario'); location.replace('/fyrachat.html?vendedor=' + encodeURIComponent(ru.tenant.id)); return;
+  }
   const r = await fetch(API+'?action=acceso_entrar_contrasena',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel, contrasena: pw})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
   if (!r.ok) { $a('acc-err3').textContent = r.error || 'No se pudo.'; return; }
   location.replace('/fyrachat.html');
