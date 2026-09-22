@@ -1,6 +1,6 @@
 // Servidor local de desarrollo del panel copiloto.
 // Sirve copilot.html y enruta /api/seb-panel al handler real (mismo código
-// que correrá en Vercel). Correr: node lib/seb/_dev-server.js [puerto]
+// que correrá en Vercel). Correr: node scripts/dev/_dev-server.js [puerto]
 const fs = require('fs');
 const http = require('http');
 const path = require('path');

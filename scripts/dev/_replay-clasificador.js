@@ -1,11 +1,11 @@
 // Replay del clasificador (Paso 3) contra mensajes REALES de wa_messages.
-// Solo lectura + llamadas a Haiku. Correr: node lib/seb/_replay-clasificador.js
+// Solo lectura + llamadas a Haiku. Correr: node scripts/dev/_replay-clasificador.js
 const fs = require('fs');
 fs.readFileSync(__dirname + '/../../.env', 'utf8').split('\n').forEach(l => {
     const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) process.env[m[1]] = m[2].trim();
 });
-const { query } = require('./db.js');
-const { entender } = require('./clasificador.js');
+const { query } = require('../../lib/seb/db.js');
+const { entender } = require('../../lib/seb/clasificador.js');
 
 (async () => {
     // Mensajes entrantes reales con su contexto (los 6 mensajes previos del mismo teléfono)

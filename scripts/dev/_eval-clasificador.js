@@ -1,13 +1,13 @@
 // Corredor del eval set fijo del clasificador.
-// Correr: node lib/seb/_eval-clasificador.js
+// Correr: node scripts/dev/_eval-clasificador.js
 // Regla del proyecto: antes de aceptar CUALQUIER cambio al prompt del
 // clasificador, este eval debe correr completo sin bajar de accuracy.
 const fs = require('fs');
 fs.readFileSync(__dirname + '/../../.env', 'utf8').split('\n').forEach(l => {
     const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) process.env[m[1]] = m[2].trim();
 });
-const { entender } = require('./clasificador.js');
-const { query } = require('./db.js');
+const { entender } = require('../../lib/seb/clasificador.js');
+const { query } = require('../../lib/seb/db.js');
 const { casos } = JSON.parse(fs.readFileSync(__dirname + '/eval-clasificador.json', 'utf8'));
 
 (async () => {

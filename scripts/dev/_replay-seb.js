@@ -1,11 +1,11 @@
 // Replay EN SECO del cerebro completo: entender (Haiku) → pensar (Sonnet).
-// No escribe nada en Turso, no envía nada. Correr: node lib/seb/_replay-seb.js
+// No escribe nada en Turso, no envía nada. Correr: node scripts/dev/_replay-seb.js
 const fs = require('fs');
 fs.readFileSync(__dirname + '/../../.env', 'utf8').split('\n').forEach(l => {
     const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) process.env[m[1]] = m[2].trim();
 });
-const { entender } = require('./clasificador.js');
-const { pensar } = require('./loop.js');
+const { entender } = require('../../lib/seb/clasificador.js');
+const { pensar } = require('../../lib/seb/loop.js');
 
 const ESCENARIOS = [
     {

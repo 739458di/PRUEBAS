@@ -1440,57 +1440,65 @@ module.exports = async function handler(req, res) {
 
             // ===== EN_CURSO: PRIMERA respuesta del comprador al opener (1 ráfaga nuestra + último=entrante) =====
             // Solo financiamiento / ubicación (sus manuales). Lo demás → silencio (lo ve el owner).
-            if (bursts === 1 && lastDir === 'in') {
-                let followup = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ');
+            // ══ CAPAS COMUNES de todo turno después del opener (una sola vez para continuación y etapa 3): imagen → elección del aparador →
+            //    más opciones → clasificar → mesa → dudas generales → el perro (herramientas). Devuelve { done } si ya contestó, o { followup, clasif }.
+            const capasComunes = async (followup0) => {
+                let followup = followup0;
                 // 📷 LA IMAGEN SE LEE (owner 2026-07-22): con URL se identifica el auto y
                 // entra al texto; sin URL y sin texto útil → aviso al owner, jamás silencio.
                 {
                     const absI = await require('../lib/seb/aparador.js').absorberImagen({ texto: followup, urls: req.body.imagenes });
                     if (absI.imagen && absI.sinUrl && !absI.textoUtil) {
                         await logEscala(tel, '📷 mandó una IMAGEN que el bot no puede ver — revísala tú');
-                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: followup });
+                        return { done: { ok: false, escalar_owner: true, escala_motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: followup } };
                     }
                     if (absI.texto && absI.texto !== followup) followup = absI.texto;
                 }
                 // ══ ELECCIÓN DEL APARADOR (carrusel 2026-07-20): si mostramos aparador y
                 // aún no hay foco, este mensaje puede ser la elección (hecho duro) o "más opciones"
                 const elA = await intentarEleccionAparador(tel, followup, convId);
-                if (elA) return res.status(200).json({ ok: true, modo: 'aparador', ...elA, pin_after_index: (elA.pin_after_index != null ? elA.pin_after_index : null) });
+                if (elA) return { done: { ok: true, modo: 'aparador', ...elA, pin_after_index: (elA.pin_after_index != null ? elA.pin_after_index : null) } };
                 // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
                 const opF = await opcionesEnFlujo({ tel, texto: followup });
                 if (opF) {
                     if (opF.escalar_owner) await logEscala(tel, opF.escala_motivo);
-                    return res.status(200).json({ ok: true, modo: 'aparador', ...opF, escala_ultimo: opF.escalar_owner ? followup : undefined });
+                    return { done: { ok: true, modo: 'aparador', ...opF, escala_ultimo: opF.escalar_owner ? followup : undefined } };
                 }
-                const mcC = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
-                const clasifC = await entender({ mensaje: mcC, historial: histCorto, estado: {} });
+                const mc = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
+                const clasif = await entender({ mensaje: mc, historial: histCorto, estado: {} });
                 // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
-                clasifC.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followup, clasif: clasifC });
+                clasif.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followup, clasif: clasif });
                 // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
                 // con 2-3 en mesa lo general se contesta para todos, lo de uno en ese.
                 // DUDAS GENERALES (crédito/requisitos/tasas) → su carril, no la mesa
-                const dgC = await require('../lib/seb/mesa.js').dudaGeneral({ tel, texto: followup, nombre: nombreChat, clasif: clasifC, convId });
-                if (dgC) return res.status(200).json({ ok: true, modo: 'duda_general', tipo: dgC.tipo, segmentos: dgC.segmentos });
-                const mesaC = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasifC, convId });
-                if (mesaC && mesaC.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaC.tipo, segmentos: mesaC.segmentos, fotos: mesaC.fotos || null, fotos_after_index: (mesaC.fotos_after_index != null ? mesaC.fotos_after_index : null), ubicacion_auto_id: mesaC.ubicacion_auto_id || null, pin_after_index: (mesaC.pin_after_index != null ? mesaC.pin_after_index : null) });
-                if (mesaC && mesaC.auto_id) clasifC.auto_id = mesaC.auto_id;
+                const dg = await require('../lib/seb/mesa.js').dudaGeneral({ tel, texto: followup, nombre: nombreChat, clasif: clasif, convId });
+                if (dg) return { done: { ok: true, modo: 'duda_general', tipo: dg.tipo, segmentos: dg.segmentos } };
+                const mesaR = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followup, clasif: clasif, convId });
+                if (mesaR && mesaR.segmentos) return { done: { ok: true, modo: 'mesa', tipo: mesaR.tipo, segmentos: mesaR.segmentos, fotos: mesaR.fotos || null, fotos_after_index: (mesaR.fotos_after_index != null ? mesaR.fotos_after_index : null), ubicacion_auto_id: mesaR.ubicacion_auto_id || null, pin_after_index: (mesaR.pin_after_index != null ? mesaR.pin_after_index : null) } };
+                if (mesaR && mesaR.auto_id) clasif.auto_id = mesaR.auto_id;
                 // ══ EL PERRO (owner 2026-07-21): Haiku elige herramientas (combinadas o
                 // no), el código ejecuta con machotes — mata el parche-por-parche.
                 {
-                    const histTxt = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
-                    const perroC = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followup, historial: histTxt, convId });
-                    if (perroC && perroC.escalar_owner) {
-                        await logEscala(tel, perroC.escala_motivo);
-                        return res.status(200).json({ ok: !!(perroC.segmentos && perroC.segmentos.length), modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos || [], fotos: perroC.fotos || null, fotos_after_index: (perroC.fotos_after_index != null ? perroC.fotos_after_index : null), escalar_owner: true, escala_motivo: perroC.escala_motivo, escala_ultimo: followup });
+                    const histTxtP = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
+                    const perro = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followup, historial: histTxtP, convId });
+                    if (perro && perro.escalar_owner) {
+                        await logEscala(tel, perro.escala_motivo);
+                        return { done: { ok: !!(perro.segmentos && perro.segmentos.length), modo: 'perro', tipo: perro.tipo, segmentos: perro.segmentos || [], fotos: perro.fotos || null, fotos_after_index: (perro.fotos_after_index != null ? perro.fotos_after_index : null), escalar_owner: true, escala_motivo: perro.escala_motivo, escala_ultimo: followup } };
                     }
-                    if (perroC) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroC.tipo, segmentos: perroC.segmentos, fotos: perroC.fotos || null, fotos_after_index: (perroC.fotos_after_index != null ? perroC.fotos_after_index : null) });
+                    if (perro) return { done: { ok: true, modo: 'perro', tipo: perro.tipo, segmentos: perro.segmentos, fotos: perro.fotos || null, fotos_after_index: (perro.fotos_after_index != null ? perro.fotos_after_index : null) } };
                 }
+                return { followup, clasif };
+            };
+            if (bursts === 1 && lastDir === 'in') {
+                const ccC = await capasComunes(mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' '));
+                if (ccC.done) return res.status(200).json(ccC.done);
+                const followup = ccC.followup, clasifC = ccC.clasif;
                 const cont = await responderCont({ texto: followup, nombre: nombreChat, auto_id: clasifC.auto_id, enganche: clasifC.datos && clasifC.datos.enganche, plazo: clasifC.datos && clasifC.datos.plazo_meses, intencion: clasifC.intencion_principal, conv_id: convId, clasif: clasifC });
                 const escNomC = require('../lib/seb/opener.js').nombreReal(nombreChat) || nombreChat || null;
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
                 if (cont && cont.escalar) {
                     await logEscala(tel, cont.motivo);
-                    if (cont.puente) return res.status(200).json({ ok: true, modo: 'continuacion', segmentos: [cont.puente], escalar_owner: true, escala_motivo: cont.motivo, escala_nombre: escNomC, escala_ultimo: followup });
+                    // orden owner 2026-07-09: al escalar NO hay puente — el bot se calla y el owner contesta en persona (igual que etapa 3)
                     return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: cont.motivo, escala_nombre: escNomC, escala_ultimo: followup });
                 }
                 if (cont && cont.silencio) return res.status(200).json({ ok: false, motivo: 'cortesia_silencio' });
@@ -1525,46 +1533,9 @@ module.exports = async function handler(req, res) {
             // claro / no maximiza la venta → ESCALA al owner (NO improvisa con Sonnet). =====
             const AUTO_ETAPA3 = process.env.AUTO_ETAPA3 !== '0';   // interruptor maestro (default ON)
             if (AUTO_ETAPA3 && bursts >= 2 && lastDir === 'in') {
-                let followupE = mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes.length ? entrantes[entrantes.length - 1].mensaje : '');
-                // 📷 LA IMAGEN SE LEE (owner 2026-07-22) — misma ley que en continuación
-                {
-                    const absI2 = await require('../lib/seb/aparador.js').absorberImagen({ texto: followupE, urls: req.body.imagenes });
-                    if (absI2.imagen && absI2.sinUrl && !absI2.textoUtil) {
-                        await logEscala(tel, '📷 mandó una IMAGEN que el bot no puede ver — revísala tú');
-                        return res.status(200).json({ ok: false, escalar_owner: true, escala_motivo: '📷 mandó una IMAGEN que el bot no puede ver — revísala tú', escala_nombre: nombreChat || null, escala_ultimo: followupE });
-                    }
-                    if (absI2.texto && absI2.texto !== followupE) followupE = absI2.texto;
-                }
-                // elección tardía del aparador (preguntó algo en medio y luego eligió)
-                const elA2 = await intentarEleccionAparador(tel, followupE, convId);
-                if (elA2) return res.status(200).json({ ok: true, modo: 'aparador', ...elA2, pin_after_index: (elA2.pin_after_index != null ? elA2.pin_after_index : null) });
-                // "¿qué más opciones?" → relacionados al interés · necesidad → filtro duro
-                const opF2 = await opcionesEnFlujo({ tel, texto: followupE });
-                if (opF2) {
-                    if (opF2.escalar_owner) await logEscala(tel, opF2.escala_motivo);
-                    return res.status(200).json({ ok: true, modo: 'aparador', ...opF2, escala_ultimo: opF2.escalar_owner ? followupE : undefined });
-                }
-                const mcE = adCtx ? '[DESC: ' + adCtx + ']\n' + followupE : followupE;
-                const clasifE = await entender({ mensaje: mcE, historial: histCorto, estado: {} });
-                // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
-                clasifE.auto_id = await require('../lib/seb/mesa.js').alinearAuto({ tel, texto: followupE, clasif: clasifE });
-                // ══ LA MESA (owner 2026-07-21) — misma capa que en continuación
-                // DUDAS GENERALES (crédito/requisitos/tasas) → su carril, no la mesa
-                const dgE = await require('../lib/seb/mesa.js').dudaGeneral({ tel, texto: followupE, nombre: nombreChat, clasif: clasifE, convId });
-                if (dgE) return res.status(200).json({ ok: true, modo: 'duda_general', tipo: dgE.tipo, segmentos: dgE.segmentos });
-                const mesaE = await require('../lib/seb/mesa.js').responderMesa({ tel, texto: followupE, clasif: clasifE, convId });
-                if (mesaE && mesaE.segmentos) return res.status(200).json({ ok: true, modo: 'mesa', tipo: mesaE.tipo, segmentos: mesaE.segmentos, fotos: mesaE.fotos || null, fotos_after_index: (mesaE.fotos_after_index != null ? mesaE.fotos_after_index : null), ubicacion_auto_id: mesaE.ubicacion_auto_id || null, pin_after_index: (mesaE.pin_after_index != null ? mesaE.pin_after_index : null) });
-                if (mesaE && mesaE.auto_id) clasifE.auto_id = mesaE.auto_id;
-                // ══ EL PERRO (owner 2026-07-21) — misma capa que en continuación
-                {
-                    const histTxtE = histCorto.map(h => (h.direccion === 'in' ? 'COMPRADOR: ' : 'SEB: ') + h.mensaje).join('\n');
-                    const perroE = await require('../lib/seb/ruteador.js').rutear({ tel, texto: followupE, historial: histTxtE, convId });
-                    if (perroE && perroE.escalar_owner) {
-                        await logEscala(tel, perroE.escala_motivo);
-                        return res.status(200).json({ ok: !!(perroE.segmentos && perroE.segmentos.length), modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos || [], fotos: perroE.fotos || null, fotos_after_index: (perroE.fotos_after_index != null ? perroE.fotos_after_index : null), escalar_owner: true, escala_motivo: perroE.escala_motivo, escala_ultimo: followupE });
-                    }
-                    if (perroE) return res.status(200).json({ ok: true, modo: 'perro', tipo: perroE.tipo, segmentos: perroE.segmentos, fotos: perroE.fotos || null, fotos_after_index: (perroE.fotos_after_index != null ? perroE.fotos_after_index : null) });
-                }
+                const ccE = await capasComunes(mensajes.slice(lastOutIdx + 1).filter(m => m.direccion === 'in').map(m => m.mensaje).join(' ') || (entrantes.length ? entrantes[entrantes.length - 1].mensaje : ''));
+                if (ccE.done) return res.status(200).json(ccE.done);
+                const followupE = ccE.followup, clasifE = ccE.clasif;
                 let autoE = clasifE.auto_id;
                 if (!autoE) { try { autoE = await U.autoActivoDe(0, tel); } catch (e) { } }
                 const { responderEtapa3 } = require('../lib/seb/etapa3.js');

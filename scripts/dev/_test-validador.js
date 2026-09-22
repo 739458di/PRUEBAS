@@ -1,10 +1,10 @@
-// Test del validador (Paso 2). Se corre local: node lib/seb/_test-validador.js
+// Test del validador (Paso 2). Se corre local: node scripts/dev/_test-validador.js
 const fs = require('fs');
 fs.readFileSync(__dirname + '/../../.env', 'utf8').split('\n').forEach(l => {
     const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) process.env[m[1]] = m[2].trim();
 });
-const { validarYRellenar, juntarPlaceholders } = require('./validador.js');
-const H = require('./herramientas.js');
+const { validarYRellenar, juntarPlaceholders } = require('../../lib/seb/validador.js');
+const H = require('../../lib/seb/herramientas.js');
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => {

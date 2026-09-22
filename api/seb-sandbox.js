@@ -565,7 +565,7 @@ module.exports = async function handler(req, res) {
                 const cont = out ? null : await responderCont({ texto: textoFamilia, nombre: NOMBRE_COMPRADOR, auto_id: autoActivo || clasif.auto_id, enganche: clasif.datos && clasif.datos.enganche, plazo: clasif.datos && clasif.datos.plazo_meses, intencion: clasif.intencion_principal, conv_id: convId, clasif });
                 if (out) { /* la mesa contestó */ } else
                 // DOCTRINA: la continuación también escala (momentos de gol / fuera de lista blanca).
-                if (cont && cont.escalar) { out = { escala: true, motivo: cont.motivo, puente: cont.puente || null }; ruta = cont.puente ? 'escala_puente' : 'escala'; }
+                if (cont && cont.escalar) { out = { escala: true, motivo: cont.motivo }; ruta = 'escala'; }   // sin puente (orden owner 2026-07-09)
                 else if (cont && cont.silencio) { out = { silencio: true, motivo: 'cortesía — silencio' }; ruta = 'silencio'; }
                 else if (cont && cont.segmentos && cont.segmentos.length) { out = cont; ruta = 'banco_continuacion'; universo = cont.universo || ''; }
                 else {
