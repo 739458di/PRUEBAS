@@ -124,7 +124,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}button
     <div class="comp"><textarea id="tx" rows="1" placeholder="Escribe como el cliente…"></textarea><button id="send" aria-label="Enviar">➤</button></div>
   </section>
   <section class="right">
-    <div class="bar"><b id="titulo">Calendario de la visita</b><span class="now" id="now"></span><div class="sp"></div>
+    <div class="bar"><b id="titulo">Calendario de la visita</b><span class="now" id="now"></span><span id="voz" hidden style="margin-left:10px;padding:4px 10px;border-radius:999px;background:#fff3cd;color:#7a4b00;font-size:13px;font-weight:600">👤 Estás atendiendo tú <button type="button" id="devolver" style="margin-left:6px;border:0;border-radius:6px;padding:3px 9px;background:#1b1b1b;color:#fff;cursor:pointer">Devolver a Seb</button></span><div class="sp"></div>
       <button id="bHoy" title="Regresa este cliente a la hora real de hoy">Volver a hoy</button><button class="ok" id="bLlego">Sí llegó</button><button class="no" id="bNo">No llegó</button></div>
     <div class="leg"><span><i style="width:14px;height:14px;border-radius:4px;background:var(--cita)"></i>la visita</span><span><i style="width:12px;height:12px;border-radius:50%;background:var(--rojo)"></i>lo siguiente que va a pasar</span><span><i style="width:12px;height:12px;border-radius:50%;background:var(--seb)"></i>programado</span><span><i style="width:12px;height:12px;border-radius:50%;background:#111"></i>ya salió</span><span><i style="width:12px;height:12px;border-radius:50%;border:1.5px solid var(--gris)"></i>✕ a la derecha = cancelado por el último cambio</span><span><i style="width:12px;height:12px;border-radius:50%;border:2px dashed var(--seb)"></i>vendría después</span><span><i style="width:12px;height:12px;border-radius:3px;background:var(--seb)"></i>cuadrado = aviso a ti</span><span><i style="width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:10px solid var(--cli)"></i>algo que dijo el cliente</span><span>⬤ arrastra la perilla o la barra de abajo: a la derecha el tiempo avanza y salen los mensajes; a la izquierda se regresan</span></div>
     <div class="calwrap" id="calwrap"><div class="cal" id="cal"></div></div>
@@ -278,7 +278,8 @@ async function soltarEn(T){   // COMMIT: el motor real lleva a ESTE cliente a es
   el.addEventListener('pointerdown', (e) => { if (OCUPADO || !FILM) return; arr = true; el.setPointerCapture(e.pointerId); el.classList.add('arr'); verEn(tDe(e)); e.preventDefault(); });
   el.addEventListener('pointermove', (e) => { if (arr) verEn(tDe(e)); });
   el.addEventListener('pointerup', (e) => { if (!arr) return; arr = false; el.classList.remove('arr'); soltarEn(tDe(e)); }); })();
-async function cargarEstado(){ EST = CHAT ? await post('citaf_estado', { chat_id: CHAT }) : null; pintarCal(); }
+async function cargarEstado(){ EST = CHAT ? await post('citaf_estado', { chat_id: CHAT }) : null; pintarCal(); const v = $('voz'); if (v) { v.hidden = !(EST && EST.voz === 'humano'); } }
+async function devolverASeb(){ if (OCUPADO || !CHAT) return; bloquear(true); sinTip(); const r = await post('bot_estado', { chat_id: CHAT, estado: 'seb' }); TURNOS.unshift({ tipo: 'vendedor', titulo: 'Devolviste la voz a Seb', ok: !!r.ok, res: { estado: r.reanudo === 'turno' ? 'Seb atendió el mensaje pendiente' : (r.reanudo === 'gancho' ? 'Seb hizo un solo gancho' : 'Seb no tenía nada que decir') }, error: r.error }); VER = 0; TVISTA = null; await cargarEstado(); await cargarChat(); pintarFranja(); bloquear(false); }
 function bloquear(on){ OCUPADO = on; document.querySelectorAll('#send,.bar button,.film button,#chips button,#nuevo,#borrar,#reiniciar').forEach(b => b.disabled = on); }
 async function enviar(texto){
   texto = String(texto || '').trim(); if (!texto || OCUPADO || !CHAT) return; $('tx').value = ''; bloquear(true); sinTip();
@@ -317,6 +318,7 @@ async function borrarCliente(){ if (OCUPADO || !CHAT) return; if (!confirm('¿Bo
   addEventListener('resize', () => { if (EST) pintarCal(); });
   await cargarChats(Number(QS.get('chat')) || null); await abrir();
 })();
+document.addEventListener('click', e => { if (e.target && e.target.id === 'devolver') devolverASeb(); });
 </script>
 </body>
 </html>

@@ -1235,7 +1235,10 @@ function pintarCabecera(ch){
   const bot = ch.bot !== undefined ? ch.bot : c.bot;
   let l2 = '';
   if (bot && bot !== 'n/a') {
-    if (bot === 'seb') l2 += '<div class="linea ok" data-bot="seb"><span class="dot"></span><span class="t">Seb atendiendo</span><button type="button" onclick="cambiarBot(\'humano\', this)">' + ico('hand') + 'Tomar control</button></div>';
+    const univ = TENANT && Number(TENANT.id) !== 0;   // universos con Seb autónomo: solo dos realidades — Seb atendiendo / estás atendiendo tú [Devolver a Seb]. Sin 'Tomar control'.
+    if (univ && bot === 'seb') l2 += '<div class="linea ok" data-bot="seb"><span class="dot"></span><span class="t">🤖 Seb atendiendo</span></div>';
+    else if (univ && bot === 'humano') l2 += '<div class="linea" data-bot="humano"><span class="dot"></span><span class="t">👤 Estás atendiendo tú</span><button type="button" onclick="cambiarBot(\'seb\', this)">' + ico('bot') + 'Devolver a Seb</button></div>';
+    else if (bot === 'seb') l2 += '<div class="linea ok" data-bot="seb"><span class="dot"></span><span class="t">Seb atendiendo</span><button type="button" onclick="cambiarBot(\'humano\', this)">' + ico('hand') + 'Tomar control</button></div>';
     else if (bot === 'humano') l2 += '<div class="linea" data-bot="humano"><span class="dot"></span><span class="t">Tú tienes el control</span><button type="button" onclick="cambiarBot(\'seb\', this)">' + ico('bot') + 'Devolver a Seb</button></div>';
     else l2 += '<div class="linea" data-bot="' + esc(bot) + '">' + ico('pause') + '<span class="t">Seb en pausa</span><button type="button" onclick="cambiarBot(\'seb\', this)">' + ico('play') + 'Reanudar</button></div>';
   }

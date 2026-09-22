@@ -24,6 +24,7 @@ const citasVivas = require('../lib/seb/citas-vivas.js');
 const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
+const VOZ = require('../lib/seb/voz.js');   // LA VOZ del chat: Seb o el vendedor (human-on-the-loop)
 const CITAF = require('../lib/seb/citas-flex.js');   // CITAS FLEXIBLES (ventana + eventos + reloj virtual) — solo universos con config.citas_flex=1 (TERRA MOTORS)
 const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
 // ══ LA PUERTA ÚNICA DE MENSAJES (FyraChat v2, contrato 2026-09-10): TODO envío que nace aquí (manual, sugerencia
@@ -224,7 +225,11 @@ module.exports = async function handler(req, res) {
             if (!conPuente && !conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
             const tE = await tenantDeParam(String(req.body.tenant_id || '')); if (!tE || !Number(tE.id)) return res.status(404).json({ ok: false, error: 'universo inexistente' });
             if (!(tE.config && Number(tE.config.auto_boton) === 1)) return res.status(200).json({ ok: true, ignorado: 'auto_boton apagado en este universo' });
-            return res.status(200).json({ ok: true, ignorado: 'auto-botón retirado (2026-09-22): el cerebro de Seb ya aprieta las herramientas por la misma puerta' });
+            if (!(tE.config && Number(tE.config.seb_auto) === 1)) return res.status(200).json({ ok: true, ignorado: 'este universo no tiene Seb autónomo' });
+            // Seb autónomo en WhatsApp real: el entrante ya está persistido por el puente → mismo turno que en el sandbox (voz, candado, citas, cerebro)
+            let outE = null; const resE = { setHeader() { }, status() { return this; }, json(j) { outE = j; return this; }, end() { return this; } };
+            await module.exports({ method: 'POST', query: { action: 'seb_turno', vendedor: String(tE.id) }, body: { chat_id: Number(req.body.chat_id) || 0 }, headers: { 'x-api-key': process.env.K_PANEL || '', 'user-agent': 'puente-entrante' }, socket: { remoteAddress: '127.0.0.1' } }, resE);
+            return res.status(200).json({ ok: true, turno: outE });
         }
         // ── CITAS FLEXIBLES: tubería (sandbox → hilo; real → WhatsApp por la puerta de mensajes) y auto del chat ──
         const ioCitaf = (tC, chC) => CITAF.ioPara(tC, chC);   // UNA sola tubería (panel, cron y pruebas): vive en lib/seb/citas-flex.js
@@ -264,7 +269,7 @@ module.exports = async function handler(req, res) {
                 const stR = await CITAF.estado({ tenant: tC, chat: chC }); return res.status(200).json(Object.assign({ hechas, rebobino }, stR));
             }
             if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, datos: req.body.datos || null, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
-            const st = await CITAF.estado({ tenant: tC, chat: chC });
+            const st = await CITAF.estado({ tenant: tC, chat: chC }); st.voz = VOZ.vozDe(chC);
             return res.status(200).json(Object.assign({ hechas, vendedor: rV }, st));
         }
         if (action === 'seb_turno' && req.method === 'POST') {
@@ -273,6 +278,13 @@ module.exports = async function handler(req, res) {
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tS.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
             const chS = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chS || Number(chS.tenant_id) !== Number(tS.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const telS = String(chS.telefono);
+            // ══ LA VOZ (human-on-the-loop): si el vendedor tiene la voz, Seb NO corre (ni cerebro ni lector de citas); el mensaje se le reenvía a su WhatsApp una vez ══
+            if (VOZ.vozDe(chS) === 'humano') {
+                const uiH = (await query("SELECT id, msg_id, texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0];
+                const fw = uiH ? await VOZ.reenviarAlVendedor({ tenant: tS, chat: chS, msgId: uiH.msg_id || uiH.id, texto: uiH.texto }) : null;
+                return res.status(200).json({ ok: true, chat_id: Number(chS.id), voz: 'humano', seb: { ok: false, motivo: 'voz_humano' }, reenviado: !!(fw && fw.ok) });
+            }
+            const VOZ_GEN = VOZ.genDe(chS);   // generación vigente: todo lo que Seb mande en este turno lleva esta marca
             // UN TURNO POR MENSAJE (timbre idempotente): si ya corrió —o va corriendo— un turno para el ÚLTIMO mensaje del comprador, este no corre.
             try {
                 await run('CREATE TABLE IF NOT EXISTS seb_turnos (chat_id INTEGER NOT NULL, ultimo_in_id INTEGER NOT NULL, ts INTEGER, PRIMARY KEY (chat_id, ultimo_in_id))');
@@ -301,7 +313,7 @@ module.exports = async function handler(req, res) {
             }
             // ── ENVIAR lo que el cerebro decidió, por la PUERTA DE MENSAJES de este universo (sandbox → se pinta en el hilo; real → WhatsApp) ──
             const base = 'seb:' + Number(chS.id) + ':' + Date.now() + (soloTexto ? ':c' : ''); let n = 0;
-            const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno' }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
+            const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno', voz_gen: VOZ_GEN }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
             const pin = async () => { if (!out.ubicacion_auto_id) return; const pe = (await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [Number(out.ubicacion_auto_id)]).catch(() => []))[0]; if (!pe) return; await mandarS({ imagen: pe.image_b64 || null, imagen_ref: pe.image_b64 ? 'ubic-img:' + Number(out.ubicacion_auto_id) : null, location: (pe.lat != null && pe.lng != null) ? { lat: pe.lat, lng: pe.lng, name: pe.name || '', maps_link: pe.maps_link || undefined } : null }); };
             if (out.ok && Array.isArray(out.segmentos)) {
                 const segs = out.segmentos.map(x => String(x || '').trim()).filter(Boolean); const fotos = Array.isArray(out.fotos) ? out.fotos : [];
@@ -313,6 +325,7 @@ module.exports = async function handler(req, res) {
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
             const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : (out.escalar_owner ? ('🔴 Seb escaló (no contestó): ' + String(out.escala_motivo || '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo')));
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
+                if (out.escalar_owner) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: String(out.escala_motivo || 'Seb necesita ayuda') }); } catch (e) { console.error('[voz entregar]', e.message); } }   // ESCALAR = ENTREGAR LA VOZ al vendedor (+ WhatsApp con link)
                 return { out, enviados };
             };
             // ══ VISITAS FLEXIBLES: el mensaje pasa PRIMERO por la puerta de eventos de cita. La IA solo interpreta; el motor aplica. Si el mismo mensaje trae
@@ -321,6 +334,7 @@ module.exports = async function handler(req, res) {
             let citaF = null, comercialR = null;
             if (CITAF.activo(tS)) {
                 try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
+                if (citaF && citaF.escalado) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: 'cita: ' + String(citaF.evento || 'no quedó claro') }); } catch (e) { } }
                 if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF, comercial: comercialR ? { ok: !!comercialR.out.ok, modo: comercialR.out.modo || null, tipo: comercialR.out.tipo || null, enviados: comercialR.enviados.length, textos: Array.isArray(comercialR.out.segmentos) ? comercialR.out.segmentos.map(x => String(x || '')).filter(Boolean) : [] } : null });
             }
             const { out, enviados } = await correrCerebro(null);
@@ -2432,7 +2446,7 @@ module.exports = async function handler(req, res) {
             const nombreDe = c => (c.nombre && c.nombre !== '.') ? String(c.nombre) : ('+' + String(c.telefono).slice(0, 3) + ' ' + String(c.telefono).slice(-10));
             const iniDe = nombre => { const n = String(nombre || '').trim(); if (!n || n === '.') return '#'; const p = n.split(/\s+/).filter(Boolean); const s = ((p[0] || '')[0] || '') + ((p[1] || '')[0] || ''); return s.toUpperCase() || '#'; };
             const ghostDias = c => (c.ult_dir === 'out' && Number(c.ult_msg_ts)) ? Math.max(0, Math.floor((Date.now() - Number(c.ult_msg_ts)) / 86400000)) : null;
-            const botInbox = c => TV ? 'n/a' : ((c.canal === 'owner' || c.canal === 'messenger') ? 'humano' : 'seb');
+            const botInbox = c => TV ? ((tV.config && Number(tV.config.seb_auto) === 1) ? VOZ.vozDe(c) : 'n/a') : ((c.canal === 'owner' || c.canal === 'messenger') ? 'humano' : 'seb');
             const ph = arr => arr.map(() => '?').join(',');
             // portada por web_id (1 lectura): principal, o la primera por orden
             async function portadasDe(webIds) {
@@ -2603,7 +2617,7 @@ module.exports = async function handler(req, res) {
                         chat_id: Number(c.id), telefono: String(c.telefono), nombre: nombreDe(c), ini: iniDe(c.nombre),
                         auto: focoH ? { id: Number(focoH.id), web_id: focoH.web_id == null ? null : Number(focoH.web_id), nombre: focoH.nombre, precio: focoH.precio == null ? null : Number(focoH.precio), portada: (focoH.web_id && portadasH[Number(focoH.web_id)]) || null } : null,
                         autos_disponibles: cat.slice(0, 200).map(a => autoJson(a, portadasH)),
-                        bot: TV ? 'n/a' : botEstadoT0(c, antes ? [] : asc), delegado: !!deleg,
+                        bot: TV ? ((tV.config && Number(tV.config.seb_auto) === 1) ? VOZ.vozDe(c) : 'n/a') : botEstadoT0(c, antes ? [] : asc), delegado: !!deleg,
                         ghost_dias: ghostDias(c), no_leidos: antes ? noLeidosAntes : 0, canal: c.canal || null
                     },
                     mensajes: asc.map(mensajeJson), hay_mas, desde: desde || undefined, antes: antes || undefined
@@ -2617,6 +2631,7 @@ module.exports = async function handler(req, res) {
                 const clave = String(req.body.clave || '').trim(); if (!clave) return err(400, 'clave requerida');
                 if (!TV) { try { await citasVivas.senalManual(c.telefono, texto); } catch (e) { console.error('[senalManual v2]', e.message); } }   // "cita confirmada/cancelada" en el chat del dueño (t0)
                 const env = await MSJ.enviar({ tenantId: TV, chatId: c.id, origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
+                if (env.ok && TV && !env.repetido && tV.config && Number(tV.config.seb_auto) === 1) { try { await VOZ.entregar({ tenant: tV, chat: c, motivo: 'contestaste tú', avisar: false, fuente: 'vendedor' }); } catch (e) { } }   // escribir a mano = tomar la voz
                 if (!env.ok) return res.status(env.status && env.status >= 400 ? env.status : 502).json({ ok: false, error: env.error || 'no se pudo mandar', chat_id: Number(c.id), clave, en_vuelo: !!env.en_vuelo });
                 return okJ({ mensaje: env.mensaje, chat_id: Number(c.id), clave, simulado: !!env.simulado, repetido: !!env.repetido });
             }
@@ -2791,8 +2806,36 @@ module.exports = async function handler(req, res) {
             //    tenant≠0: 'n/a' (no hay cerebro en esos universos).
             if (action === 'bot_estado' && req.method === 'POST') {
                 const c = await chatDelUniverso(req.body.chat_id); if (!c) return err(404, 'chat inexistente en este universo');
-                if (TV) return okJ({ bot: 'n/a', chat_id: Number(c.id) });
                 const est = String(req.body.estado || '');
+                if (TV) {   // universos: la voz se cambia por voz.js (una sola puerta, idempotente)
+                    if (!(tV.config && Number(tV.config.seb_auto) === 1)) return okJ({ bot: 'n/a', chat_id: Number(c.id) });   // sin Seb autónomo no hay voz que cambiar
+                    if (!['seb', 'humano'].includes(est)) return err(400, "estado debe ser 'seb' o 'humano'");
+                    if (est === 'humano') { const r = await VOZ.entregar({ tenant: tV, chat: c, motivo: 'tomaste el chat', avisar: false, fuente: 'vendedor' }); return okJ({ bot: 'humano', chat_id: Number(c.id), cambio: r.cambio }); }
+                    const r = await VOZ.devolver({ tenant: tV, chat: c });
+                    // REANUDAR: Seb mira la realidad que quedó → turno pendiente (se procesa por el flujo normal) · falta un movimiento comercial (UN gancho por el gobernador) · nada
+                    let reanudo = 'nada';
+                    try {
+                        const tp = await VOZ.turnoPendiente(c.id);
+                        if (tp.pendiente) {
+                            let outT = null; const resT = { setHeader() { }, status() { return this; }, json(j) { outT = j; return this; }, end() { return this; } };
+                            await module.exports({ method: 'POST', query: { action: 'seb_turno', vendedor: String(TV) }, body: { chat_id: Number(c.id) }, headers: { 'x-api-key': process.env.K_PANEL || '', 'user-agent': 'voz-reanudar' }, socket: { remoteAddress: '127.0.0.1' } }, resT);
+                            reanudo = 'turno'; var turnoR = outT;
+                        } else if (Number(tV.config && tV.config.seb_auto) === 1) {
+                            const LIB_ETAPA3 = require('../lib/seb/etapa3.js'); const est3 = await LIB_ETAPA3.estadoConv(Number(c.id));
+                            if (!est3.cita_viva && !est3.gancho_abierto) {
+                                const ultIn = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(c.id)]))[0];
+                                const g = LIB_GOBERNADOR.gobernarSalida({ ok: true, modo: 'etapa3', tipo: 'e3_reanudar', segmentos: [LIB_ETAPA3.ctaEstado(est3, 'producto') || ''] }, { texto: (ultIn && ultIn.texto) || '', est: est3 });
+                                if (g && g.ok && g.segmentos && g.segmentos.length) {
+                                    const chR = await U.chatPorId(Number(c.id));
+                                    const e = await MSJ.enviar({ tenantId: TV, chatId: Number(c.id), origen: 'sb', clave: 'voz:gancho:' + Number(c.id) + ':' + (r.gen || 0), manual: false, accion: 'seb_turno', voz_gen: VOZ.genDe(chR), texto: g.segmentos[0] });
+                                    if (e.ok) reanudo = 'gancho';
+                                }
+                            }
+                        }
+                    } catch (e2) { console.error('[voz reanudar]', e2.message); }
+                    await ACCIONES.registrar({ tenant_id: TV, chat_id: Number(c.id), tipo: 'bot_' + est, meta: { reanudo }, actor: 'vendedor', sesion_id: SID });
+                    return okJ({ bot: 'seb', chat_id: Number(c.id), cambio: r.cambio, reanudo, turno: typeof turnoR !== 'undefined' ? turnoR : null });
+                }
                 if (!['seb', 'humano'].includes(est)) return err(400, "estado debe ser 'seb' o 'humano'");
                 await U.guardarEstado(0, c.telefono, { canal: est === 'humano' ? 'owner' : null });
                 await ACCIONES.registrar({ tenant_id: 0, chat_id: Number(c.id), tipo: 'bot_' + est, meta: { canal: est === 'humano' ? 'owner' : null }, actor: 'vendedor', sesion_id: SID });
