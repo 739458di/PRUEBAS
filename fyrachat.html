@@ -1716,53 +1716,27 @@ function abrirNuevoComprador(){
     next.onclick = () => { if (!valida()) { terr.textContent = 'Son 10 dígitos.'; tw.classList.add('err'); ti.focus(); return; } if (!st.auto) return; paso2(); };
   };
 
-  // ── PASO 2: ¿cómo entra? (8 modos en dos superficies; cotizar/cita/texto despliegan debajo de su row) ──
+  // ── PASO 2 (orden owner 2026-09-22): UNA caja de texto — "¿qué hacer?" — la IA la traduce a las herramientas que ya existen y Seb arranca el flujo ──
   const paso2 = () => {
-    const TE = !!(TENANT && TENANT.todo_entra);   // número dedicado: delegar = primer mensaje, sí o sí
-    setBack(paso1); s.setTitulo(TE ? 'Primer mensaje' : '¿Cómo entra?'); arriba();
-    const rowOp = (o) => '<button type="button" class="row op" data-m="' + o.m + '"><div class="sq">' + ico(o.ico) + '</div><div class="tx"><div class="t">' + esc(o.t) + '</div><div class="s">' + esc(o.s) + '</div></div>' + ico('chev', 'chev') + '</button>';
+    setBack(paso1); s.setTitulo('¿Qué le mandamos?'); arriba();
     box.innerHTML = pasos(2) + '<p class="sub">' + esc(nombreSinAnio(st.auto) + (anioDe(st.auto) ? ' ' + anioDe(st.auto) : '')) + ' · +52 ' + esc(telFmt10(st.tel)) + '</p>' +
-      '<span class="lbl">' + (TE ? 'Tu primer mensaje · elige la herramienta' : 'Ejecuta una acción') + '</span><div class="grupo">' + NC_ACCION.map(rowOp).join('') + '</div>' +
-      '<span class="lbl">' + (TE ? 'O un mensaje' : 'Solo un mensaje / nada') + '</span><div class="grupo">' + NC_MENSAJE.filter(o => !(TE && o.m === 'silencio')).map(rowOp).join('') + '</div>' +
-      ((TENANT && TENANT.demo) ? '<span class="lbl">Sandbox · simular que el comprador escribió primero</span><div class="grupo">' + rowOp({ m: 'entrante', ico: 'chat', t: 'Recibo yo el mensaje', s: 'No es delegar: entra un mensaje del comprador (lo tecleas tú) y Seb responde solo.' }) + '</div>' : '');
-    s.setPie('<button class="cta" id="nc-go" disabled>Delegar</button><div class="g-err" id="nc-gerr"></div>');
-    const go = s.pie.querySelector('#nc-go'), gerr = s.pie.querySelector('#nc-gerr'); let ciSt = null, desp = null;
-    const elegir = (b) => {
-      st.modo = b.dataset.m; box.querySelectorAll('.row.op').forEach(x => x.classList.toggle('on', x === b));
-      if (desp) { desp.remove(); desp = null; } ciSt = null; go.disabled = false; go.textContent = NC_CTA[st.modo] || 'Delegar'; gerr.textContent = '';
-      let h = '';
-      if (st.modo === 'cotizar') h = '<label class="lbl" for="nc-eng">Enganche</label><input class="inp" id="nc-eng" inputmode="numeric" placeholder="$ 0" autocomplete="off"><div class="f-err" id="nc-eerr"></div>';
-      else if (st.modo === 'cita') h = citaFormHTML('');
-      else if (st.modo === 'texto') h = '<label class="lbl" for="nc-tx">Tu mensaje</label><textarea class="inp" id="nc-tx" placeholder="Hola, soy…"></textarea><div class="f-err" id="nc-txerr"></div>';
-      else if (st.modo === 'entrante') h = '<label class="lbl" for="nc-in">Lo que escribe el comprador</label><textarea class="inp" id="nc-in" placeholder="Hola, ¿sigue disponible?"></textarea><div class="f-err" id="nc-inerr"></div>';
-      if (!h) return;
-      desp = document.createElement('div'); desp.className = 'desp'; desp.innerHTML = h; b.after(desp);
-      if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); e.oninput = () => { const n = e.value.replace(/\D/g, ''); e.value = n ? '$ ' + Number(n).toLocaleString('es-MX') : ''; e.classList.remove('err'); desp.querySelector('#nc-eerr').textContent = ''; }; setTimeout(() => e.focus(), 60); }
-      if (st.modo === 'cita') ciSt = citaFormWire(desp);
-      if (st.modo === 'texto') setTimeout(() => desp.querySelector('#nc-tx').focus(), 60);
-      if (st.modo === 'entrante') setTimeout(() => desp.querySelector('#nc-in').focus(), 60);
-      setTimeout(() => desp.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 40);
-    };
-    box.querySelectorAll('.row.op').forEach(b => b.onclick = () => elegir(b));
-    if (st.modo) { const b = box.querySelector('.row.op[data-m="' + st.modo + '"]'); if (b) elegir(b); }
+      '<label class="lbl" for="nc-ins">Escribe qué hacer</label><textarea class="inp" id="nc-ins" rows="3" placeholder="cotizar con 50 mil · mandar ubicación · fotos · ficha · agendar el sábado a las 4 · solo saludar"></textarea>' +
+      '<div class="f-note">Seb lo saluda (“Hola nuevamente… somos ' + esc((TENANT && TENANT.nombre) || 'el lote') + '… para darte seguimiento te comparto…”), manda lo que pediste y de ahí sigue el flujo normal.</div>' +
+      ((TENANT && TENANT.demo) ? '<span class="lbl" style="margin-top:14px">Sandbox · simular que el comprador escribió primero</span><label class="f-note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="nc-ent"> Recibo yo el mensaje (lo tecleo como comprador)</label><textarea class="inp" id="nc-in" rows="2" placeholder="Hola, ¿sigue disponible?" hidden></textarea>' : '');
+    s.setPie('<button class="cta" id="nc-go">Delegar</button><div class="g-err" id="nc-gerr"></div>');
+    const go = s.pie.querySelector('#nc-go'), gerr = s.pie.querySelector('#nc-gerr'); const ins = box.querySelector('#nc-ins'), chk = box.querySelector('#nc-ent'), inb = box.querySelector('#nc-in');
+    if (chk) chk.onchange = () => { inb.hidden = !chk.checked; ins.disabled = chk.checked; if (chk.checked) inb.focus(); };
+    setTimeout(() => ins.focus(), 60);
     const cl = clave('delegar', st.tel);   // clave fija para esta hoja: reintentar = mismo resultado
-    let ncCorriendo = false;   // un solo disparo: el segundo toque mientras corre no repite el mensaje del comprador ni el turno de Seb
-    go.onclick = async () => {
-      if (ncCorriendo) return;
-      if (!st.modo || !st.auto) return; gerr.textContent = '';
-      ncCorriendo = true; try { await ncDelegar(); } finally { ncCorriendo = false; }
-    };
+    let ncCorriendo = false;
+    go.onclick = async () => { if (ncCorriendo || !st.auto) return; gerr.textContent = ''; ncCorriendo = true; try { await ncDelegar(); } finally { ncCorriendo = false; } };
     const ncDelegar = async () => {
-      const entrada = { modo: st.modo };
-      if (st.modo === 'cotizar') { const e = desp.querySelector('#nc-eng'); const n = Number((e.value || '').replace(/\D/g, '')) || 0; if (!n) { desp.querySelector('#nc-eerr').textContent = 'Escribe el enganche.'; e.classList.add('err'); e.focus(); return; } entrada.enganche = n; }
-      if (st.modo === 'cita') { if (!ciSt || !ciSt.valida()) return; entrada.fecha_iso = ciSt.fecha; entrada.hora = ciSt.hora; }
-      if (st.modo === 'texto') { const t = (desp.querySelector('#nc-tx').value || '').trim(); if (!t) { desp.querySelector('#nc-txerr').textContent = 'Escribe el mensaje.'; desp.querySelector('#nc-tx').focus(); return; } entrada.texto = t; }
-      // ENTRANTE (sandbox/prueba): el comprador escribe primero → el chat nace callado y su mensaje entra al hilo; Seb decide solo
-      let textoEntrante = null;
-      if (st.modo === 'entrante') { textoEntrante = (desp.querySelector('#nc-in').value || '').trim(); if (!textoEntrante) { desp.querySelector('#nc-inerr').textContent = 'Escribe lo que dice el comprador.'; desp.querySelector('#nc-in').focus(); return; } entrada.modo = 'silencio'; entrada.entrante = true; }
+      let textoEntrante = null; let entrada;
+      if (chk && chk.checked) { textoEntrante = (inb.value || '').trim(); if (!textoEntrante) { gerr.textContent = 'Escribe lo que dice el comprador.'; inb.focus(); return; } entrada = { modo: 'silencio', entrante: true }; st.modo = 'entrante'; }
+      else { entrada = { modo: 'instruccion', texto: (ins.value || '').trim() }; st.modo = 'instruccion'; }
       bloquear(go, true);
       const r = await correr('delegar:' + cl, () => apiPost('delegar_v2', { telefono: st.tel, auto_id: st.auto.id, entrada, clave: cl }));
-      bloquear(go, false); go.textContent = NC_CTA[st.modo] || 'Delegar';
+      bloquear(go, false);
       if (!r.ok) { gerr.textContent = r.error || 'No se pudo delegar'; return; }
       const id = r.chat_id; if (!id) { gerr.textContent = 'Delegado, pero el servidor no devolvió el chat.'; cargarInbox({ reset: true }); return; }
       let c = INBOX.rows.get(id); if (!c) c = await filaDesdeServidor(id);
@@ -1771,15 +1745,14 @@ function abrirNuevoComprador(){
         const rIn = await apiPost('demo_responder', { chat_id: id, texto: textoEntrante });
         if (!rIn.ok) { gerr.textContent = rIn.error || 'No pude registrar el mensaje del comprador'; return; }
         HILOS.delete(id); s.cerrar(); irTab('inicio'); QUIEN = 'comprador'; pintarQuien(); abrirChat(id);
-        if (rIn.seb_auto) { pintarPensando(true); apiPost('seb_turno', { chat_id: id }).finally(() => { pintarPensando(false); if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); cargarInbox({ reset: true }); }); return; }
+        if (rIn.seb_auto) { pintarPensando(true); apiPost('seb_turno', { chat_id: id }).finally(() => { pintarPensando(false); if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }); }
         setTimeout(() => { if (CHAT_ID === id) cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(m => m._eco ? actualizarBurbuja(m) : insertarBurbuja(m, { auto: true })); }); }, 2500);
         cargarInbox({ reset: true });
         return;
       }
-      // la nota y la burbuja de lo enviado quedan en el hilo: se pintan al abrir el chat (lógica existente)
-      notaLocal(id, (r.ya_delegado ? 'Ya estaba delegado · ' : 'Delegado · ') + (NC_NOTA[st.modo] || st.modo) + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : ''));
+      notaLocal(id, (r.ya_delegado ? 'Ya estaba delegado · ' : 'Delegado · ') + 'seguimiento' + (r.accion_ejecutada ? ' (' + r.accion_ejecutada + ')' : '') + ((r.errores || []).length ? ' · no se pudo: ' + r.errores.join('; ') : ''));
       if (typeof r.enviado === 'string' && r.enviado.trim()) burbujaSalida(id, r.enviado, r);
-      if (st.modo === 'cita') citasInvalidar();
+      if ((r.hechas || []).includes('cita')) citasInvalidar();
       st.listo = { id, nombre: r.nombre || (c && c.nombre) || '' };
       paso3();
     };

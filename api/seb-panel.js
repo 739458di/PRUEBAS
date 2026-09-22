@@ -922,6 +922,34 @@ module.exports = async function handler(req, res) {
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
         // ══ NÚCLEO DE DELEGAR — UNA puerta para `delegar` (v1) y `delegar_v2` (contrato FyraChat v2). Devuelve { status, out }.
         //   X = { sesionId, clave } — la clave (idempotencia de la UI) deriva las claves del opener (':opener') y de la acción (':accion').
+        // DELEGAR CON INSTRUCCIÓN: nace el chat (delegarCore en silencio), la IA traduce la instrucción a herramientas, Seb saluda con el puente y las ejecuta por la misma puerta que los botones
+        async function delegarConInstruccion({ t, body, instruccion, clave, sesionId }) {
+            const PD = require('../lib/seb/puente-delegar.js');
+            const plan = await PD.interpretar(instruccion, Date.now());
+            const rD = await delegarCore(t, { telefono: body.telefono, nombre: body.nombre, auto_id: body.auto_id, modo_entrada: 'silencio' }, { sesionId, clave, sin_guard: true });
+            const o = rD.out || {}; if (rD.status >= 400 || o.ok === false) return { ok: false, status: rD.status, error: o.error || 'no se pudo delegar', necesita: o.necesita };
+            const chatI = o.chat_id ? await U.chatPorId(Number(o.chat_id)) : null; if (!chatI) return { ok: false, status: 500, error: 'delegado, pero sin chat' };
+            const autosI = await autosDeTenant(t); const autoI = autosI.find(a => Number(a.id) === Number(body.auto_id) || Number(a.fyradrive_web_id) === Number(body.auto_id)) || {};
+            const faltaEnganche = plan.herramientas.includes('cotizar') && !(Number(plan.enganche) > 0);
+            const vendedorN = String((t.config && (t.config.vendedor_nombre || t.config.recibe)) || '').trim();
+            const burbujas = plan.saludar === false ? [] : PD.saludo({ nombreComprador: o.nombre || body.nombre, lote: PD.capPalabras(t.nombre), vendedor: vendedorN, herramientas: plan.herramientas, faltaEnganche });
+            let sal = null; if (burbujas.length) sal = await MSJ.enviar({ tenantId: Number(t.id), chatId: Number(chatI.id), origen: 'delegar', clave: clave + ':puente', manual: false, accion: 'delegar_puente', segmentos: burbujas, sesionId });
+            const hechas = [], errores = [];
+            for (const h of plan.herramientas) {
+                try {
+                    if (h === 'cotizar' && faltaEnganche) continue;   // la pregunta del enganche ya va en el saludo
+                    if (h === 'cita') {
+                        const fI = String(plan.fecha_iso || ''), hI = String(plan.hora || '');
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(fI) || !/^\d{1,2}:\d{2}$/.test(hI)) { errores.push('cita: falta día u hora'); continue; }
+                        if (CITAF.activo(t)) { const rC = await CITAF.vendedor({ tenant: t, chat: chatI, evento: 'agenda', datos: { dia_ini: fI, hora_ini: hI.padStart(5, '0') }, auto: await autoCitaf(t, chatI), io: ioCitaf(t, chatI) }); if (rC && rC.ok !== false) hechas.push('cita'); else errores.push('cita: ' + ((rC && rC.error) || 'no se pudo')); continue; }
+                    }
+                    const rA = await ejecutarAccion(t, o.telefono, h, { auto_id: autoI.id || body.auto_id, enganche: plan.enganche || undefined, plazo_meses: plan.plazo_meses || undefined, fecha_iso: plan.fecha_iso || undefined, hora: plan.hora || undefined, comprador_nombre: o.nombre || body.nombre, via: 'entrada', clave: clave + ':' + h });
+                    if (rA.out && rA.out.ok) hechas.push(h); else errores.push(h + ': ' + ((rA.out && rA.out.error) || 'no se pudo'));
+                } catch (e) { errores.push(h + ': ' + e.message); }
+            }
+            try { await ACCIONES.registrar({ tenant_id: Number(t.id), chat_id: Number(chatI.id), tipo: 'delegacion_instruccion', meta: { instruccion: String(instruccion || '').slice(0, 300), plan: plan.herramientas, hechas, errores }, actor: 'vendedor', sesion_id: sesionId }); } catch (e) { }
+            return { ok: true, status: 200, chat_id: Number(chatI.id), telefono: o.telefono, nombre: o.nombre || body.nombre || null, auto: o.auto || null, modo: 'instruccion', ya_delegado: !!o.ya_delegado, plan: plan.herramientas, hechas, errores, enviado: burbujas.join('\n'), simulado: !!(sal && sal.simulado) || !!t.demo, accion_ejecutada: hechas.join('+') || null };
+        }
         async function delegarCore(t, body, X) {
             X = X || {}; body = body || {};
             const R = (status, out) => ({ status, out });
@@ -2657,6 +2685,10 @@ module.exports = async function handler(req, res) {
                 const E = (req.body.entrada && typeof req.body.entrada === 'object') ? req.body.entrada : {};
                 // NÚMERO DEDICADO (orden owner 2026-09-18, TERRA MOTORS): con config.todo_entra=1 todo lo que ENTRA ya es del giro, así que
                 // DELEGAR = el PRIMER MENSAJE del lote al comprador, sí o sí. No existe "entrar callado" (salvo la simulación de entrante del sandbox).
+                if (E.modo === 'instruccion') {   // DELEGAR CON INSTRUCCIÓN (orden owner 2026-09-22): número (+nombre) + auto + 'qué hacer' en texto → Seb saluda con el puente y ejecuta las herramientas que ya existen
+                    const rI = await MSJ.conClave(clave, { tenantId: TV, accion: 'delegar_v2', sesionId: SID }, async () => delegarConInstruccion({ t: tV, body: req.body, instruccion: String(E.texto || ''), clave, sesionId: SID }));
+                    return res.status(codigoDe(rI)).json(rI);
+                }
                 if (tV.config && Number(tV.config.todo_entra) === 1 && (E.modo || 'silencio') === 'silencio' && E.entrante !== true) return err(400, 'En este universo agregar un comprador es mandarle el primer mensaje: elige qué le mandas.', { necesita: 'modo' });
                 const body = { telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
                 const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'delegar_v2', sesionId: SID }, async () => {
