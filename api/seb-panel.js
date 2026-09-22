@@ -1212,6 +1212,7 @@ module.exports = async function handler(req, res) {
             // Con VISITA VIVA no se vuelve a empujar a cita; sin visita, el gancho sale eventualmente (enfriamiento), nunca en cada turno.
             if (convId) {
                 try {
+                    try { require('../lib/seb/memo.js').olvidar('estadoConv:' + convId); } catch (e) { }   // siempre fresco: el gancho recién enviado debe contar (mensajes seguidos en < 20 s)
                     const estG = await require('../lib/seb/etapa3.js').estadoConv(convId);
                     const textoG = entrantes[entrantes.length - 1].mensaje;
                     const _json = res.json.bind(res);
