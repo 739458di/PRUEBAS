@@ -1207,6 +1207,17 @@ module.exports = async function handler(req, res) {
             }
             const entrantes = mensajes.filter(m => m.direccion === 'in');
             if (!entrantes.length) return res.status(200).json({ ok: false, motivo: 'sin_entrantes' });
+            // ══ PUERTA ÚNICA DE SALIDA COMERCIAL (orden owner 2026-09-22: opener + exploración permanente + cita en paralelo):
+            // TODO lo que contesta el cerebro (perro, mesa, continuación, aparador, etapa 3) pasa por el gobernador antes de salir.
+            // Con VISITA VIVA no se vuelve a empujar a cita; sin visita, el gancho sale eventualmente (enfriamiento), nunca en cada turno.
+            if (convId) {
+                try {
+                    const estG = await require('../lib/seb/etapa3.js').estadoConv(convId);
+                    const textoG = entrantes[entrantes.length - 1].mensaje;
+                    const _json = res.json.bind(res);
+                    res.json = (payload) => { try { payload = require('../lib/seb/gobernador.js').gobernarSalida(payload, { texto: textoG, est: estG }); } catch (e) { console.error('[gobernador salida]', e.message); } return _json(payload); };
+                } catch (e) { console.error('[gobernador estado]', e.message); }
+            }
             // ══ VENDEDOR ASIGNADO (staff, orden owner 2026-08-25): si este tel tiene una
             // silla de vendedor viva, su mensaje entra a ESA máquina (sí→confirma, no→
             // escala, resto→escala) — jamás al flujo de comprador.
