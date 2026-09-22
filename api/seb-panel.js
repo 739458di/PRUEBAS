@@ -111,7 +111,7 @@ async function cargarResets() {
 // ══════════ CLASIFICACIÓN DE ACCIONES (blindaje 2026-09-10, spec docs/seguridad-acceso-spec-2026-09-10.md) ══════════
 // PÚBLICA: sin nada. K_PUENTE: solo el puente (header x-api-key). K_PANEL: servidores propios (web, SB, Claude/scripts).
 // Las de K_PUENTE y K_PANEL también las abre la sesión MAESTRA (el owner desde su navegador). Todo lo no listado = SESIÓN.
-const ACC_PUBLICAS = new Set(['acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
+const ACC_PUBLICAS = new Set(['tenant_marca', 'acceso_yo', 'acceso_pedir', 'acceso_entrar', 'acceso_salir', 'acceso_canjear', 'timbre_url', 'acceso_modo', 'acceso_entrar_contrasena']);
 // CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
 const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
 const ACC_PUENTE = new Set(['entrante_v2', 'opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
@@ -910,13 +910,17 @@ module.exports = async function handler(req, res) {
             try { const dF = await citasVivas.direccionDe(tF.id, telF); await ACCIONES.registrar({ tenant_id: tF.id, chat_id: dF.chat_id, delegacion_id: dF.delegacion_id, tipo: 'foco_cambiado', ref_id: inv.id, meta: { auto: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ') }, actor: 'vendedor', sesion_id: SES ? SES.sid : null }); } catch (e) { }
             return res.status(200).json({ ok: true, foco: { id: inv.id, web_id: inv.fyradrive_web_id, nombre: [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' '), precio: inv.precio } });
         }
+        if (action === 'tenant_marca') {   // PÚBLICA: solo nombre, marca y tema (para pintar la pantalla de entrada del universo)
+            const tM = await tenantDeParam(VEND_PARAM); if (!tM || !Number(tM.id)) return res.status(404).json({ ok: false });
+            return res.status(200).json({ ok: true, nombre: tM.nombre, marca: (tM.config && tM.config.marca) || null, tema: (tM.config && tM.config.tema) || null });
+        }
         if (action === 'tenant_info') {
             const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, marca: (t.config && t.config.marca) || null, tema: (t.config && t.config.tema) || null, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.

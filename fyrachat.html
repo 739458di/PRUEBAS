@@ -25,6 +25,11 @@
   --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+/* ═══ TEMA BLANCO por universo (config.tema='blanco'; TERRA IA): mismo layout, base blanca, negro solo para contraste ═══ */
+:root[data-tema="blanco"]{ --bg:#FFFFFF; --s1:#F4F4F4; --s2:#E9E9E9; --pri:#111111; --pri2:#2A2A2A; --pos:#111111; --txt:#111111; --txt2:#555555; --muted:#7A7A7A; --danger:#C62828; --warn:#8A6D00; --border:rgba(0,0,0,.14); --glow:none; --sep:rgba(0,0,0,.07); --in:#EFEFEF; --out:#111111; --inp-bg:#F4F4F4; --inp-bd:rgba(0,0,0,.18); --grad:linear-gradient(135deg,#111,#2A2A2A); --sh-card:0 12px 32px rgba(0,0,0,.10); --sh-btn:0 10px 28px rgba(0,0,0,.16); color-scheme:light }
+:root[data-tema="blanco"] .wm, :root[data-tema="blanco"] .bell, :root[data-tema="blanco"] .buscar input, :root[data-tema="blanco"] .fila .nom, :root[data-tema="blanco"] .cal-nav, :root[data-tema="blanco"] .cal-d, :root[data-tema="blanco"] .btn-c.sec, :root[data-tema="blanco"] .sc .btns button, :root[data-tema="blanco"] .sc-comp .ib, :root[data-tema="blanco"] .sc-comp .go, :root[data-tema="blanco"] .sc-pend span, :root[data-tema="blanco"] .vacio b, :root[data-tema="blanco"] .auto-c, :root[data-tema="blanco"] .row, :root[data-tema="blanco"] .row .sq, :root[data-tema="blanco"] .cita .dia-b b, :root[data-tema="blanco"] .cita .nom, :root[data-tema="blanco"] .tl .r .t b, :root[data-tema="blanco"] .ch-h .back, :root[data-tema="blanco"] .ch-h .ib, :root[data-tema="blanco"] .foco, :root[data-tema="blanco"] .msg.in, :root[data-tema="blanco"] .composer .quien, :root[data-tema="blanco"] .acc, :root[data-tema="blanco"] .composer textarea, :root[data-tema="blanco"] .sh-head .x, :root[data-tema="blanco"] .inp, :root[data-tema="blanco"] .tel .pre, :root[data-tema="blanco"] .tel input, :root[data-tema="blanco"] .chips .c, :root[data-tema="blanco"] .auto-r, :root[data-tema="blanco"] .thumb .mv button, :root[data-tema="blanco"] .mas-det, :root[data-tema="blanco"] .cf .btns button{ color:#111111 }
+:root[data-tema="blanco"] .msg.in .lnk{ color:#0B57D0 } :root[data-tema="blanco"] select.inp option{ background:#fff; color:#111 } :root[data-tema="blanco"] .sh-head .x{ background:rgba(0,0,0,.06) } :root[data-tema="blanco"] .cover .cnt, :root[data-tema="blanco"] .thumb .x{ background:rgba(0,0,0,.72) }
 html,body{height:100%;margin:0}
 body{font-family:var(--font);color:var(--txt);background:var(--bg);overscroll-behavior:none;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;font-size:15px;line-height:22px}
 button,input,textarea,select{font-family:inherit;font-size:inherit;color:inherit}
@@ -895,12 +900,27 @@ async function cargarTenantInfo(){
   const d = await apiGet('tenant_info', {});
   if (!d.ok) { avisoError(d.error || 'Este link no corresponde a un vendedor dado de alta'); return; }
   TENANT = Object.assign({}, TENANT, d.tenant, { autos: d.autos || [], sesion: d.sesion || null });
-  if (TENANT.demo) { document.body.classList.add('demo'); document.title = TENANT.sandbox ? ('FyraChat · ' + (TENANT.nombre || '') + ' · SANDBOX') : 'FyraChat · PRUEBAS# · MODO PRUEBA'; }
+  aplicarTemaYMarca(TENANT);
+  if (TENANT.demo) { document.body.classList.add('demo'); document.title = TENANT.marca ? (TENANT.marca + (TENANT.sandbox ? ' · SANDBOX' : '')) : (TENANT.sandbox ? ('FyraChat · ' + (TENANT.nombre || '') + ' · SANDBOX') : 'FyraChat · PRUEBAS# · MODO PRUEBA'); }
   pintarUniverso();
   if (!TENANT.demo && !T0 && (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado')) avisoError('Tu WhatsApp aún no está vinculado al asistente. Vincúlalo en fyradrive.com/seb.');
 }
 function telFmtDe(t){ const telV = String(t || '').replace(/\D/g, ''); return telV.length === 13 ? ('+' + telV.slice(0, 2) + ' ' + telV.slice(2, 5) + ' ' + telV.slice(5, 8) + ' ' + telV.slice(8)) : (telV ? '+' + telV : ''); }
 // el header ya no lleva nombre fijo (sistema visual 2026-09-12): solo la etiqueta PRUEBA junto al título cuando es demo; el universo se ve en Más › Tu cuenta
+
+// ══════════ TEMA Y MARCA POR UNIVERSO (config.tema / config.marca; p.ej. TERRA IA en blanco) ══════════
+function aplicarTemaYMarca(t){
+  if (!t) return;
+  if (t.tema === 'blanco') { document.documentElement.dataset.tema = 'blanco'; const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', '#FFFFFF'); }
+  if (t.marca) {
+    const m = String(t.marca).trim(); const partes = m.split(/\s+/); const html = partes.length > 1 ? esc(partes.slice(0, -1).join(' ')) + ' <b>' + esc(partes[partes.length - 1]) + '</b>' : esc(m);
+    document.querySelectorAll('.wm').forEach(el => { el.innerHTML = html; });
+    document.querySelectorAll('h2, p, .apple-title').forEach(el => { if (el.children.length === 0 && /FyraChat|Fyradrive/.test(el.textContent)) el.textContent = el.textContent.replace(/tu FyraChat/g, m).replace(/FyraChat|Fyradrive/g, m); });
+    document.title = m + (TENANT && TENANT.sandbox ? ' · SANDBOX' : '');
+    const at = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (at) at.setAttribute('content', m);
+  }
+}
+(async () => { try { const v = new URLSearchParams(location.search).get('vendedor'); if (v && v !== '0') { const r = await fetch(API + '?action=tenant_marca&vendedor=' + encodeURIComponent(v)).then(x => x.json()); if (r && r.ok) aplicarTemaYMarca(r); } } catch (e) { } })();   // antes del login: la pantalla de entrada ya sale con el tema del universo
 function pintarUniverso(){
   const el = $('univ'); if (!TENANT) return; try { pintarQuien(); } catch (e) {}
   el.innerHTML = TENANT.sandbox ? '<span class="tag">SANDBOX</span>' : (TENANT.demo ? '<span class="tag">PRUEBA</span>' : '');
