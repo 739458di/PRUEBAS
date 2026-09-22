@@ -12,12 +12,13 @@ async function caso(letra, titulo, tel, pasos) {
     const T = (await query('SELECT id,telefono,nombre,config_json FROM tenants WHERE id=9'))[0]; T.config = JSON.parse(T.config_json); T.demo = true;
     await DEMO.delegar({ tenant: T, tel, auto_id: 1081, auto_nombre: 'Nissan Sentra Sr 2023', nombre: 'Juan Evidencia' });
     const ch = (await query('SELECT id,telefono,nombre,tenant_id FROM conversaciones WHERE tenant_id=9 AND telefono=?', [tel]))[0];
-    const io0 = C.ioPara(T, ch); const out = [], ven = [];
+    const io0 = C.ioPara(T, ch); const out = [], ven = []; let vUlt = 0;
     const io = Object.assign({}, io0, { mandar: async (tx, ts) => { out.push(tx.replace(/\n/g, ' ⏎ ')); return io0.mandar(tx, ts); }, vendedor: async tx => { ven.push(tx); return io0.vendedor(tx); } });
     console.log('\n══ ' + letra + ' · ' + titulo);
     try {
         for (const p of pasos) {
             if (p.lote) { await io0.mandar(p.lote); console.log('   🏢 (recordatorio) ' + p.lote); continue; }
+            if (p.tick) { const h = await C.tick({ tenant: T, chatId: ch.id, hasta: p.tick, ioDe: async () => C.ioPara(T, ch) }); console.log('   ⏱ (pasó el tiempo hasta ' + C.fechaCorta(p.tick) + ') ' + ((h.hechas || h || []).map(k => k.tipo + (k.salio ? '' : ' (' + (k.motivo || '') + ')')).join(' · '))); continue; }
             if (p.vencer) { const c = (await query('SELECT * FROM citaf WHERE chat_id=? ORDER BY id DESC LIMIT 1', [ch.id]))[0]; await run("UPDATE citaf SET ultima_palabra='ventana_vencida', version=version+1, version_ts=?, updated=updated+1 WHERE id=?", [p.vencer, c.id]); await C.reconciliar(T, c.id, p.vencer, 'prueba: ventana vencida'); console.log('   ⏱ (la ventana venció sin llegada acreditada)'); continue; }
             out.length = 0; ven.length = 0; await DEMO.responder({ tenant: T, tel, texto: p.di });
             const r = await C.entrante({ tenant: T, chat: ch, auto: { id: 291, nombre: 'Nissan Sentra Sr 2023' }, io, ahoraFijo: p.now });
@@ -28,13 +29,15 @@ async function caso(letra, titulo, tel, pasos) {
             out.forEach(o => console.log('      🏢 ' + o.slice(0, 200))); ven.forEach(o => console.log('      📣 ' + o.slice(0, 220)));
             console.log('      ⏰ plan: ' + (pend.map(k => k.tipo + ' ' + C.fechaCorta(k.due_ts)).join(' · ') || '(nada)'));
             const ver = (nombre, ok) => { total++; if (!ok) fallas++; console.log('      ' + (ok ? '✅' : '❌') + ' ' + nombre); };
-            const E = p.espera || {};
+            const E = p.espera || {}; const vAntes = vUlt; vUlt = Number(c.version) || 0;
             if (E.evento) ver('evento ' + E.evento.join('|'), E.evento.includes(r.evento));
             if (E.estado) ver('estado = ' + E.estado, c.estado === E.estado);
             if (E.dia) ver('día = ' + E.dia.join(' → '), ymd(Number(c.ini_ts)) === E.dia[0] && ymd(Number(c.fin_ts)) === E.dia[E.dia.length - 1]);
             if (E.precision) ver('concreción = ' + E.precision, c.precision === E.precision);
             if (E.confirmada != null) ver('día confirmado = ' + E.confirmada, Number(c.confirmada_dia || 0) === E.confirmada);
-            if (E.version) ver('nueva versión', Number(c.version) > p._vAntes);
+            if (E.version) ver('nueva versión', Number(c.version) > vAntes);
+            if (E.mismaVersion) ver('MISMA versión (el plan principal no se tocó)', Number(c.version) === vAntes);
+            if (E.alt != null) ver(E.alt ? 'hay posibilidad alterna' : 'NO hay posibilidad alterna', !!(JSON.parse(c.datos_json || '{}').alt) === !!E.alt);
             if (E.sinPlanEn) ver('ya no hay mensajes del día ni vencimiento en ' + E.sinPlanEn, !pend.some(k => ymd(Number(k.due_ts)) === E.sinPlanEn && ['dia', 'dia_multi', 'dia_ultimo', 'empujon', 'marcar', 'me_avisas', 'vence'].includes(k.tipo)));
             if (E.planEn) ver('hay plan para ' + E.planEn, pend.some(k => ymd(Number(k.due_ts)) >= E.planEn));
             if (E.planSolo) ver('el plan solo tiene: ' + E.planSolo.join(','), pend.every(k => E.planSolo.includes(k.tipo)));
@@ -98,6 +101,28 @@ async function caso(letra, titulo, tel, pasos) {
     await caso('J', '"no sé qué día pueda, yo te aviso": ahí sí murió todo el cuándo', '5210000000041', [
         { di: 'voy el sábado a las 5', now: at(JUE, 11, 0), espera: { estado: 'viva', dia: [SAB] } },
         { di: 'no sé qué día pueda, yo te aviso', now: at(JUE, 11, 5), espera: { evento: ['promete_avisar', 'se_complico'], estado: 'pospuesta', planSolo: [], vendedor: 'sin fecha' } },
+    ]);
+
+    await caso('K', 'lunes 11 → "si alcanzo voy el domingo": posibilidad, lunes intacto → "sí, mejor domingo a las 12": ahora sí se mueve', '5210000000042', [
+        { di: 'voy el lunes a las 11', now: at(JUE, 10, 0), espera: { estado: 'viva', dia: [LUN], precision: 'hora' } },
+        { di: 'oye si alcanzo voy el domingo', now: at(VIE, 9, 30), espera: { evento: ['agenda_o_cambio'], estado: 'viva', dia: [LUN], precision: 'hora', mismaVersion: true, alt: true, planEn: LUN, responde: 'dejamos', trazaCambio: 'Posibilidad' } },
+        { di: 'sí, mejor el domingo a las 12', now: at(VIE, 9, 35), espera: { evento: ['agenda_o_cambio'], estado: 'viva', dia: [DOM], precision: 'hora', version: true, alt: false, sinPlanEn: LUN, planEn: DOM, todasDeVersion: true, vendedor: 'movida' } },
+    ]);
+    await caso('L', 'lunes → "chance hasta el martes": posibilidad de atraso; vence sola y el lunes sigue', '5210000000043', [
+        { di: 'voy el lunes a las 11', now: at(JUE, 10, 0), espera: { estado: 'viva', dia: [LUN] } },
+        { di: 'chance hasta el martes', now: at(VIE, 9, 30), espera: { evento: ['agenda_o_cambio'], estado: 'viva', dia: [LUN], mismaVersion: true, alt: true, responde: 'por ahora dejamos' } },
+        { tick: at('2026-09-30', 9, 0) },
+        { di: 'ahí nos vemos', now: at('2026-09-30', 9, 5), espera: { estado: 'viva', dia: [LUN], alt: false } },
+    ]);
+    await caso('M', '5 pm → "chance puedo desde las 3": posibilidad mismo día → "sí, voy a las 3": se ajusta la hora', '5210000000044', [
+        { di: 'voy el sábado a las 5', now: at(JUE, 10, 0), espera: { estado: 'viva', dia: [SAB], precision: 'hora' } },
+        { di: 'chance puedo desde las 3', now: at(JUE, 10, 5), espera: { evento: ['agenda_o_cambio'], estado: 'viva', dia: [SAB], precision: 'hora', mismaVersion: true, alt: true } },
+        { di: 'sí, voy a las 3', now: at(JUE, 10, 9), espera: { evento: ['agenda_o_cambio'], estado: 'viva', dia: [SAB], precision: 'hora', version: true, alt: false } },
+    ]);
+    await caso('N', 'viernes-sábado, el viernes "chance alcanzo hoy": el sábado NO se destruye → "ya voy": queda viernes', '5210000000045', [
+        { di: 'paso entre viernes y sábado', now: at(JUE, 10, 0), espera: { estado: 'viva', dia: [VIE, SAB] } },
+        { di: 'chance alcanzo hoy', now: at(VIE, 10, 0), espera: { evento: ['agenda_o_cambio', 'confirma'], estado: 'viva', dia: [VIE, SAB], mismaVersion: true, planEn: SAB } },
+        { di: 'ya voy para allá', now: at(VIE, 13, 0), espera: { evento: ['ya_voy'], estado: 'en_camino', dia: [VIE], alt: false } },
     ]);
     console.log('\nRESULTADO: ' + (total - fallas) + '/' + total + ' verificaciones OK' + (fallas ? ' · ' + fallas + ' FALLAS' : '')); process.exit(fallas ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
