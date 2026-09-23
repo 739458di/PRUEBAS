@@ -1051,6 +1051,7 @@ function pintarMas(){
   c.innerHTML =
     '<div class="grupo">' +
       masRow('user', 'Tu cuenta', 'Perfil y datos', 'abrirCuenta()') +
+      (TENANT && TENANT.miembro && TENANT.miembro.rol === 'admin' ? masRow('usercheck', 'Vendedores del lote', 'Da de alta y administra a tu equipo', "location.href='/panel.html'") : '') +
       masRow('devices', 'Tus dispositivos', 'Dónde está abierto tu FyraChat', 'abrirDispositivos()') +
       masRow('bell', 'Notificaciones', 'Configura tus alertas', "abrirPronto('Notificaciones', 'Aquí vas a elegir qué alertas te llegan y cuándo.')") +
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +
