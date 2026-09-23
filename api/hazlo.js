@@ -42,7 +42,7 @@ async function inventario() {
 
 const SCHEMA = {
     type: 'object', additionalProperties: false,
-    required: ['intencion', 'marcas', 'origen', 'tipo', 'precio_min', 'precio_max', 'anio_min', 'transmision', 'auto_id', 'nombre', 'telefono', 'cuando', 'respuesta'],
+    required: ['intencion', 'marcas', 'origen', 'tipo', 'precio_min', 'precio_max', 'anio_min', 'transmision', 'lote', 'auto_id', 'nombre', 'telefono', 'cuando', 'respuesta'],
     properties: {
         intencion: { type: 'string', enum: ['mostrar', 'ver_auto', 'agendar', 'ubicacion', 'platicar', 'fuera'] },
         marcas: { type: 'array', items: { type: 'string' } },
@@ -50,6 +50,7 @@ const SCHEMA = {
         tipo: { type: 'string', enum: ['', 'suv', 'sedan', 'pickup', 'hatchback', 'deportivo'] },
         precio_min: { type: 'number' }, precio_max: { type: 'number' }, anio_min: { type: 'number' },
         transmision: { type: 'string', enum: ['', 'automatica', 'manual'] },
+        lote: { type: 'string' },
         auto_id: { type: 'number' },
         nombre: { type: 'string' }, telefono: { type: 'string' }, cuando: { type: 'string' },
         respuesta: { type: 'string' }
@@ -60,7 +61,7 @@ function sistema(autos) {
     return `Eres HazloGPT, el asistente de Fyradrive (autos seminuevos en Monterrey). Lees lo que escribe un comprador y devuelves SOLO el JSON.
 REGLAS:
 - "intencion": mostrar = quiere ver autos (lista, filtro, "qué tienes", "japoneses", "SUV", "algo de 300 mil"); ver_auto = pregunta por UN auto concreto (pon su auto_id); agendar = quiere ir a verlo / prueba de manejo / cita (pon auto_id si lo menciona); ubicacion = pregunta dónde están, dónde ve el auto, dirección, mapa (pon auto_id si habla de un auto); platicar = saludo, duda general de cómo funciona Fyradrive, gracias; fuera = no tiene que ver con autos.
-- Filtros solo cuando el comprador los dice: marcas (nombres tal cual), origen, tipo, precios en pesos (0 = sin límite), anio_min (0 = sin límite), transmision.
+- Filtros solo cuando el comprador los dice: marcas (nombres tal cual), origen, tipo, precios en pesos (0 = sin límite), anio_min (0 = sin límite), transmision, lote (si nombra un lote/agencia del inventario, p. ej. "autos universales", "autos lozano"; '' si no).
 - "respuesta": UNA frase corta y natural en español de México, tuteando, sin emojis, sin inventar datos ni precios; si vas a mostrar autos di algo como "Esto es lo que tenemos en SUV:" (las tarjetas las arma el sistema). Si es 'fuera' di amablemente que solo ayudas con los autos de Fyradrive.
 - Para agendar: extrae nombre, telefono (10 dígitos) y cuando (día/hora) si los dice; deja '' lo que no diga. No confirmes tú la cita: el sistema pregunta lo que falte.
 - Datos de Fyradrive: se paga de contado o con crédito bancario (HEY Banco); enganche desde 25% aprox; los autos se ven en Monterrey con cita.
@@ -93,9 +94,10 @@ function filtrar(autos, f) {
     if (f.precio_max > 0) out = out.filter(a => a.precio <= f.precio_max);
     if (f.anio_min > 0) out = out.filter(a => a.anio >= f.anio_min);
     if (f.transmision) out = out.filter(a => norm(a.transmision).startsWith(f.transmision === 'manual' ? 'manual' : 'auto'));
+    if (f.lote) { const l = norm(f.lote).replace(/\s+/g, ' '); out = out.filter(a => norm(a.lote).includes(l) || l.includes(norm(a.lote)) && a.lote); }
     return out;
 }
-const hayFiltro = f => (f.marcas && f.marcas.length) || f.origen || f.tipo || f.precio_min > 0 || f.precio_max > 0 || f.anio_min > 0 || f.transmision;
+const hayFiltro = f => (f.marcas && f.marcas.length) || f.origen || f.tipo || f.precio_min > 0 || f.precio_max > 0 || f.anio_min > 0 || f.transmision || f.lote;
 async function ensureTabla() { await run('CREATE TABLE IF NOT EXISTS hazlo_solicitudes (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, telefono TEXT, cuando TEXT, auto_id INTEGER, auto_nombre TEXT, sesion TEXT, created INTEGER)'); }
 
 module.exports = async (req, res) => {
@@ -132,7 +134,7 @@ module.exports = async (req, res) => {
             if (L.intencion === 'ubicacion') {
                 const a = porId(L.auto_id) || (hayFiltro(L) ? filtrar(autos, L)[0] : null);
                 const pts = a ? [a] : autos; const vistos = new Set(); const lineas = [];
-                for (const x of pts) { const p = x.punto; if (!p) continue; const k = (p.nombre || '') + '|' + (p.direccion || ''); if (vistos.has(k)) continue; vistos.add(k); lineas.push((x.lote || p.nombre || 'Punto de venta') + ': ' + [p.nombre && p.nombre !== x.lote ? p.nombre : null, p.direccion].filter(Boolean).join(', ') + (p.mapa ? ' · ' + p.mapa : '')); if (lineas.length >= 4) break; }
+                for (const x of pts) { const p = x.punto; if (!p) continue; const etiqueta = x.lote || 'Fyradrive'; const k = etiqueta + '|' + (p.direccion || p.mapa || p.nombre || ''); if (vistos.has(k)) continue; vistos.add(k); lineas.push(etiqueta + ': ' + [p.direccion || (p.nombre && norm(p.nombre) !== norm(etiqueta) ? p.nombre : null)].filter(Boolean).join(', ') + (p.mapa ? ' · ' + p.mapa : '')); if (lineas.length >= 4) break; }
                 if (a && !lineas.length) return res.status(200).json({ ok: true, texto: `El ${a.nombre} se ve con cita en Monterrey. Agenda y te confirmamos la ubicación exacta por WhatsApp.`, autos: [a], cita: null });
                 return res.status(200).json({ ok: true, texto: (a ? `El ${a.nombre} lo ves aquí:\n` : 'Nuestros puntos de venta en Monterrey:\n') + lineas.join('\n') + '\nSi quieres ir a manejarlo, agenda tu cita y te esperamos.', autos: a ? [a] : [], cita: null });
             }
