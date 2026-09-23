@@ -57,6 +57,12 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .pill.ok{color:var(--ok);background:var(--okbg)}.pill.warn{color:var(--warn);background:var(--warnbg)}.pill.off{color:var(--off);background:var(--offbg)}
 .ib{width:32px;height:32px;border:1px solid var(--ln);border-radius:8px;background:#fff;display:grid;place-items:center;color:var(--txt2);flex:0 0 32px}.ib:hover{background:var(--s1);color:var(--txt)}
 .vacio{color:var(--txt2);padding:28px;border:1px dashed var(--ln);border-radius:var(--r);text-align:center}
+.com{margin-top:8px;font-size:12px;line-height:18px;color:var(--txt2);background:var(--s1);border-radius:9px;padding:7px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}.com b{color:var(--txt)}
+.com.q{background:var(--a2-05,var(--s1));border:1px solid var(--a2-15,var(--ln))}.com.ok{background:var(--okbg);color:var(--ok)}.com.ok b{color:var(--ok)}.com.no{background:var(--offbg);color:var(--off)}
+.com.fy{background:var(--a2-08,var(--s1));color:var(--txt2)}.com.fy.ok{background:var(--okbg);color:var(--ok)}.com.fy.no{background:var(--offbg);color:var(--off)}
+.com .mon{display:inline-flex;align-items:center;gap:2px;font-weight:700;color:var(--txt)}.com .ci{width:74px;height:26px;border:1px solid var(--ln);border-radius:6px;padding:0 6px;font:700 12px var(--f);color:var(--txt);background:#fff}
+.com .cb{height:26px;border-radius:6px;padding:0 10px;font:700 12px var(--f);border:1px solid var(--ln);background:#fff;color:var(--txt);cursor:pointer}.com .cb.ok{background:var(--acento,#16A34A);border-color:var(--acento,#16A34A);color:#fff}.com .cb.no{color:var(--txt2)}
+.com .cl{border:0;background:none;color:inherit;text-decoration:underline;font:600 12px var(--f);cursor:pointer;padding:0}
 /* calendario */
 .calh{display:flex;align-items:center;gap:8px;margin:0 0 10px}.calh b{font-size:15px;flex:1;font-weight:600}.calh .ib{width:34px;height:34px}
 .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--ln);border-radius:var(--r);overflow:hidden;background:var(--ln)}.cal>div{background:#fff;min-width:0}
@@ -194,7 +200,7 @@ async function entrar(){
   TID = Number(new URLSearchParams(location.search).get('vendedor')) || Number(SES.tenant.id);
   const [r, a] = await Promise.all([get('panel_info', { vendedor: String(TID) }), get('autos_mios', { vendedor: String(TID) })]);   // en paralelo (rendimiento 2026-09-23)
   if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
-  INFO = r; AUTOS = (a.ok && a.autos) || [];
+  INFO = r; AUTOS = (a.ok && a.autos) || []; AUTOS_META = { lote_fyradrive: !!(a && a.lote_fyradrive), puede_editar: !!(a && a.puede_editar) };
   const t = INFO.tenant, m = t.marca || t.nombre; document.title = m;
   aplicarAcentos(t);
   $('sd-marca').textContent = m; $('tb-marca').textContent = m; $('sd-mk').textContent = m[0]; $('tb-mk').textContent = m[0];
@@ -231,9 +237,10 @@ function pintar(keep){
   } else if (VISTA === 'autos') {
     const sel = AUTOS.filter(a => hit(a.nombre) && (AF === 'todos' || (AF === 'activo' ? a.estado === 'activo' : a.estado === 'vendido')));
     M.innerHTML = '<h2>Autos del lote</h2><p class="desc">Los autos que el asistente conoce y ofrece en los chats. Toca un auto para abrirlo, editarlo, marcarlo vendido o darlo de baja.</p>' + tools('Buscar auto…', '<select class="sel" id="af"><option value="todos"' + (AF === 'todos' ? ' selected' : '') + '>Todos</option><option value="activo"' + (AF === 'activo' ? ' selected' : '') + '>Disponibles</option><option value="vendido"' + (AF === 'vendido' ? ' selected' : '') + '>Vendidos</option></select>') +
-      '<p class="count"><b>' + sel.length + '</b> autos' + (qn ? ' encontrados' : (AF === 'vendido' ? ' vendidos' : AF === 'activo' ? ' disponibles' : '')) + '</p><div class="grid">' + (sel.map(a => '<div class="cd" data-auto="' + a.id + '" style="cursor:pointer"><div class="lg">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="">' : esc((a.marca || '?')[0])) + '</div><div class="bd"><div class="t">' + esc(a.nombre) + (a.estado === 'activo' ? '<span class="pill ok"><i></i>Disponible</span>' : a.estado === 'vendido' ? '<span class="pill off"><i></i>Vendido</span>' : '<span class="pill warn"><i></i>' + esc(a.estado) + '</span>') + '</div><div class="s">' + fmtDinero(a.precio) + (a.km ? ' · ' + Number(a.km).toLocaleString('es-MX') + ' km' : '') + (a.fotos ? ' · ' + a.fotos + ' fotos' : '') + '</div></div><span class="ib" title="Abrir">' + ico('r') + '</span></div>').join('') || '<div class="vacio">Sin autos.</div>') + '</div>';
+      '<p class="count"><b>' + sel.length + '</b> autos' + (qn ? ' encontrados' : (AF === 'vendido' ? ' vendidos' : AF === 'activo' ? ' disponibles' : '')) + '</p><div class="grid">' + (sel.map(a => '<div class="cd" data-auto="' + a.id + '" style="cursor:pointer"><div class="lg">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="">' : esc((a.marca || '?')[0])) + '</div><div class="bd"><div class="t">' + esc(a.nombre) + (a.estado === 'activo' ? '<span class="pill ok"><i></i>Disponible</span>' : a.estado === 'vendido' ? '<span class="pill off"><i></i>Vendido</span>' : '<span class="pill warn"><i></i>' + esc(a.estado) + '</span>') + '</div><div class="s">' + fmtDinero(a.precio) + (a.km ? ' · ' + Number(a.km).toLocaleString('es-MX') + ' km' : '') + (a.fotos ? ' · ' + a.fotos + ' fotos' : '') + '</div>' + comisionHTML(a) + '</div><span class="ib" title="Abrir">' + ico('r') + '</span></div>').join('') || '<div class="vacio">Sin autos.</div>') + '</div>';
     bindQ(); const af = $('af'); if (af) af.onchange = () => { AF = af.value; pintar(true); };
-    M.querySelectorAll('[data-auto]').forEach(el => el.onclick = () => abrirAuto(Number(el.dataset.auto)));
+    M.querySelectorAll('[data-auto]').forEach(el => el.onclick = e => { if (e.target.closest('.com')) return; abrirAuto(Number(el.dataset.auto)); });
+    bindComision(M);
   } else if (VISTA === 'citas') pintarCitas(keep);
   else if (VISTA === 'miembros') {
     const sel = INFO.miembros.filter(m => hit(m.nombre + ' ' + m.telefono));
@@ -300,8 +307,9 @@ async function pintarAuto(){
   M.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><button class="ib" id="au-back" title="Volver">' + ico('l') + '</button><h2 style="margin:0">' + esc([a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' ')) + '</h2>' + estadoPill + '<div style="flex:1"></div>' + (a.link ? '<a class="btn sec" style="display:inline-flex;align-items:center;height:36px" href="' + esc(a.link) + '" target="_blank" rel="noopener">Ficha pública ' + ico('ext') + '</a>' : '') + '</div>' +
     '<div class="autoficha"><div class="gal"><div class="big" id="au-big">' + (a.fotos[0] ? '<img src="' + esc(a.fotos[0]) + '" alt="">' : '<div class="vacio">Sin fotos</div>') + '</div><div class="thumbs">' + a.fotos.map((u, i) => '<img src="' + esc(u) + '" data-i="' + i + '" class="' + (i === 0 ? 'on' : '') + '" alt="">').join('') + '</div><p class="hint">' + a.fotos.length + ' fotos · tal como las publicó el lote' + (a.punto ? ' · Ubicación: ' + esc(a.punto.name || '') + (a.punto.address ? ', ' + esc(a.punto.address) : '') : '') + '</p></div>' +
     '<div class="datos"><div class="row2">' + f('au-marca', 'Marca', a.marca) + f('au-modelo', 'Modelo', a.modelo) + '</div><div class="row2">' + f('au-version', 'Versión', a.version) + f('au-anio', 'Año', a.anio, ' inputmode="numeric"') + '</div><div class="row2">' + f('au-precio', 'Precio', a.precio, ' inputmode="numeric"') + f('au-km', 'Kilometraje', a.km, ' inputmode="numeric"') + '</div><div class="row2">' + f('au-trans', 'Transmisión', a.transmision) + f('au-color', 'Color', a.color) + '</div><div><label class="lbl">Descripción</label><textarea class="inp" id="au-desc" style="height:120px;padding:10px 12px;resize:vertical"' + (ed ? '' : ' readonly') + '>' + esc(a.descripcion || '') + '</textarea></div>' +
+    (function(){ const ax = AUTOS.find(x => x.id === a.id); return ax ? '<div style="margin-top:12px">' + comisionHTML(ax) + '</div>' : ''; })() +
     (ed ? '<div class="acts"><button class="btn" id="au-save">Guardar cambios</button>' + (a.estado === 'activo' ? '<button class="btn sec" id="au-vendido">Vendido</button><button class="btn sec" id="au-baja" style="color:#C62828;border-color:#F3C5C5">Dar de baja</button>' : '<button class="btn sec" id="au-activo">Volver a poner disponible</button>') + '</div><div class="hint" id="au-h"></div>' : '<p class="hint">Solo el dueño del lote puede editar.</p>') + '</div></div>';
-  $('au-back').onclick = () => ir('autos');
+  $('au-back').onclick = () => ir('autos'); bindComision(M);
   M.querySelectorAll('.thumbs img').forEach(im => im.onclick = () => { $('au-big').innerHTML = '<img src="' + esc(a.fotos[Number(im.dataset.i)]) + '" alt="">'; M.querySelectorAll('.thumbs img').forEach(x => x.classList.toggle('on', x === im)); });
   if (!ed) return;
   const h = $('au-h'); const aviso = (t, mal) => { h.textContent = t; h.style.color = mal ? '#C62828' : 'var(--ok)'; };
@@ -311,7 +319,34 @@ async function pintarAuto(){
   if ($('au-baja')) $('au-baja').onclick = () => cambiar('baja', '¿Dar de baja este auto? Sale del lote y de la web. Lo puedes volver a activar después.');
   if ($('au-activo')) $('au-activo').onclick = () => cambiar('activo', '¿Volver a poner este auto disponible?');
 }
-async function recargarAutos(){ const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || []; contar(); }
+let AUTOS_META = { lote_fyradrive: false, puede_editar: false };
+async function recargarAutos(){ const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || []; AUTOS_META = { lote_fyradrive: !!(a && a.lote_fyradrive), puede_editar: !!(a && a.puede_editar) }; contar(); }
+// ══ COMISIÓN A FYRADRIVE (orden owner 2026-09-23). Lote dueño: burbuja "¿le das $X?" con monto editable + Aceptar / Rechazar.
+// Autos Fyradrive: cuánto le corresponde por cada auto y si el lote ya lo aceptó.
+function comisionHTML(a){
+  const c = a.comision; if (!c) return '';
+  if (AUTOS_META.lote_fyradrive) {
+    const quien = a.lote ? esc(a.lote) : 'particular';
+    if (c.estado === 'aceptada') return '<div class="com fy ok">Comisión <b>' + fmtDinero(c.monto) + '</b> · aceptada por ' + quien + '</div>';
+    if (c.estado === 'rechazada') return '<div class="com fy no">Comisión rechazada por ' + quien + '</div>';
+    return '<div class="com fy">Comisión <b>' + fmtDinero(c.monto) + '</b> · ' + (a.lote ? 'pendiente de ' + quien : 'regla Fyradrive') + '</div>';
+  }
+  if (c.estado === 'aceptada') return '<div class="com ok">Comisión a Fyradrive <b>' + fmtDinero(c.monto) + '</b> ✓' + (AUTOS_META.puede_editar ? ' <button class="cl" data-com="cambiar" data-id="' + a.id + '">cambiar</button>' : '') + '</div>';
+  if (c.estado === 'rechazada') return '<div class="com no">Sin comisión a Fyradrive' + (AUTOS_META.puede_editar ? ' <button class="cl" data-com="cambiar" data-id="' + a.id + '">cambiar</button>' : '') + '</div>';
+  if (!AUTOS_META.puede_editar) return '<div class="com">Comisión a Fyradrive propuesta: <b>' + fmtDinero(c.propuesto) + '</b> · pendiente</div>';
+  return '<div class="com q" data-cid="' + a.id + '"><span>Si Fyradrive te consigue el cliente y le vende tu auto, ¿le das</span><span class="mon">$<input class="ci" value="' + c.propuesto + '" inputmode="numeric" aria-label="Monto"></span><span>?</span><button class="cb ok" data-com="aceptada" data-id="' + a.id + '">Aceptar</button><button class="cb no" data-com="rechazada" data-id="' + a.id + '">Rechazar</button></div>';
+}
+function bindComision(root){
+  root.querySelectorAll('.com .ci').forEach(i => { i.onclick = e => e.stopPropagation(); });
+  root.querySelectorAll('button[data-com]').forEach(b => b.onclick = async e => {
+    e.stopPropagation(); const id = Number(b.dataset.id); const acc = b.dataset.com;
+    if (acc === 'cambiar') { const r = await post('comision_responder', { vendedor: String(TID), id, estado: 'pendiente' }); if (r.ok) { await recargarAutos(); if (VISTA === 'auto') { AUTO_D = null; pintarAuto(); } else pintar(true); } return; }
+    const box = b.closest('.com'); const inp = box ? box.querySelector('.ci') : null; const monto = inp ? inp.value : '';
+    if (acc === 'aceptada' && !(Number(String(monto).replace(/[^0-9.]/g, '')) > 0)) { alert('Escribe el monto de la comisión.'); return; }
+    b.disabled = true; const r = await post('comision_responder', { vendedor: String(TID), id, estado: acc, monto }); b.disabled = false;
+    if (!r.ok) { alert(r.error || 'No se pudo'); return; } await recargarAutos(); if (VISTA === 'auto') { AUTO_D = null; pintarAuto(); } else pintar(true);
+  });
+}
 function citaCard(c){ return '<div class="cd"><div class="lg">' + esc(ini(c.nombre)) + '</div><div class="bd"><div class="t">' + esc(c.nombre || 'Sin nombre') + pillEstado(c.estado) + '</div><div class="s">' + esc(c.auto || '') + '</div><div class="s">' + esc(c.situacion || c.cuando || '') + '</div></div></div>'; }
 function horarioTxt(h){ const nd = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; return [1, 2, 3, 4, 5, 6, 0].map(d => { const r = h[String(d)] || h[d]; return '<span>' + nd[d] + '</span><div>' + (Array.isArray(r) ? hm(r[0]) + ' – ' + hm(r[1]) : 'cerrado') + '</div>'; }).join(''); }
 function pintarCitas(keep){

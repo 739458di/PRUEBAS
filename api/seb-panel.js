@@ -2512,7 +2512,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
+        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'comision_responder', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -3055,11 +3055,28 @@ module.exports = async function handler(req, res) {
                 try { await ACCIONES.registrar({ tenant_id: TV, tipo: 'auto_' + est, ref_id: Number(a.id), meta: { nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' ') } }); } catch (e) { }
                 return okJ({ id: Number(a.id), estado: est });
             }
+            // ══ COMISIÓN A FYRADRIVE por auto (orden owner 2026-09-23): regla $10,000 hasta $500,000 · 2% arriba. El lote dueño ve la propuesta
+            // (monto editable) con Aceptar / Rechazar; Autos Fyradrive (catalogo='fyradrive') ve la comisión que le corresponde por cada auto.
+            const comisionRegla = precio => { const p = Number(precio) || 0; return Math.max(10000, Math.round(p * 0.02)); };
+            const ensureComisiones = async () => { if (global.__comOk) return; await run('CREATE TABLE IF NOT EXISTS comisiones_auto (inv_auto_id INTEGER PRIMARY KEY, tenant_id INTEGER, monto INTEGER, propuesto INTEGER, estado TEXT, decidido_por TEXT, decidido_ts INTEGER, updated INTEGER)'); global.__comOk = true; };
+            const ES_LOTE_FYRADRIVE = !!(tV && tV.config && tV.config.catalogo === 'fyradrive');
+            if (action === 'comision_responder' && req.method === 'POST') {
+                if (!TV) return err(400, 'el panel es por universo'); if (!PUEDE_EDITAR_AUTOS) return err(403, 'Solo el dueño del lote decide la comisión.'); if (ES_LOTE_FYRADRIVE) return err(400, 'Este lote no propone comisiones: las recibe.');
+                const a = await autoDelLote(req.body.id); if (!a || a.rol !== 'dueno') return err(404, 'ese auto no es de este lote');
+                await ensureComisiones();
+                const est = String(req.body.estado || ''); if (!['aceptada', 'rechazada', 'pendiente'].includes(est)) return err(400, 'estado inválido');
+                const propuesto = comisionRegla(a.precio); const montoIn = Number(String(req.body.monto == null ? '' : req.body.monto).replace(/[^0-9.]/g, '')); const monto = est === 'rechazada' ? 0 : (isFinite(montoIn) && montoIn > 0 ? Math.round(montoIn) : propuesto);
+                const quien = SES && SES.miembro ? SES.miembro.nombre : (tV.config && tV.config.usuario) || tV.nombre;
+                await run(`INSERT INTO comisiones_auto (inv_auto_id, tenant_id, monto, propuesto, estado, decidido_por, decidido_ts, updated) VALUES (?,?,?,?,?,?,?,?)
+                           ON CONFLICT(inv_auto_id) DO UPDATE SET tenant_id=excluded.tenant_id, monto=excluded.monto, propuesto=excluded.propuesto, estado=excluded.estado, decidido_por=excluded.decidido_por, decidido_ts=excluded.decidido_ts, updated=excluded.updated`, [Number(a.id), TV, monto, propuesto, est, String(quien || '').slice(0, 80), Date.now(), Date.now()]);
+                try { await ACCIONES.registrar({ tenant_id: TV, tipo: 'comision_' + est, ref_id: Number(a.id), meta: { monto, propuesto, quien } }); } catch (e) { }
+                return okJ({ id: Number(a.id), estado: est, monto, propuesto });
+            }
             if (action === 'autos_mios') {
                 let rows;
                 if (!TV) rows = await query("SELECT id, fyradrive_web_id, marca, modelo, anio, precio, kilometraje, estado FROM inventario_autos WHERE estado='activo' ORDER BY marca COLLATE NOCASE, modelo COLLATE NOCASE LIMIT 200");
                 else {
-                    rows = await query(`SELECT i.id, i.fyradrive_web_id, i.marca, i.modelo, i.anio, i.precio, i.kilometraje, i.estado, au.rol
+                    rows = await query(`SELECT i.id, i.fyradrive_web_id, i.marca, i.modelo, i.anio, i.precio, i.kilometraje, i.estado, i.agencia_nombre, au.rol
                                         FROM autos_universo au JOIN inventario_autos i ON i.id = au.inv_auto_id
                                         WHERE au.tenant_id = ? AND au.activo = 1 ORDER BY i.marca COLLATE NOCASE, i.modelo COLLATE NOCASE LIMIT 200`, [TV]).catch(() => []);
                     if (!rows.length && tV.demo) rows = await autosDeTenant(tV);   // MODO PRUEBA: 3 autos de muestra (solo lectura)
@@ -3074,8 +3091,11 @@ module.exports = async function handler(req, res) {
                 ]);
                 for (const w of rowsW) webEstado[Number(w.id)] = String(w.estado || '');
                 for (const f of rowsF) fotosN[Number(f.auto_id)] = Number(f.n);
+                // comisión por auto: lo decidido por el lote dueño (o la regla si aún no hay decisión). Para un lote: solo en SUS autos (rol dueño).
+                let comMap = {}; try { await ensureComisiones(); const invIds = rows.map(r => Number(r.id)).filter(Boolean); if (invIds.length) for (const c of await query(`SELECT inv_auto_id, tenant_id, monto, propuesto, estado, decidido_por FROM comisiones_auto WHERE inv_auto_id IN (${ph(invIds)})`, invIds)) comMap[Number(c.inv_auto_id)] = c; } catch (e) { }
+                const comisionDe = r => { if (!TV) return null; if (!ES_LOTE_FYRADRIVE && r.rol !== 'dueno') return null; const c = comMap[Number(r.id)]; const regla = comisionRegla(r.precio); if (!c) return { estado: 'pendiente', monto: regla, propuesto: regla, decidido_por: null }; return { estado: c.estado, monto: Number(c.monto) || 0, propuesto: Number(c.propuesto) || regla, decidido_por: c.decidido_por || null }; };
                 const estadoDe = r => { const w = webEstado[Number(r.fyradrive_web_id)]; if (w === 'en_revision' || w === 'no_aprobado') return 'revision'; if (w === 'vendido' || r.estado === 'vendido') return 'vendido'; if (r.estado === 'activo' || w === 'activo') return 'activo'; return 'revision'; };
-                return okJ({ autos: rows.map(r => ({ id: Number(r.id), web_id: r.fyradrive_web_id == null ? null : Number(r.fyradrive_web_id), nombre: nombreAuto(r), marca: r.marca, modelo: r.modelo, anio: r.anio == null ? null : Number(r.anio), precio: r.precio == null ? null : Number(r.precio), km: r.kilometraje == null ? null : Number(r.kilometraje), portada: (r.fyradrive_web_id && portadas[Number(r.fyradrive_web_id)]) || null, estado: estadoDe(r), fotos: fotosN[Number(r.fyradrive_web_id)] || 0, rol: r.rol || (TV ? null : 'comercializa') })), tenant_id: TV });
+                return okJ({ autos: rows.map(r => ({ id: Number(r.id), web_id: r.fyradrive_web_id == null ? null : Number(r.fyradrive_web_id), nombre: nombreAuto(r), marca: r.marca, modelo: r.modelo, anio: r.anio == null ? null : Number(r.anio), precio: r.precio == null ? null : Number(r.precio), km: r.kilometraje == null ? null : Number(r.kilometraje), portada: (r.fyradrive_web_id && portadas[Number(r.fyradrive_web_id)]) || null, estado: estadoDe(r), fotos: fotosN[Number(r.fyradrive_web_id)] || 0, rol: r.rol || (TV ? null : 'comercializa'), lote: r.agencia_nombre || null, comision: comisionDe(r) })), tenant_id: TV, lote_fyradrive: ES_LOTE_FYRADRIVE, puede_editar: PUEDE_EDITAR_AUTOS });
             }
 
             // 12) FOTO_SUBIR — reenvía al Blob de la web (upload-photo, como la carga de lote); límite 6 MB (ojo: el body de Vercel tope ~4.5 MB)
