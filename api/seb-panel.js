@@ -2571,7 +2571,7 @@ module.exports = async function handler(req, res) {
                 const cursor = Number(req.query.cursor) || 0;
                 const SOBRA = 40;   // se leen de más para poder filtrar dueños en JS sin romper la paginación
                 const duenos = TV ? new Set() : await telefonosDueno();
-                const COLS = 'id, channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, is_dueno_chat, auto_id_activo, canal, estado_bot';
+                const COLS = 'id, channel_thread_id, telefono, nombre, ult_texto, ult_dir, ult_msg_ts, no_leidos, is_dueno_chat, auto_id_activo, canal, estado_bot, miembro_id';
                 let rows;
                 if (filtro === 'sugerencia') {
                     // sugerencia = seb_queue pendiente (solo existe en t0; índice (estado, telefono))
@@ -2584,6 +2584,9 @@ module.exports = async function handler(req, res) {
                 } else {
                     const w = ['COALESCE(tenant_id,0)=?', "source='whatsapp'", 'ult_msg_ts IS NOT NULL'], a = [TV];
                     if (SES && SES.miembro && !MAESTRA) { w.push('(miembro_id = ? OR miembro_id IS NULL)'); a.push(Number(SES.miembro.id)); }   // miembro: SUS chats + los que aún no tienen vendedor
+                    else if (TV && req.query.miembro) {   // PANEL del dueño: "lo que ve ese vendedor" (mismo filtro que él) o los chats sin vendedor
+                        if (req.query.miembro === 'sin') w.push('miembro_id IS NULL'); else if (Number(req.query.miembro)) { w.push('(miembro_id = ? OR miembro_id IS NULL)'); a.push(Number(req.query.miembro)); }
+                    }
                     if (cursor) { w.push('ult_msg_ts < ?'); a.push(cursor); }
                     if (q) {
                         const d = q.replace(/\D/g, '');
@@ -2647,7 +2650,7 @@ module.exports = async function handler(req, res) {
                         ult_ts: Number(c.ult_msg_ts) || 0, no_leidos: Number(c.no_leidos) || 0,
                         sugerencia: !!pendMap[String(c.telefono)], delegado: !!d,
                         auto: a ? autoJson(a, portadas) : (d && d.auto_nombre ? { id: d.auto_id == null ? null : Number(d.auto_id), web_id: null, nombre: d.auto_nombre, precio: null, portada: null } : null),
-                        bot: botInbox(c), ghost_dias: ghostDias(c),
+                        bot: botInbox(c), ghost_dias: ghostDias(c), miembro_id: c.miembro_id == null ? null : Number(c.miembro_id),
                         cita: citaMap[Number(c.id)] || null   // { cita_ts, auto, estado } → fila verde, arriba, con cronómetro
                     };
                 });
