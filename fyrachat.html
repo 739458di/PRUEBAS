@@ -10,8 +10,9 @@
 <meta name="color-scheme" content="dark">
 <script>/* RENDIMIENTO (2026-09-23): pre-pinta el tema/acentos del universo desde caché local ANTES del primer cuadro, para no ver el flash oscuro→blanco
    mientras llegan tenant_marca/tenant_info (~0.3-1.5 s). La caché la escribe aplicarTemaYMarca con la respuesta real del servidor; si no hay caché, no pasa nada. */
-(function(){try{var v=new URLSearchParams(location.search).get('vendedor');var c=JSON.parse(localStorage.getItem('fyra_marca_'+((v&&v!=='0')?v:'ses'))||'null');if(!c||c.tema!=='blanco')return;var h=document.documentElement,ok=function(x){return /^#[0-9a-f]{6}$/i.test(String(x||''))};h.dataset.tema='blanco';h.dataset.pre='1';var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content','#FFFFFF');if(ok(c.acento2)){var a2=c.acento2,a1=ok(c.acento)?c.acento:a2,r=h.style;r.setProperty('--pri',a2);r.setProperty('--pri2',a2);r.setProperty('--pos',a2);r.setProperty('--out',a2);r.setProperty('--grad','linear-gradient(135deg,'+a2+','+a2+')');r.setProperty('--acento',a1);r.setProperty('--acento2',a2);r.setProperty('--a2-08',a2+'14');r.setProperty('--a2-12',a2+'1f');r.setProperty('--a1-12',a1+'1f');h.dataset.acentos='1';if(mt)mt.setAttribute('content',a2);}}catch(e){}})();
+(function(){try{var v=new URLSearchParams(location.search).get('vendedor');var h=document.documentElement;var c=JSON.parse(localStorage.getItem('fyra_marca_'+((v&&v!=='0')?v:'ses'))||localStorage.getItem('fyra_marca_ses')||'null');if(!c){h.setAttribute('data-tema-espera','1');setTimeout(function(){h.removeAttribute('data-tema-espera')},2500);return;}if(c.tema!=='blanco')return;var ok=function(x){return /^#[0-9a-f]{6}$/i.test(String(x||''))};h.dataset.tema='blanco';h.dataset.pre='1';var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content','#FFFFFF');if(ok(c.acento2)){var a2=c.acento2,a1=ok(c.acento)?c.acento:a2,r=h.style;r.setProperty('--pri',a2);r.setProperty('--pri2',a2);r.setProperty('--pos',a2);r.setProperty('--out',a2);r.setProperty('--grad','linear-gradient(135deg,'+a2+','+a2+')');r.setProperty('--acento',a1);r.setProperty('--acento2',a2);r.setProperty('--a2-08',a2+'14');r.setProperty('--a2-12',a2+'1f');r.setProperty('--a1-12',a1+'1f');h.dataset.acentos='1';if(mt)mt.setAttribute('content',a2);}}catch(e){}})();
 </script>
+<style>html[data-tema-espera]{background:#F2F4F8}html[data-tema-espera] body{visibility:hidden}</style>
 <title>FyraChat</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2309183F'/%3E%3Ctext x='32' y='42' font-size='30' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23fff'%3EF%3C/text%3E%3C/svg%3E">
 <link rel="apple-touch-icon" sizes="180x180" href="/icono-180.png">
@@ -905,7 +906,7 @@ async function accEntrar(){
   location.replace('/fyrachat.html?bienvenida=1');
 }
 function accVolver(){ ['acc-p2','acc-p3','acc-p4'].forEach(i => { $a(i).style.display = 'none'; }); $a('acc-p1').style.display = ''; }
-function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search);
+function mostrarAcceso(aviso){ document.documentElement.removeAttribute('data-tema-espera'); $a('acceso').classList.add('on'); if (aviso) $a('acc-err1').textContent = aviso; const q = new URLSearchParams(location.search);
   // MODO PRUEBA: ?demo=1 → teléfono del usuario PRUEBAS# prellenado + leyenda del código fijo (solo vale para ese tenant)
   if (q.get('demo') === '1') { $a('acc-tel').value = '8888888888'; $a('acc-demo1').style.display = 'block'; $a('acc-demo').style.display = 'block'; }
   const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
@@ -968,7 +969,8 @@ function telFmtDe(t){ const telV = String(t || '').replace(/\D/g, ''); return te
 function aplicarTemaYMarca(t){
   if (!t) return;
   // caché del tema para el pre-pintado del <head> (por ?vendedor=, o 'ses' para la sesión sin parámetro; se borra al salir)
-  try { const v = new URLSearchParams(location.search).get('vendedor'); const pack = JSON.stringify({ tema: t.tema || null, acento: t.acento || null, acento2: t.acento2 || null }); if (v && v !== '0') localStorage.setItem('fyra_marca_' + v, pack); else if (t.id != null) localStorage.setItem('fyra_marca_ses', pack); } catch (e) { }
+  try { const pack = JSON.stringify({ tema: t.tema || null, acento: t.acento || null, acento2: t.acento2 || null }); if (t.id != null && Number(t.id) !== 0) localStorage.setItem('fyra_marca_' + t.id, pack); localStorage.setItem('fyra_marca_ses', pack); } catch (e) { }
+  document.documentElement.removeAttribute('data-tema-espera');   // ya sabemos el tema: se muestra la pantalla (sin parpadeo azul→blanco)
   // si el pre-pintado adivinó "blanco" pero este universo NO es blanco (caché vieja), se deshace y vuelve el tema oscuro de siempre
   if (t.tema !== 'blanco' && document.documentElement.dataset.pre) { const h = document.documentElement; delete h.dataset.pre; delete h.dataset.tema; delete h.dataset.acentos; h.removeAttribute('style'); const mt0 = document.querySelector('meta[name="theme-color"]'); if (mt0) mt0.setAttribute('content', '#050C2A'); }
   if (t.tema === 'blanco') { document.documentElement.dataset.tema = 'blanco'; const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', '#FFFFFF'); }
