@@ -816,7 +816,7 @@ async function accEntrarContrasena(){
   if (usuario) {
     const ru = await fetch(API+'?action=acceso_entrar_usuario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario, contrasena: pw})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
     if (!ru.ok) { $a('acc-err3').textContent = ru.error || 'No se pudo.'; return; }
-    sessionStorage.removeItem('acc_usuario'); location.replace('/fyrachat.html?vendedor=' + encodeURIComponent(ru.tenant.id)); return;
+    sessionStorage.removeItem('acc_usuario'); location.replace('/panel.html'); return;   // el usuario del lote entra a su PANEL general; adentro está el FyraChat de cada vendedor
   }
   const r = await fetch(API+'?action=acceso_entrar_contrasena',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono: tel, contrasena: pw})}).then(x=>x.json()).catch(()=>({ok:false,error:'Sin conexión'}));
   if (!r.ok) { $a('acc-err3').textContent = r.error || 'No se pudo.'; return; }
