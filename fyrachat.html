@@ -988,7 +988,7 @@ function aplicarTemaYMarca(t){
   if (t.marca) {
     const m = String(t.marca).trim(); const partes = m.split(/\s+/); const html = partes.length > 1 ? esc(partes.slice(0, -1).join(' ')) + ' <b>' + esc(partes[partes.length - 1]) + '</b>' : esc(m);
     document.querySelectorAll('.wm').forEach(el => { el.innerHTML = html; });
-    document.querySelectorAll('h2, p, .apple-title').forEach(el => { if (el.children.length === 0 && /FyraChat|Fyradrive/.test(el.textContent)) el.textContent = el.textContent.replace(/tu FyraChat/g, m).replace(/FyraChat|Fyradrive/g, m); });
+    document.querySelectorAll('h2, p, .apple-title').forEach(el => { if (el.children.length === 0 && /FyraChat|Fyradrive/.test(el.textContent) && !el.textContent.includes(m)) el.textContent = el.textContent.replace(/tu FyraChat/g, m).replace(/FyraChat|Fyradrive/g, m); });   // si la marca ya está (o contiene "Fyradrive", como Autos Fyradrive IA) no se vuelve a sustituir
     document.title = m + (TENANT && TENANT.sandbox ? ' · SANDBOX' : '');
     const at = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (at) at.setAttribute('content', m);
   }
