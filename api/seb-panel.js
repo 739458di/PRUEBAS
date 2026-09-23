@@ -115,7 +115,7 @@ const ACC_PUBLICAS = new Set(['acceso_entrar_usuario', 'tenant_marca', 'acceso_y
 // CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
 const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
 const ACC_PUENTE = new Set(['entrante_v2', 'opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
-const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
+const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_entrar_remoto', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
     'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
     'flags_msgs', 'flags_msgs_done', 'citas_backfill', 'universo_backfill']);
 // prog_crear/prog_machote también los usa copilot.html (el vendedor programa "te aviso" desde su FyraChat) → K_PANEL **o** SESIÓN
@@ -451,7 +451,17 @@ module.exports = async function handler(req, res) {
             // LOTE con panel (config.usuario o tipo 'lote'): el pase del Sales Brain abre su PANEL general, no el chat (orden owner 2026-09-23)
             let esLote = false;
             if (r.destino && r.maestra) { try { const tl = await query('SELECT config_json FROM tenants WHERE id = ?', [Number(r.destino)]); const cl = tl.length ? JSON.parse(tl[0].config_json || '{}') : {}; esLote = !!(cl.usuario || cl.tipo === 'lote'); } catch (e) { } }
+            if (r.origen === 'web' && /^\/[a-z0-9_./?=&-]*$/i.test(String(r.destino || ''))) { res.setHeader('Location', String(r.destino)); return res.status(302).end(); }   // login desde fyradrive.com: cae donde está dado de alta
             res.setHeader('Location', r.destino && r.maestra ? (esLote ? '/panel.html?vendedor=' : '/fyrachat.html?vendedor=') + encodeURIComponent(r.destino) : '/fyrachat.html?bienvenida=1'); return res.status(302).end();
+        }
+        if (action === 'acceso_entrar_remoto' && req.method === 'POST') {
+            // LOGIN DESDE LA PORTADA fyradrive.com (orden owner 2026-09-23): el servidor web manda usuario/teléfono + contraseña con K_PANEL;
+            // aquí se verifica y se devuelve un pase de un solo uso (5 min) que abre la sesión en ESTE dominio y cae donde esté dado de alta.
+            if (!conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
+            const rR = await ACC.crearTicketRemoto({ usuario: req.body.usuario, telefono: req.body.telefono, contrasena: req.body.contrasena, ip: String(req.body.ip || IP) });
+            if (!rR.ok) return res.status(rR.limite ? 429 : 401).json({ ok: false, error: rR.error });
+            await ACC.accesosLog({ sesion_id: null, tenant_id: rR.tenant_id, action: 'acceso_entrar_remoto', ip: String(req.body.ip || IP) });
+            return res.status(200).json({ ok: true, url: ORIGEN_PROPIO + '/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(rR.token), destino: rR.destino });
         }
         if (action === 'acceso_ticket_maestra' && req.method === 'POST') {
             // Solo el Sales Brain (K_PANEL, tras su PIN): pase de un solo uso con la sesión MAESTRA que abre el FyraChat del universo pedido
