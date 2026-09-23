@@ -71,6 +71,28 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .acts{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 .hint{font-size:13px;color:var(--txt2);margin-top:10px;min-height:18px}
 .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:13px}.kv span{color:var(--txt2)}
+/* ═══ MARCA DEL LOTE (automático para cada lote: --acento2 = identidad, --acento = acción). Fondo blanco base siempre. ═══ */
+html[data-acentos] .brand{background:var(--acento2);color:#fff;margin:0 0 6px;padding:18px 18px 16px}
+html[data-acentos] .brand .mk{background:#fff;color:var(--acento2)}
+html[data-acentos] .brand .tag{background:var(--acento);border-color:var(--acento);color:#fff}
+html[data-acentos] .side{background:var(--a2-05)}
+html[data-acentos] .grp{color:var(--acento2);opacity:.75}
+html[data-acentos] .nav.on{background:var(--a2-10);color:var(--acento2)}html[data-acentos] .nav.on .ic{color:var(--acento2)}
+html[data-acentos] .nav .n{color:var(--acento2);border-color:var(--a2-20)}
+html[data-acentos] .sfoot .av{background:var(--a2-10);color:var(--acento2);border-color:var(--a2-20)}
+html[data-acentos] h1,html[data-acentos] h2{color:var(--acento2)}
+html[data-acentos] .tab.on{color:var(--acento2);border-bottom-color:var(--acento)}
+html[data-acentos] .btn{background:var(--acento);border-color:var(--acento)}html[data-acentos] .btn.sec{background:#fff;color:var(--acento2);border-color:var(--a2-25)}html[data-acentos] .btn.sec:hover{background:var(--a2-05)}
+html[data-acentos] .cd .lg{background:var(--a2-08);border-color:var(--a2-15);color:var(--acento2)}
+html[data-acentos] .cd .t{color:var(--acento2)}
+html[data-acentos] .count b{color:var(--acento2)}
+html[data-acentos] .search:focus-within,html[data-acentos] .inp:focus{border-color:var(--acento2);box-shadow:0 0 0 3px var(--a2-10)}
+html[data-acentos] .ib:hover{color:var(--acento2);border-color:var(--a2-25)}
+html[data-acentos] .cal .dn{background:var(--a2-05);color:var(--acento2)}
+html[data-acentos] .cal .d.hoy .n{background:var(--acento)}
+html[data-acentos] .cal .ev{background:var(--a2-10);color:var(--acento2);border-left-color:var(--acento2)}
+html[data-acentos] .pill.warn{color:var(--acento);background:var(--a1-10)}
+html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}html[data-acentos] .topbar .mk{background:#fff;color:var(--acento2)}html[data-acentos] .topbar .x{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:#fff}
 @media (max-width:820px){
   .app.on{grid-template-columns:1fr}.side{display:none}
   .topbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--ln);position:sticky;top:0;background:#fff;z-index:3}
@@ -147,7 +169,7 @@ async function entrar(){
   const r = await get('panel_info', { vendedor: String(TID) }); if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
   INFO = r; const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || [];
   const t = INFO.tenant, m = t.marca || t.nombre; document.title = m;
-  if (/^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) { const r = document.documentElement.style; r.setProperty('--acc', t.acento2); r.setProperty('--txt', '#111827'); document.querySelectorAll('.brand .mk').forEach(e => { e.style.background = t.acento2; }); if (/^#[0-9a-f]{6}$/i.test(String(t.acento || ''))) { r.setProperty('--warn', t.acento); r.setProperty('--warnbg', t.acento + '14'); document.querySelectorAll('.brand .tag').forEach(e => { e.style.color = t.acento; e.style.borderColor = t.acento + '55'; }); } }   // acentos de marca (fondo blanco base)
+  aplicarAcentos(t);
   $('sd-marca').textContent = m; $('tb-marca').textContent = m; $('sd-mk').textContent = m[0]; $('tb-mk').textContent = m[0];
   $('sd-nombre').textContent = t.nombre; $('sd-user').textContent = t.usuario || ''; $('sd-av').textContent = ini(t.nombre);
   $('titulo').textContent = 'Configuración de ' + m;
@@ -211,6 +233,14 @@ function pintarCitas(keep){
     '<div style="height:22px"></div>' + tools('Buscar cita…') + '<p class="count"><b>' + INFO.citas.filter(c => VIVAS.includes(c.estado)).length + '</b> vivas · <b>' + INFO.citas.filter(c => !VIVAS.includes(c.estado)).length + '</b> cerradas</p><div class="grid">' + (lista.map(citaCard).join('') || '<div class="vacio">Sin citas.</div>') + '</div>';
   $('c-prev').onclick = () => { MES.m--; if (MES.m < 0) { MES.m = 11; MES.y--; } pintarCitas(); }; $('c-next').onclick = () => { MES.m++; if (MES.m > 11) { MES.m = 0; MES.y++; } pintarCitas(); };
   bindQ(); if (keep) { const q = $('q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+// MARCA DEL LOTE: dos colores (acento2 = identidad, acento = acción) → toda la interfaz se tiñe sola; sin colores queda blanco/negro.
+function aplicarAcentos(t){
+  const ok = h => /^#[0-9a-f]{6}$/i.test(String(h || '')); if (!ok(t.acento2)) return;
+  const a2 = t.acento2, a1 = ok(t.acento) ? t.acento : t.acento2; const r = document.documentElement.style;
+  r.setProperty('--acento2', a2); r.setProperty('--acento', a1); r.setProperty('--acc', a2);
+  [['a2', a2], ['a1', a1]].forEach(([k, h]) => [5, 8, 10, 15, 20, 25].forEach(p => r.setProperty('--' + k + '-' + (p < 10 ? '0' + p : p), h + Math.round(p * 2.55).toString(16).padStart(2, '0'))));
+  document.documentElement.dataset.acentos = '1';
 }
 async function recargar(){ const r = await get('panel_info', { vendedor: String(INFO.tenant.id) }); if (r.ok) { INFO = r; contar(); pintarSideFC(); pintar(); } }
 </script>

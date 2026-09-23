@@ -573,8 +573,21 @@ select.inp option{background:#09183F;color:#fff}
   .aviso{left:auto;right:16px;max-width:440px}
 }
 :root[data-tema="blanco"] .tag{background:#EDEEF0;color:#111}
-:root[data-tema="blanco"] .tag{background:var(--acento, #EDEEF0);color:#fff}
-:root[data-tema="blanco"]:not([style*="--acento"]) .tag{background:#EDEEF0;color:#111}
+/* ═══ MARCA DEL LOTE sobre el tema blanco (automático: --acento2 identidad, --acento acción) ═══ */
+html[data-acentos] .tag{background:var(--acento);color:#fff}
+html[data-acentos] #app::before{content:'';position:absolute;left:0;right:0;top:0;height:5px;background:var(--acento2);z-index:5}
+html[data-acentos] .wm{color:var(--acento2)}html[data-acentos] .wm b{color:var(--acento)}
+html[data-acentos] .titulo h1,html[data-acentos] .apple-title,html[data-acentos] h2{color:var(--acento2)}
+html[data-acentos] .tab-plus .plus{background:var(--acento);box-shadow:0 8px 20px var(--a1-12)}
+html[data-acentos] #tabbar .tab.on{color:var(--acento2)}
+html[data-acentos] .pill.on{background:var(--acento2);border-color:var(--acento2);color:#fff}
+html[data-acentos] .bell{background:var(--a2-08);color:var(--acento2)}html[data-acentos] .bell .b,html[data-acentos] .bell b{background:var(--acento);color:#fff}
+html[data-acentos] .fila .ava{background:var(--a2-12);color:var(--acento2)}
+html[data-acentos] .fila.sel{background:var(--a2-08)}
+html[data-acentos] .cta,html[data-acentos] .btn-pri{background:var(--acento);border-color:var(--acento)}
+html[data-acentos] .ch-h .ava{background:var(--a2-12);color:var(--acento2)}
+html[data-acentos] .acc .sq,html[data-acentos] .sq{background:var(--a2-08);color:var(--acento2)}
+html[data-acentos] .buscar:focus-within{border-color:var(--acento2)}
 </style>
 </head>
 <body>
@@ -952,7 +965,13 @@ function aplicarTemaYMarca(t){
   if (!t) return;
   if (t.tema === 'blanco') { document.documentElement.dataset.tema = 'blanco'; const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', '#FFFFFF'); }
   // ACENTOS DE MARCA (orden owner 2026-09-23, Autos Universales): fondo blanco siempre; acento2 = azul oscuro (botones, burbujas mías, positivo); acento = rojo (detalles: etiqueta, campana con no leídos)
-  if (t.tema === 'blanco' && /^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) { const r = document.documentElement.style; r.setProperty('--pri', t.acento2); r.setProperty('--pri2', t.acento2); r.setProperty('--pos', t.acento2); r.setProperty('--out', t.acento2); r.setProperty('--grad', 'linear-gradient(135deg,' + t.acento2 + ',' + t.acento2 + ')'); if (/^#[0-9a-f]{6}$/i.test(String(t.acento || ''))) { r.setProperty('--danger', t.acento); r.setProperty('--acento', t.acento); } }
+  if (t.tema === 'blanco' && /^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) {
+    const a2 = t.acento2, a1 = /^#[0-9a-f]{6}$/i.test(String(t.acento || '')) ? t.acento : t.acento2; const r = document.documentElement.style;
+    r.setProperty('--pri', a2); r.setProperty('--pri2', a2); r.setProperty('--pos', a2); r.setProperty('--out', a2); r.setProperty('--grad', 'linear-gradient(135deg,' + a2 + ',' + a2 + ')');
+    r.setProperty('--acento', a1); r.setProperty('--acento2', a2); r.setProperty('--a2-08', a2 + '14'); r.setProperty('--a2-12', a2 + '1f'); r.setProperty('--a1-12', a1 + '1f');
+    document.documentElement.dataset.acentos = '1';
+    const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', a2);
+  }
   if (t.marca) {
     const m = String(t.marca).trim(); const partes = m.split(/\s+/); const html = partes.length > 1 ? esc(partes.slice(0, -1).join(' ')) + ' <b>' + esc(partes[partes.length - 1]) + '</b>' : esc(m);
     document.querySelectorAll('.wm').forEach(el => { el.innerHTML = html; });
