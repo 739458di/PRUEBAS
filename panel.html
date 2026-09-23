@@ -47,7 +47,7 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .desc{color:var(--txt2);max-width:640px;margin:0 0 18px}
 .tools{display:flex;gap:10px;margin-bottom:12px}
 .search{flex:1;display:flex;align-items:center;gap:8px;height:40px;border:1px solid var(--ln);border-radius:8px;padding:0 12px;background:#fff}.search input{border:0;outline:0;flex:1;font:inherit;color:var(--txt);background:none;min-width:0}.search .ic{color:var(--mut)}
-.sel{height:40px;border:1px solid var(--ln);border-radius:8px;background:#fff;padding:0 12px;font:inherit;color:var(--txt);display:flex;align-items:center;gap:8px}
+.sel{height:40px;border:1px solid var(--ln);border-radius:8px;background:#fff;padding:0 12px;font:inherit;color:var(--txt);display:flex;align-items:center;gap:8px}select.sel{-webkit-appearance:none;appearance:none;padding-right:28px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center/16px}
 .count{font-size:13px;color:var(--txt2);margin:0 0 14px}.count b{color:var(--txt);font-weight:600}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
 .cd{border:1px solid var(--ln);border-radius:var(--r);background:#fff;padding:14px;display:flex;gap:12px;align-items:flex-start;min-height:96px}
@@ -71,6 +71,11 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .acts{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 .hint{font-size:13px;color:var(--txt2);margin-top:10px;min-height:18px}
 .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:13px}.kv span{color:var(--txt2)}
+.autoficha{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:22px;align-items:start}
+.gal .big{aspect-ratio:4/3;border:1px solid var(--ln);border-radius:var(--r);overflow:hidden;background:var(--s1)}.gal .big img{width:100%;height:100%;object-fit:cover;display:block}
+.gal .thumbs{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}.gal .thumbs img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:2px solid transparent;cursor:pointer}.gal .thumbs img.on{border-color:var(--acc)}
+.datos .row2{margin-bottom:4px}.datos .lbl{margin-top:8px}
+@media (max-width:820px){.autoficha{grid-template-columns:1fr}.gal .thumbs{grid-template-columns:repeat(5,1fr)}}
 /* chat general del lote: lista a la izquierda (vendedor a la derecha de cada fila), hilo a la derecha */
 .chats{display:grid;grid-template-columns:380px minmax(0,1fr);gap:0;border:1px solid var(--ln);border-radius:var(--r);overflow:hidden;min-height:560px;height:calc(100vh - 260px)}
 .chats .lst{border-right:1px solid var(--ln);overflow:auto;min-height:0}
@@ -119,7 +124,7 @@ html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}
   .topbar .brand{padding:0;flex:1}.topbar .av{width:32px;height:32px;border-radius:8px;border:1px solid var(--ln);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--txt2)}
   .topbar .x{border:1px solid var(--ln);background:#fff;border-radius:8px;height:32px;padding:0 10px;font:600 12px var(--f);color:var(--txt)}
   .main{padding:18px 16px 40px}h1{font-size:20px;margin-bottom:12px}
-  .tools{flex-wrap:wrap}.sel{display:none}.grid{grid-template-columns:1fr}.row3{grid-template-columns:1fr}
+  .tools{flex-wrap:wrap}.grid{grid-template-columns:1fr}.row3{grid-template-columns:1fr}
   .cal .d{min-height:62px;padding:3px}.cal .d .n{width:20px;height:20px}.cal .ev{font-size:9px;line-height:13px;padding:1px 3px}
 }
 </style>
@@ -166,7 +171,7 @@ const ico = n => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[
 document.body.innerHTML = document.body.innerHTML.replace(/\{\{(\w+)\}\}/g, (m, k) => ico(k));
 const post = (action, body) => fetch(API + '?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json()).catch(() => ({ ok: false, error: 'Sin conexión' }));
 const get = (action, q) => fetch(API + '?action=' + action + (q ? '&' + new URLSearchParams(q) : '')).then(r => r.json()).catch(() => ({ ok: false, error: 'Sin conexión' }));
-let SES = null, INFO = null, AUTOS = [], VISTA = 'general', MES = null, Q = '';
+let SES = null, INFO = null, AUTOS = [], VISTA = 'general', MES = null, Q = '', AF = 'todos', AUTO_ID = null;
 const fmtDinero = n => n == null ? '' : '$' + Number(n).toLocaleString('es-MX');
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const TZ = 6 * 3600000; const dMx = ts => new Date(Number(ts) - TZ); const ymd = ts => dMx(ts).toISOString().slice(0, 10);
@@ -216,6 +221,7 @@ function pintar(keep){
       '<h2 style="margin-top:26px">Chats de tus vendedores</h2><p class="desc">Entra a ver lo que ve cada vendedor: sus clientes y el WhatsApp general.</p><div class="grid">' + [{ id: 'sin', nombre: 'WhatsApp general', sub: t.telefono ? '+52 ' + telFmt(t.telefono) + ' · web, Facebook, anuncios' : 'Sin número todavía' }].concat(INFO.miembros.filter(m => m.activo).map(m => ({ id: m.id, nombre: m.nombre, sub: '+52 ' + telFmt(m.telefono) }))).map(f => '<div class="cd"><div class="lg">' + esc(ini(f.nombre)) + '</div><div class="bd"><div class="t">' + esc(f.nombre) + '</div><div class="s">' + esc(f.sub) + '</div></div><button class="ib" data-vend="' + f.id + '" title="Ver sus chats">' + ico('r') + '</button></div>').join('') + '</div>' + '<h2 style="margin-top:26px">Próximas citas</h2><p class="desc">Las citas vivas más cercanas.</p><div class="grid">' + (vivas.slice(0, 6).map(citaCard).join('') || '<div class="vacio">Sin citas vivas por ahora.</div>') + '</div>';
     M.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ir(b.dataset.go));
     M.querySelectorAll('[data-vend]').forEach(b => b.onclick = () => { CH.filtro = b.dataset.vend; CH.sel = null; ir('chats'); });
+  } else if (VISTA === 'auto') { pintarAuto();
   } else if (VISTA === 'chats') { pintarChats();
   } else if (VISTA === 'fyrachat') {
     const L = fcLista();
@@ -223,10 +229,11 @@ function pintar(keep){
       '<p class="count"><b>' + L.length + '</b> FyraChat' + (L.length === 1 ? '' : 's') + (t.telefono ? '' : ' · el lote todavía no tiene número') + '</p><div class="grid">' + L.map(f => '<div class="cd"><div class="lg">' + esc(ini(f.nombre)) + '</div><div class="bd"><div class="t">' + esc(f.nombre) + (f.lote ? (f.tel ? '<span class="pill ok"><i></i>Lote</span>' : '<span class="pill off"><i></i>Sin número</span>') : '<span class="pill ok"><i></i>Vendedor</span>') + '</div><div class="s">' + esc(f.sub) + '</div><div class="acts" style="margin-top:10px"><a class="btn sec" style="display:inline-flex;align-items:center;height:34px" href="' + f.href + '">Abrir FyraChat</a></div></div></div>').join('') + '</div>' +
       (INFO.miembros.filter(m => m.activo).length ? '' : '<p class="hint">Cuando des de alta miembros, aquí aparece el FyraChat de cada uno.</p>');
   } else if (VISTA === 'autos') {
-    const sel = AUTOS.filter(a => hit(a.nombre));
-    M.innerHTML = '<h2>Autos del lote</h2><p class="desc">Los autos que el asistente conoce y ofrece en los chats. Cada tarjeta abre la ficha del auto.</p>' + tools('Buscar auto…', '<button class="sel">Todos ' + ico('chev') + '</button>') +
-      '<p class="count"><b>' + sel.length + '</b> autos' + (qn ? ' encontrados' : ' activos') + '</p><div class="grid">' + (sel.map(a => '<div class="cd"><div class="lg">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="">' : esc((a.marca || '?')[0])) + '</div><div class="bd"><div class="t">' + esc(a.nombre) + (a.estado === 'activo' ? '<span class="pill ok"><i></i>Disponible</span>' : '<span class="pill warn"><i></i>' + esc(a.estado) + '</span>') + '</div><div class="s">' + fmtDinero(a.precio) + (a.km ? ' · ' + Number(a.km).toLocaleString('es-MX') + ' km' : '') + (a.fotos ? ' · ' + a.fotos + ' fotos' : '') + '</div></div>' + (a.web_id ? '<a class="ib" href="https://www.fyradrive.com/car/' + a.web_id + '" target="_blank" rel="noopener" title="Ver ficha">' + ico('ext') + '</a>' : '') + '</div>').join('') || '<div class="vacio">Sin autos.</div>') + '</div>';
-    bindQ();
+    const sel = AUTOS.filter(a => hit(a.nombre) && (AF === 'todos' || (AF === 'activo' ? a.estado === 'activo' : a.estado === 'vendido')));
+    M.innerHTML = '<h2>Autos del lote</h2><p class="desc">Los autos que el asistente conoce y ofrece en los chats. Toca un auto para abrirlo, editarlo, marcarlo vendido o darlo de baja.</p>' + tools('Buscar auto…', '<select class="sel" id="af"><option value="todos"' + (AF === 'todos' ? ' selected' : '') + '>Todos</option><option value="activo"' + (AF === 'activo' ? ' selected' : '') + '>Disponibles</option><option value="vendido"' + (AF === 'vendido' ? ' selected' : '') + '>Vendidos</option></select>') +
+      '<p class="count"><b>' + sel.length + '</b> autos' + (qn ? ' encontrados' : (AF === 'vendido' ? ' vendidos' : AF === 'activo' ? ' disponibles' : '')) + '</p><div class="grid">' + (sel.map(a => '<div class="cd" data-auto="' + a.id + '" style="cursor:pointer"><div class="lg">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="">' : esc((a.marca || '?')[0])) + '</div><div class="bd"><div class="t">' + esc(a.nombre) + (a.estado === 'activo' ? '<span class="pill ok"><i></i>Disponible</span>' : a.estado === 'vendido' ? '<span class="pill off"><i></i>Vendido</span>' : '<span class="pill warn"><i></i>' + esc(a.estado) + '</span>') + '</div><div class="s">' + fmtDinero(a.precio) + (a.km ? ' · ' + Number(a.km).toLocaleString('es-MX') + ' km' : '') + (a.fotos ? ' · ' + a.fotos + ' fotos' : '') + '</div></div><span class="ib" title="Abrir">' + ico('r') + '</span></div>').join('') || '<div class="vacio">Sin autos.</div>') + '</div>';
+    bindQ(); const af = $('af'); if (af) af.onchange = () => { AF = af.value; pintar(true); };
+    M.querySelectorAll('[data-auto]').forEach(el => el.onclick = () => abrirAuto(Number(el.dataset.auto)));
   } else if (VISTA === 'citas') pintarCitas(keep);
   else if (VISTA === 'miembros') {
     const sel = INFO.miembros.filter(m => hit(m.nombre + ' ' + m.telefono));
@@ -282,6 +289,29 @@ function pintarChats(){
   cargarChats();
   if (CH.timer) clearInterval(CH.timer); CH.timer = setInterval(() => { if (VISTA === 'chats') cargarChats(); else { clearInterval(CH.timer); CH.timer = null; } }, 20000);
 }
+// ══ FICHA DEL AUTO dentro del panel (orden owner 2026-09-23): fotos, datos editables, precio, VENDIDO, DAR DE BAJA
+let AUTO_D = null;
+function abrirAuto(id){ AUTO_ID = id; AUTO_D = null; VISTA = 'auto'; document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === 'autos')); pintarAuto(); window.scrollTo(0, 0); }
+async function pintarAuto(){
+  const M = $('main');
+  if (!AUTO_D) { M.innerHTML = '<div class="vacio" style="border:0">Abriendo auto…</div>'; const r = await get('auto_detalle', { vendedor: String(TID), id: AUTO_ID }); if (!r.ok) { M.innerHTML = '<div class="vacio">' + esc(r.error || 'No se pudo abrir') + '</div>'; return; } AUTO_D = r.auto; AUTO_D._puede = !!r.puede_editar; }
+  const a = AUTO_D, ed = a._puede; const f = (id, lbl, val, extra) => '<div><label class="lbl">' + lbl + '</label><input class="inp" id="' + id + '" value="' + esc(val == null ? '' : val) + '"' + (ed ? '' : ' readonly') + (extra || '') + '></div>';
+  const estadoPill = a.estado === 'activo' ? '<span class="pill ok"><i></i>Disponible</span>' : a.estado === 'vendido' ? '<span class="pill off"><i></i>Vendido</span>' : '<span class="pill warn"><i></i>Dado de baja</span>';
+  M.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><button class="ib" id="au-back" title="Volver">' + ico('l') + '</button><h2 style="margin:0">' + esc([a.marca, a.modelo, a.version, a.anio].filter(Boolean).join(' ')) + '</h2>' + estadoPill + '<div style="flex:1"></div>' + (a.link ? '<a class="btn sec" style="display:inline-flex;align-items:center;height:36px" href="' + esc(a.link) + '" target="_blank" rel="noopener">Ficha pública ' + ico('ext') + '</a>' : '') + '</div>' +
+    '<div class="autoficha"><div class="gal"><div class="big" id="au-big">' + (a.fotos[0] ? '<img src="' + esc(a.fotos[0]) + '" alt="">' : '<div class="vacio">Sin fotos</div>') + '</div><div class="thumbs">' + a.fotos.map((u, i) => '<img src="' + esc(u) + '" data-i="' + i + '" class="' + (i === 0 ? 'on' : '') + '" alt="">').join('') + '</div><p class="hint">' + a.fotos.length + ' fotos · tal como las publicó el lote' + (a.punto ? ' · Ubicación: ' + esc(a.punto.name || '') + (a.punto.address ? ', ' + esc(a.punto.address) : '') : '') + '</p></div>' +
+    '<div class="datos"><div class="row2">' + f('au-marca', 'Marca', a.marca) + f('au-modelo', 'Modelo', a.modelo) + '</div><div class="row2">' + f('au-version', 'Versión', a.version) + f('au-anio', 'Año', a.anio, ' inputmode="numeric"') + '</div><div class="row2">' + f('au-precio', 'Precio', a.precio, ' inputmode="numeric"') + f('au-km', 'Kilometraje', a.km, ' inputmode="numeric"') + '</div><div class="row2">' + f('au-trans', 'Transmisión', a.transmision) + f('au-color', 'Color', a.color) + '</div><div><label class="lbl">Descripción</label><textarea class="inp" id="au-desc" style="height:120px;padding:10px 12px;resize:vertical"' + (ed ? '' : ' readonly') + '>' + esc(a.descripcion || '') + '</textarea></div>' +
+    (ed ? '<div class="acts"><button class="btn" id="au-save">Guardar cambios</button>' + (a.estado === 'activo' ? '<button class="btn sec" id="au-vendido">Vendido</button><button class="btn sec" id="au-baja" style="color:#C62828;border-color:#F3C5C5">Dar de baja</button>' : '<button class="btn sec" id="au-activo">Volver a poner disponible</button>') + '</div><div class="hint" id="au-h"></div>' : '<p class="hint">Solo el dueño del lote puede editar.</p>') + '</div></div>';
+  $('au-back').onclick = () => ir('autos');
+  M.querySelectorAll('.thumbs img').forEach(im => im.onclick = () => { $('au-big').innerHTML = '<img src="' + esc(a.fotos[Number(im.dataset.i)]) + '" alt="">'; M.querySelectorAll('.thumbs img').forEach(x => x.classList.toggle('on', x === im)); });
+  if (!ed) return;
+  const h = $('au-h'); const aviso = (t, mal) => { h.textContent = t; h.style.color = mal ? '#C62828' : 'var(--ok)'; };
+  $('au-save').onclick = async () => { const b = $('au-save'); b.disabled = true; try { const r = await post('auto_editar', { vendedor: String(TID), id: a.id, marca: $('au-marca').value, modelo: $('au-modelo').value, version: $('au-version').value, anio: $('au-anio').value, precio: $('au-precio').value, km: $('au-km').value, transmision: $('au-trans').value, color: $('au-color').value, descripcion: $('au-desc').value }); if (!r.ok) { aviso(r.error || 'No se pudo guardar', true); return; } aviso('Guardado.'); AUTO_D = null; await recargarAutos(); pintarAuto(); } finally { b.disabled = false; } };
+  const cambiar = async (estado, msg) => { if (!confirm(msg)) return; const r = await post('auto_estado', { vendedor: String(TID), id: a.id, estado }); if (!r.ok) { aviso(r.error || 'No se pudo', true); return; } AUTO_D = null; await recargarAutos(); if (estado === 'baja') ir('autos'); else pintarAuto(); };
+  if ($('au-vendido')) $('au-vendido').onclick = () => cambiar('vendido', '¿Marcar este auto como VENDIDO? El asistente deja de ofrecerlo.');
+  if ($('au-baja')) $('au-baja').onclick = () => cambiar('baja', '¿Dar de baja este auto? Sale del lote y de la web. Lo puedes volver a activar después.');
+  if ($('au-activo')) $('au-activo').onclick = () => cambiar('activo', '¿Volver a poner este auto disponible?');
+}
+async function recargarAutos(){ const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || []; contar(); }
 function citaCard(c){ return '<div class="cd"><div class="lg">' + esc(ini(c.nombre)) + '</div><div class="bd"><div class="t">' + esc(c.nombre || 'Sin nombre') + pillEstado(c.estado) + '</div><div class="s">' + esc(c.auto || '') + '</div><div class="s">' + esc(c.situacion || c.cuando || '') + '</div></div></div>'; }
 function horarioTxt(h){ const nd = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; return [1, 2, 3, 4, 5, 6, 0].map(d => { const r = h[String(d)] || h[d]; return '<span>' + nd[d] + '</span><div>' + (Array.isArray(r) ? hm(r[0]) + ' – ' + hm(r[1]) : 'cerrado') + '</div>'; }).join(''); }
 function pintarCitas(keep){

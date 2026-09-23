@@ -2512,7 +2512,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
+        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -3022,6 +3022,38 @@ module.exports = async function handler(req, res) {
             if (action === 'miembro_quitar' && req.method === 'POST') {
                 if (!TV) return err(400, 'el panel es por universo');
                 await ensureMiembros(); await run('DELETE FROM vendedores_universo WHERE tenant_id = ? AND id = ?', [TV, Number(req.body.id) || 0]); return okJ({ borrado: true });
+            }
+            // ══ AUTOS DEL LOTE: abrir, editar (precio/nombre/datos), VENDIDO, DAR DE BAJA (orden owner 2026-09-23). Solo dueño del lote / maestra / miembro admin.
+            const PUEDE_EDITAR_AUTOS = !!TV && (!SES || !SES.miembro || SES.miembro.rol === 'admin' || MAESTRA);
+            const autoDelLote = async (id) => { const r = await query(`SELECT i.*, au.rol, au.activo au_activo FROM inventario_autos i JOIN autos_universo au ON au.inv_auto_id = i.id WHERE i.id = ? AND au.tenant_id = ? LIMIT 1`, [Number(id) || 0, TV]).catch(() => []); return r[0] || null; };
+            if (action === 'auto_detalle') {
+                if (!TV) return err(400, 'el panel es por universo');
+                const a = await autoDelLote(req.query.id); if (!a) return err(404, 'ese auto no es de este lote');
+                const w = a.fyradrive_web_id ? (await query('SELECT id, estado, color, transmision, tipo_carroceria, comentarios_adicionales, opciones_compra, motor, numero_duenos, version FROM autos WHERE id = ?', [Number(a.fyradrive_web_id)]).catch(() => []))[0] : null;
+                const fotos = a.fyradrive_web_id ? await query('SELECT id, url_imagen, es_principal, orden_imagen FROM imagenes_autos WHERE auto_id = ? AND url_imagen IS NOT NULL ORDER BY es_principal DESC, COALESCE(orden_imagen,99) ASC, id ASC', [Number(a.fyradrive_web_id)]).catch(() => []) : [];
+                const pe = (await query('SELECT name, address, maps_link, lat, lng FROM punto_envio WHERE auto_id = ?', [Number(a.id)]).catch(() => []))[0] || null;
+                return okJ({ auto: { id: Number(a.id), web_id: a.fyradrive_web_id == null ? null : Number(a.fyradrive_web_id), marca: a.marca, modelo: a.modelo, version: a.version || (w && w.version) || null, anio: a.anio == null ? null : Number(a.anio), precio: a.precio == null ? null : Number(a.precio), km: a.kilometraje == null ? null : Number(a.kilometraje), color: a.color || (w && w.color) || null, transmision: a.transmision || (w && w.transmision) || null, tipo: a.tipo_carroceria || (w && w.tipo_carroceria) || null, descripcion: (w && w.comentarios_adicionales) || null, estado: a.estado, estado_web: w ? w.estado : null, en_lote: Number(a.au_activo) === 1, agencia: a.agencia_nombre || null, link: a.fyradrive_web_id ? 'https://www.fyradrive.com/car/' + a.fyradrive_web_id : null, fotos: fotos.map(f => f.url_imagen), punto: pe }, puede_editar: PUEDE_EDITAR_AUTOS });
+            }
+            if (action === 'auto_editar' && req.method === 'POST') {
+                if (!TV) return err(400, 'el panel es por universo'); if (!PUEDE_EDITAR_AUTOS) return err(403, 'Solo el dueño del lote puede editar autos.');
+                const a = await autoDelLote(req.body.id); if (!a) return err(404, 'ese auto no es de este lote');
+                const B = req.body || {}; const s = v => (v == null ? null : String(v).trim().slice(0, 120) || null); const n = v => { const x = Number(String(v == null ? '' : v).replace(/[^0-9.]/g, '')); return isFinite(x) && x > 0 ? Math.round(x) : null; };
+                const marca = s(B.marca) || a.marca, modelo = s(B.modelo) || a.modelo, version = B.version === undefined ? a.version : s(B.version), anio = B.anio === undefined ? a.anio : (n(B.anio) || a.anio), precio = B.precio === undefined ? a.precio : (n(B.precio) || a.precio), km = B.km === undefined ? a.kilometraje : n(B.km), color = B.color === undefined ? a.color : s(B.color), transmision = B.transmision === undefined ? a.transmision : s(B.transmision), descripcion = B.descripcion === undefined ? undefined : String(B.descripcion || '').slice(0, 2000);
+                await run('UPDATE inventario_autos SET marca=?, modelo=?, version=?, anio=?, precio=?, kilometraje=?, color=?, transmision=?, synced_at=? WHERE id=?', [marca, modelo, version, anio, precio, km, color, transmision, Date.now(), Number(a.id)]);
+                if (a.fyradrive_web_id) await run(`UPDATE autos SET marca=?, modelo=?, version=?, "año"=?, precio=?, kilometraje=?, color=?, transmision=?${descripcion === undefined ? '' : ', comentarios_adicionales=?'}, updated_at=datetime('now') WHERE id=?`, descripcion === undefined ? [marca, modelo, version, anio, precio, km, color, transmision, Number(a.fyradrive_web_id)] : [marca, modelo, version, anio, precio, km, color, transmision, descripcion, Number(a.fyradrive_web_id)]).catch(e => console.error('[auto_editar web]', e.message));
+                try { await ACCIONES.registrar({ tenant_id: TV, tipo: 'auto_editar', ref_id: Number(a.id), meta: { precio, marca, modelo, anio } }); } catch (e) { }
+                return okJ({ id: Number(a.id), marca, modelo, version, anio, precio, km, color, transmision });
+            }
+            if (action === 'auto_estado' && req.method === 'POST') {
+                if (!TV) return err(400, 'el panel es por universo'); if (!PUEDE_EDITAR_AUTOS) return err(403, 'Solo el dueño del lote puede cambiar el estado de un auto.');
+                const a = await autoDelLote(req.body.id); if (!a) return err(404, 'ese auto no es de este lote');
+                const est = String(req.body.estado || ''); const now = Date.now();
+                if (est === 'vendido') { await run("UPDATE inventario_autos SET estado='vendido', vendido_externo=1, vendido_externo_at=?, synced_at=? WHERE id=?", [now, now, Number(a.id)]); if (a.fyradrive_web_id) await run("UPDATE autos SET estado='vendido', fecha_venta=datetime('now'), updated_at=datetime('now') WHERE id=?", [Number(a.fyradrive_web_id)]).catch(() => { }); }
+                else if (est === 'baja') { await run("UPDATE inventario_autos SET estado='inactivo', synced_at=? WHERE id=?", [now, Number(a.id)]); await run('UPDATE autos_universo SET activo=0, updated=? WHERE inv_auto_id=? AND tenant_id=?', [now, Number(a.id), TV]); if (a.fyradrive_web_id) await run("UPDATE autos SET estado='eliminado', updated_at=datetime('now') WHERE id=?", [Number(a.fyradrive_web_id)]).catch(() => { }); }
+                else if (est === 'activo') { await run("UPDATE inventario_autos SET estado='activo', vendido_externo=0, synced_at=? WHERE id=?", [now, Number(a.id)]); await run('UPDATE autos_universo SET activo=1, updated=? WHERE inv_auto_id=? AND tenant_id=?', [now, Number(a.id), TV]); if (a.fyradrive_web_id) await run("UPDATE autos SET estado='activo', fecha_venta=NULL, updated_at=datetime('now') WHERE id=?", [Number(a.fyradrive_web_id)]).catch(() => { }); }
+                else return err(400, 'estado inválido (vendido | baja | activo)');
+                try { await ACCIONES.registrar({ tenant_id: TV, tipo: 'auto_' + est, ref_id: Number(a.id), meta: { nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' ') } }); } catch (e) { }
+                return okJ({ id: Number(a.id), estado: est });
             }
             if (action === 'autos_mios') {
                 let rows;

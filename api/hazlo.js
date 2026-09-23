@@ -22,7 +22,8 @@ const fmt = n => '$' + Number(n).toLocaleString('es-MX');
 let CACHE = { t: 0, autos: [] };
 async function inventario() {
     if (Date.now() - CACHE.t < 60000 && CACHE.autos.length) return CACHE.autos;
-    const rows = await query("SELECT id, fyradrive_web_id, marca, modelo, version, anio, precio, kilometraje, color, transmision, tipo_carroceria FROM inventario_autos WHERE estado='activo' AND fyradrive_web_id IS NOT NULL ORDER BY listed_at DESC, id DESC");
+    const rows = await query("SELECT id, fyradrive_web_id, marca, modelo, version, anio, precio, kilometraje, color, transmision, tipo_carroceria, agencia_nombre FROM inventario_autos WHERE estado='activo' AND fyradrive_web_id IS NOT NULL ORDER BY listed_at DESC, id DESC");
+    const puntos = {}; for (const p of await query('SELECT auto_id, name, address, maps_link FROM punto_envio').catch(() => [])) puntos[Number(p.auto_id)] = { nombre: p.name || null, direccion: p.address || null, mapa: p.maps_link || null };
     const ids = rows.map(r => Number(r.fyradrive_web_id)).filter(Boolean);
     const fotos = {};
     if (ids.length) {
@@ -33,7 +34,7 @@ async function inventario() {
     }
     const autos = rows.map(r => {
         const w = Number(r.fyradrive_web_id); const fs = fotos[w] || [];
-        return { id: w, nombre: nombre(r), marca: r.marca, modelo: r.modelo, anio: Number(r.anio) || null, precio: Number(r.precio) || null, km: Number(r.kilometraje) || null, color: r.color && !/no espec/i.test(r.color) ? r.color : null, transmision: r.transmision || null, tipo: tipoDe(r), origen: origenDe(r), foto: fs[0] || null, fotos: fs.slice(0, 12), link: 'https://www.fyradrive.com/car/' + w };
+        return { id: w, nombre: nombre(r), marca: r.marca, modelo: r.modelo, anio: Number(r.anio) || null, precio: Number(r.precio) || null, km: Number(r.kilometraje) || null, color: r.color && !/no espec/i.test(r.color) ? r.color : null, transmision: r.transmision || null, tipo: tipoDe(r), origen: origenDe(r), foto: fs[0] || null, fotos: fs.slice(0, 12), link: 'https://www.fyradrive.com/car/' + w, lote: r.agencia_nombre || null, punto: puntos[Number(r.id)] || null };
     }).filter(a => a.foto);
     CACHE = { t: Date.now(), autos };
     return autos;
@@ -43,7 +44,7 @@ const SCHEMA = {
     type: 'object', additionalProperties: false,
     required: ['intencion', 'marcas', 'origen', 'tipo', 'precio_min', 'precio_max', 'anio_min', 'transmision', 'auto_id', 'nombre', 'telefono', 'cuando', 'respuesta'],
     properties: {
-        intencion: { type: 'string', enum: ['mostrar', 'ver_auto', 'agendar', 'platicar', 'fuera'] },
+        intencion: { type: 'string', enum: ['mostrar', 'ver_auto', 'agendar', 'ubicacion', 'platicar', 'fuera'] },
         marcas: { type: 'array', items: { type: 'string' } },
         origen: { type: 'string', enum: ['', 'japones', 'coreano', 'americano', 'aleman', 'europeo', 'ingles'] },
         tipo: { type: 'string', enum: ['', 'suv', 'sedan', 'pickup', 'hatchback', 'deportivo'] },
@@ -55,10 +56,10 @@ const SCHEMA = {
     }
 };
 function sistema(autos) {
-    const lista = autos.map(a => `#${a.id} ${a.nombre} · ${fmt(a.precio)} · ${a.km ? a.km.toLocaleString('es-MX') + ' km' : ''} · ${a.tipo} · ${a.origen.join('/') || 'otro'}`).join('\n');
+    const lista = autos.map(a => `#${a.id} ${a.nombre} · ${fmt(a.precio)} · ${a.km ? a.km.toLocaleString('es-MX') + ' km' : ''} · ${a.tipo} · ${a.origen.join('/') || 'otro'}${a.lote ? ' · ' + a.lote : ''}`).join('\n');
     return `Eres HazloGPT, el asistente de Fyradrive (autos seminuevos en Monterrey). Lees lo que escribe un comprador y devuelves SOLO el JSON.
 REGLAS:
-- "intencion": mostrar = quiere ver autos (lista, filtro, "qué tienes", "japoneses", "SUV", "algo de 300 mil"); ver_auto = pregunta por UN auto concreto (pon su auto_id); agendar = quiere ir a verlo / prueba de manejo / cita (pon auto_id si lo menciona); platicar = saludo, duda general de cómo funciona Fyradrive, gracias; fuera = no tiene que ver con autos.
+- "intencion": mostrar = quiere ver autos (lista, filtro, "qué tienes", "japoneses", "SUV", "algo de 300 mil"); ver_auto = pregunta por UN auto concreto (pon su auto_id); agendar = quiere ir a verlo / prueba de manejo / cita (pon auto_id si lo menciona); ubicacion = pregunta dónde están, dónde ve el auto, dirección, mapa (pon auto_id si habla de un auto); platicar = saludo, duda general de cómo funciona Fyradrive, gracias; fuera = no tiene que ver con autos.
 - Filtros solo cuando el comprador los dice: marcas (nombres tal cual), origen, tipo, precios en pesos (0 = sin límite), anio_min (0 = sin límite), transmision.
 - "respuesta": UNA frase corta y natural en español de México, tuteando, sin emojis, sin inventar datos ni precios; si vas a mostrar autos di algo como "Esto es lo que tenemos en SUV:" (las tarjetas las arma el sistema). Si es 'fuera' di amablemente que solo ayudas con los autos de Fyradrive.
 - Para agendar: extrae nombre, telefono (10 dígitos) y cuando (día/hora) si los dice; deja '' lo que no diga. No confirmes tú la cita: el sistema pregunta lo que falte.
@@ -127,6 +128,13 @@ module.exports = async (req, res) => {
                 await run('INSERT INTO hazlo_solicitudes (nombre, telefono, cuando, auto_id, auto_nombre, sesion, created) VALUES (?,?,?,?,?,?,?)', [c.nombre, c.telefono, c.cuando, auto ? auto.id : null, auto ? auto.nombre : null, String(b.sesion || '').slice(0, 64), Date.now()]);
                 const txt = encodeURIComponent(`Hola, soy ${c.nombre}. Quiero agendar cita para ver el ${auto ? auto.nombre : 'auto'} ${c.cuando}. ${auto ? auto.link : ''}`.trim());
                 return res.status(200).json({ ok: true, texto: `Listo, ${c.nombre}: ${auto ? auto.nombre : 'tu visita'}, ${c.cuando}. Para dejarla confirmada mándanos ese mensaje por WhatsApp con el botón de abajo y ahí te decimos la ubicación.`, autos: auto ? [auto] : [], cita: null, wa: `https://wa.me/${WA_BOT}?text=${txt}` });
+            }
+            if (L.intencion === 'ubicacion') {
+                const a = porId(L.auto_id) || (hayFiltro(L) ? filtrar(autos, L)[0] : null);
+                const pts = a ? [a] : autos; const vistos = new Set(); const lineas = [];
+                for (const x of pts) { const p = x.punto; if (!p) continue; const k = (p.nombre || '') + '|' + (p.direccion || ''); if (vistos.has(k)) continue; vistos.add(k); lineas.push((x.lote || p.nombre || 'Punto de venta') + ': ' + [p.nombre && p.nombre !== x.lote ? p.nombre : null, p.direccion].filter(Boolean).join(', ') + (p.mapa ? ' · ' + p.mapa : '')); if (lineas.length >= 4) break; }
+                if (a && !lineas.length) return res.status(200).json({ ok: true, texto: `El ${a.nombre} se ve con cita en Monterrey. Agenda y te confirmamos la ubicación exacta por WhatsApp.`, autos: [a], cita: null });
+                return res.status(200).json({ ok: true, texto: (a ? `El ${a.nombre} lo ves aquí:\n` : 'Nuestros puntos de venta en Monterrey:\n') + lineas.join('\n') + '\nSi quieres ir a manejarlo, agenda tu cita y te esperamos.', autos: a ? [a] : [], cita: null });
             }
             if (L.intencion === 'ver_auto') {
                 const a = porId(L.auto_id) || filtrar(autos, L)[0] || null;
