@@ -910,7 +910,8 @@ function mostrarAcceso(aviso){ document.documentElement.removeAttribute('data-te
   // MODO PRUEBA: ?demo=1 → teléfono del usuario PRUEBAS# prellenado + leyenda del código fijo (solo vale para ese tenant)
   if (q.get('demo') === '1') { $a('acc-tel').value = '8888888888'; $a('acc-demo1').style.display = 'block'; $a('acc-demo').style.display = 'block'; }
   const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
-async function accSalir(){ try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/fyrachat.html'); }
+const PORTADA = 'https://www.fyradrive.com/';   // donde estabas antes de iniciar sesión (orden owner 2026-09-23: cerrar sesión NO manda a una pantalla intermedia)
+async function accSalir(){ try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace(PORTADA); }
 function fechaCorta(x){ try { return new Date(ms(x)).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
 async function abrirDispositivos(){
   const sh = sheet({ titulo:'Tus dispositivos', html:'<p class="hint">Cada dispositivo donde entraste con tu código.</p><div class="grupo" id="disp-lista"><div class="row"><div class="sq">' + ico('devices') + '</div><div class="tx"><div class="t">Cargando…</div></div></div></div>', pie:'<button type="button" class="cta rojo" id="disp-cerrar">Cerrar todas las sesiones</button>' });
@@ -1013,7 +1014,7 @@ async function apiPost(action, body){
   catch (e) { return { ok: false, error: 'Sin conexión' }; }
 }
 let SES_CAIDA = false;
-function sesionCaida(){ if (SES_CAIDA) return; SES_CAIDA = true; try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} try { if (WS) WS.close(); } catch(e){} mostrarAcceso('Tu sesión terminó. Vuelve a entrar.'); }
+function sesionCaida(){ if (SES_CAIDA) return; SES_CAIDA = true; try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} try { if (WS) WS.close(); } catch(e){} location.replace(PORTADA); }   // sesión vencida → de vuelta a la portada, sin limbo
 // error inline (nunca toasts de éxito; los errores sí se dicen, sin alert)
 let AVISO_T = null;
 function avisoError(txt){ const a = $('aviso'); $('aviso-t').textContent = txt; a.classList.add('on'); clearTimeout(AVISO_T); AVISO_T = setTimeout(ocultarAviso, 6000); }
