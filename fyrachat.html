@@ -164,6 +164,8 @@ a{color:var(--pri2)}
 .auto-c .tx{flex:1;min-width:0}
 .auto-c .nm{font-size:15px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .auto-c .y{font-size:13px;line-height:18px;color:var(--txt2)}
+.tucom{display:inline-block;margin-top:4px;font-size:11px;font-weight:700;color:var(--pos);background:rgba(53,224,176,.14);border-radius:6px;padding:1px 7px;white-space:nowrap}.tucom.off{color:var(--muted);background:var(--s1)}
+:root[data-tema="blanco"] .tucom{color:#15803D;background:#E7F5EE}
 .auto-c .der{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .auto-c .pr{font-size:14px;line-height:18px;color:var(--pos);font-weight:600}
 .auto-c.nuevo{animation:pop .24s ease-out}
@@ -1943,7 +1945,7 @@ function autoFilaHTML(a, extra){
   const est = AUTO_ESTADO[a.estado] ? a.estado : 'revision';
   return '<div class="auto-c' + (extra ? ' ' + extra : '') + '" data-id="' + esc(a.id) + '"><div class="ph">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="" loading="lazy" onerror="this.parentNode.innerHTML=ico(\'car\')">' : ico('car')) + '</div>' +
     '<div class="tx"><div class="nm">' + esc(nombreSinAnio(a) || 'Auto') + '</div><div class="y">' + esc([anioDe(a), a.km ? Number(a.km).toLocaleString('es-MX') + ' km' : ''].filter(Boolean).join(' · ')) + '</div></div>' +
-    '<div class="der"><span class="pr">' + esc(precioFmt(a.precio)) + '</span><span class="est ' + esc(est) + '">' + AUTO_ESTADO[est] + '</span></div></div>';
+    '<div class="der"><span class="pr">' + esc(precioFmt(a.precio)) + '</span><span class="est ' + esc(est) + '">' + AUTO_ESTADO[est] + '</span>' + (a.comision_vendedor && a.comision_vendedor.monto > 0 ? '<span class="tucom">Tu comisión ' + esc(precioFmt(a.comision_vendedor.monto)) + '</span>' : (a.comision_vendedor ? '<span class="tucom off">Sin comisión</span>' : '')) + '</div></div>';
 }
 function pintarAutos(){
   const c = $('autos-lista'); if (!AUTOS) return;
