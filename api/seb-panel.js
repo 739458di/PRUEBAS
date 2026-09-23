@@ -2604,7 +2604,7 @@ module.exports = async function handler(req, res) {
                         rows = tels.length ? await query(`SELECT ${COLS} FROM conversaciones WHERE COALESCE(tenant_id,0)=0 AND telefono IN (${ph(tels)}) AND ult_msg_ts IS NOT NULL ORDER BY ult_msg_ts DESC LIMIT ?`, tels.concat([limit + SOBRA])) : [];
                     }
                 } else {
-                    const w = ['COALESCE(tenant_id,0)=?', "source='whatsapp'", 'ult_msg_ts IS NOT NULL'], a = [TV];
+                    const w = ['COALESCE(tenant_id,0)=?', "source='whatsapp'", 'ult_msg_ts IS NOT NULL', "COALESCE(canal,'') <> 'avisos'"], a = [TV];   // canal 'avisos' = avisos al vendedor, nunca es un chat del lote
                     if (SES && SES.miembro && !MAESTRA) { w.push('(miembro_id = ? OR miembro_id IS NULL)'); a.push(Number(SES.miembro.id)); }   // miembro: SUS chats + los que aún no tienen vendedor
                     else if (TV && req.query.miembro) {   // PANEL del dueño: "lo que ve ese vendedor" (mismo filtro que él) o los chats sin vendedor
                         if (req.query.miembro === 'sin') w.push('miembro_id IS NULL'); else if (Number(req.query.miembro)) { w.push('(miembro_id = ? OR miembro_id IS NULL)'); a.push(Number(req.query.miembro)); }
