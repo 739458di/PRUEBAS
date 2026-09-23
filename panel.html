@@ -140,7 +140,7 @@ const VIVAS = ['viva', 'en_camino', 'pospuesta'];
 (async () => {
   const v = new URLSearchParams(location.search).get('vendedor');
   if (v) { const r = await get('tenant_marca', { vendedor: v }); if (r.ok) { const m = r.marca || r.nombre; $('lg-marca').textContent = m; document.title = m; } }
-  const yo = await get('acceso_yo'); if (yo.ok && yo.sesion && yo.sesion.tenant && Number(yo.sesion.tenant.id)) { SES = yo.sesion; await entrar(); }
+  const yo = await get('acceso_yo'); if (yo.ok && yo.sesion && yo.sesion.tenant && (Number(yo.sesion.tenant.id) || (yo.sesion.maestra && v))) { SES = yo.sesion; await entrar(); }   // la maestra (Sales Brain) entra con ?vendedor=ID
 })();
 $('lg-go').onclick = async () => {
   const b = $('lg-go'); b.disabled = true; $('lg-err').textContent = '';
@@ -150,9 +150,11 @@ $('lg-go').onclick = async () => {
 $('lg-p').addEventListener('keydown', e => { if (e.key === 'Enter') $('lg-go').click(); });
 const salir = async () => { await post('acceso_salir', {}); location.reload(); };
 $('salir').onclick = salir; $('tb-salir').onclick = salir;
+let TID = 0;
 async function entrar(){
-  const r = await get('panel_info', { vendedor: String(SES.tenant.id) }); if (!r.ok) { $('lg-err').textContent = r.error || 'No se pudo cargar el panel'; return; }
-  INFO = r; const a = await get('autos_mios', { vendedor: String(SES.tenant.id) }); AUTOS = (a.ok && a.autos) || [];
+  TID = Number(new URLSearchParams(location.search).get('vendedor')) || Number(SES.tenant.id);
+  const r = await get('panel_info', { vendedor: String(TID) }); if (!r.ok) { $('lg-err').textContent = r.error || 'No se pudo cargar el panel'; return; }
+  INFO = r; const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || [];
   const t = INFO.tenant, m = t.marca || t.nombre; document.title = m;
   $('sd-marca').textContent = m; $('tb-marca').textContent = m; $('sd-mk').textContent = m[0]; $('tb-mk').textContent = m[0];
   $('sd-nombre').textContent = t.nombre; $('sd-user').textContent = t.usuario || ''; $('sd-av').textContent = ini(t.nombre);
