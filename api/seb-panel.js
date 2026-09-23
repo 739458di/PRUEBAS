@@ -195,6 +195,12 @@ module.exports = async function handler(req, res) {
             else VEND_PARAM = String(SES.tenant_id);   // toda sesión de vendedor abre SU universo
         } else if (MAESTRA && !VEND_PARAM && !pidioT0) VEND_PARAM = String(SES.tenant_id);   // la maestra sin ?vendedor= abre su universo; con ?vendedor= el que pida
 
+        // VER COMO UN VENDEDOR (orden owner 2026-09-24): la cuenta del lote (o la maestra) abre el FyraChat de uno de sus miembros con ?como=<miembro_id>.
+        // En ese modo la sesión actúa como ese vendedor (sus chats, sus clientes, lo que conteste queda a su nombre). Solo lectura de la tabla; nada se persiste.
+        const COMO = Number((req.query && req.query.como) || (req.body && req.body.como)) || 0;
+        if (COMO && SES && !SES.miembro && VEND_PARAM && (String(SES.tenant_id) === VEND_PARAM || MAESTRA)) {
+            try { const mC = (await query('SELECT id, nombre, telefono, rol FROM vendedores_universo WHERE id = ? AND tenant_id = ? AND activo = 1 LIMIT 1', [COMO, Number(VEND_PARAM)]))[0]; if (mC) SES.miembro = { id: Number(mC.id), nombre: mC.nombre, telefono: mC.telefono, rol: mC.rol || 'vendedor', como: true }; } catch (e) { }
+        }
         // ══════════ REGLA ÚNICA DE AUTORIZACIÓN (antes de cualquier acción) ══════════
         const t0 = !VEND_PARAM;
         const mandaEnT0 = !!(SES && (MAESTRA || esStaff || duenoT0));

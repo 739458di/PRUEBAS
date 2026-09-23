@@ -843,7 +843,8 @@ let VEND = (new URLSearchParams(location.search).get('vendedor') || '').trim();
 let SESION = null;   // { tenant:{id,nombre,telefono,demo}, maestra, staff }
 let T0 = false;      // la maestra / STAFF pidió el FyraChat de Fyradrive (tenant 0 clásico) con ?vendedor=0
 const VPARAM = () => VEND || (T0 ? '0' : undefined);
-const vendQS = () => VPARAM() != null ? '&vendedor=' + encodeURIComponent(VPARAM()) : '';
+const COMO = (new URLSearchParams(location.search).get('como') || '').replace(/\D/g, '');   // la cuenta del lote viendo el FyraChat de un vendedor
+const vendQS = () => (VPARAM() != null ? '&vendedor=' + encodeURIComponent(VPARAM()) : '') + (COMO ? '&como=' + COMO : '');
 let TENANT = null;   // { id, nombre, telefono, demo, autos[] }
 let BIENVENIDA = false;   // ?bienvenida=1 (recién entró con código); se captura en cargarTenant antes de limpiar la URL
 const $a = $;
@@ -998,10 +999,14 @@ function aplicarTemaYMarca(t){
   }
 }
 (async () => { try { const v = new URLSearchParams(location.search).get('vendedor'); if (v && v !== '0') { const r = await fetch(API + '?action=tenant_marca&vendedor=' + encodeURIComponent(v)).then(x => x.json()); if (r && r.ok) aplicarTemaYMarca(r); } } catch (e) { } })();   // antes del login: la pantalla de entrada ya sale con el tema del universo
-function abrirPerfil(){
-  if (!TENANT) return; const m = TENANT.miembro; const nom = (m && m.nombre) || TENANT.nombre || ''; const admin = !!(m && m.rol === 'admin'); const esLote = !!(TENANT.marca);
-  const s = sheet({ titulo: 'Tu cuenta', html: '<div class="grupo"><div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(nom) + '</div><div class="s">' + esc(m ? (admin ? 'Administrador de ' : 'Vendedor de ') + (TENANT.marca || TENANT.nombre) : (TENANT.marca || TENANT.nombre)) + '</div></div></div></div>' +
-    '<div class="grupo" style="margin-top:12px">' + (admin || (!m && esLote) ? masRow('monitor', 'Panel del lote', 'Autos, chats de tus vendedores, citas y miembros', "try{localStorage.setItem('fyra_lugar','panel')}catch(e){};location.href='/panel.html'") : '') + masRow('chat', 'Mi FyraChat', 'Aquí estás ahora', 'cerrarHojas()') + '</div>' +
+async function abrirPerfil(){
+  if (!TENANT) return; const m = TENANT.miembro; const nom = (m && m.nombre) || TENANT.nombre || ''; const admin = !!(m && m.rol === 'admin'); const esLote = !!(TENANT.marca); const viendoComo = !!(m && m.como) || !!COMO;
+  let filasVend = '';
+  if (!m && esLote) {   // cuenta del lote: puede entrar al FyraChat de cualquiera de sus vendedores
+    try { const p = await apiGet('panel_info', {}); if (p && p.ok) filasVend = (p.miembros || []).filter(x => x.activo).map(x => masRow('user', 'Entrar como ' + x.nombre, 'Su FyraChat: sus clientes y el WhatsApp general', "location.href='/fyrachat.html?vendedor=" + Number(TENANT.id) + "&como=" + Number(x.id) + "'")).join(''); } catch (e) { }
+  }
+  const s = sheet({ titulo: 'Tu cuenta', html: '<div class="grupo"><div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(nom) + '</div><div class="s">' + esc(m ? (viendoComo ? 'Viendo como ' : (admin ? 'Administrador de ' : 'Vendedor de ')) + (TENANT.marca || TENANT.nombre) : (TENANT.marca || TENANT.nombre)) + '</div></div></div></div>' +
+    '<div class="grupo" style="margin-top:12px">' + (viendoComo ? masRow('monitor', 'Volver al panel del lote', 'Salir de la vista de ' + esc(nom), "location.href='/panel.html'") : '') + (admin && !viendoComo || (!m && esLote) ? masRow('monitor', 'Panel del lote', 'Autos, chats de tus vendedores, citas y miembros', "location.href='/panel.html'") : '') + (!viendoComo ? masRow('chat', 'Mi FyraChat', 'Aquí estás ahora', 'cerrarHojas()') : '') + filasVend + '</div>' +
     '<div class="grupo" style="margin-top:12px">' + masRow('logout', 'Cerrar sesión', 'Solo aquí termina tu sesión', 'accSalir()', 'rojo') + '</div>' });
   return s;
 }
