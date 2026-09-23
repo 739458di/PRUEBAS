@@ -348,7 +348,7 @@ module.exports = async function handler(req, res) {
             return res.status(r.ok ? 200 : 400).json(r);
         }
 
-        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff, contrasena_pendiente: !!SES.contrasena_pendiente, tiene_contrasena: !!SES.tiene_contrasena, via: SES.via } : null, desvinculado: DESV ? { tenant: DESV } : null });
+        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff, miembro: SES.miembro || null, contrasena_pendiente: !!SES.contrasena_pendiente, tiene_contrasena: !!SES.tiene_contrasena, via: SES.via } : null, desvinculado: DESV ? { tenant: DESV } : null });
         // ── CONTRASEÑA (orden owner 2026-09-12) ──
         if (action === 'acceso_modo' && req.method === 'POST') {   // ¿este número entra con contraseña o con código? (no revela si el número existe)
             const telM = String(req.body.telefono || '').replace(/\D/g, '');
@@ -374,7 +374,7 @@ module.exports = async function handler(req, res) {
         if (action === 'acceso_entrar_contrasena' && req.method === 'POST') {
             const r = await ACC.entrarConContrasena(req.body.telefono, req.body.contrasena, req.headers['user-agent'], IP);
             if (!r.ok) return res.status(r.limite ? 429 : 401).json({ ok: false, error: r.error });
-            if (r.tenant && r.tenant.id !== 0 && !r.maestra && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb.' }); }
+            if (r.tenant && r.tenant.id !== 0 && !r.maestra && r.tenant.telefono && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb.' }); }
             ACC.ponerCookie(res, r.token);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar_contrasena', ip: IP });
             await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
@@ -386,7 +386,7 @@ module.exports = async function handler(req, res) {
             if (SES.tenant && SES.tenant.demo) return res.status(400).json({ ok: false, error: 'El modo prueba no lleva contraseña.' });
             const reciente = (SES.via === 'codigo' || SES.via === 'ticket') && (Date.now() - Number(SES.creada || 0)) < 15 * 60 * 1000;
             if (SES.tiene_contrasena && !reciente) return res.status(403).json({ ok: false, error: 'Para cambiarla escribe tu contraseña actual.', usar: 'cambiar' });
-            const rC = await ACC.ponerContrasena(SES.tenant_id, req.body.contrasena);
+            const rC = SES.miembro ? await ACC.ponerContrasenaMiembro(SES.miembro.id, req.body.contrasena) : await ACC.ponerContrasena(SES.tenant_id, req.body.contrasena);
             if (!rC.ok) return res.status(400).json(rC);
             await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action: SES.tiene_contrasena ? 'contrasena_repuesta' : 'contrasena_creada', ip: IP });
             return res.status(200).json({ ok: true });
@@ -394,8 +394,9 @@ module.exports = async function handler(req, res) {
         if (action === 'acceso_contrasena_cambiar' && req.method === 'POST') {
             if (!SES) return res.status(401).json({ ok: false, error: 'Sin sesión' });
             if ((await ACC.contarLimite('contra:tel:' + SES.tenant.telefono, 5, 10 * 60 * 1000)).excedido) return res.status(429).json({ ok: false, error: 'Demasiados intentos. Espera 10 minutos.' });
-            if (!(await ACC.verificarContrasena(SES.tenant_id, req.body.actual))) return res.status(401).json({ ok: false, error: 'La contraseña actual no es correcta.' });
-            const rC = await ACC.ponerContrasena(SES.tenant_id, req.body.nueva);
+            const okAct = SES.miembro ? await ACC.verificarContrasenaMiembro(SES.miembro.id, req.body.actual) : await ACC.verificarContrasena(SES.tenant_id, req.body.actual);
+            if (!okAct) return res.status(401).json({ ok: false, error: 'La contraseña actual no es correcta.' });
+            const rC = SES.miembro ? await ACC.ponerContrasenaMiembro(SES.miembro.id, req.body.nueva) : await ACC.ponerContrasena(SES.tenant_id, req.body.nueva);
             if (!rC.ok) return res.status(400).json(rC);
             await ACC.accesosLog({ sesion_id: SES.sid, tenant_id: SES.tenant_id, action: 'contrasena_cambiada', ip: IP });
             return res.status(200).json({ ok: true });
@@ -407,7 +408,7 @@ module.exports = async function handler(req, res) {
             const r = await ACC.pedirCodigo(telIn, IP);
             if (r.limite === 'ip') return res.status(429).json({ ok: false, error: r.error });
             if (!r.silencioso && r.codigo && !DEMO.esDemo(r.tenant)) {   // MODO PRUEBA: al tenant demo no se le manda nada (entra con el código fijo)
-                const env = await citasVivas.enviarWA(r.tenant.telefono, ACC.textoCodigo(r.codigo, r.vida_min), 0);   // sale del número de Fyradrive
+                const env = await citasVivas.enviarWA(r.telefono || r.tenant.telefono, ACC.textoCodigo(r.codigo, r.vida_min), 0);   // sale del número de Fyradrive (al miembro, a SU número)
                 if (!env.ok) console.error('[acceso_pedir] envío falló:', env.error);
             }
             return res.status(200).json({ ok: true, vida_min: r.vida_min || 3, tel_mascara: '••• ••• ' + telIn.slice(-4) });
@@ -417,11 +418,11 @@ module.exports = async function handler(req, res) {
             if (!tel) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
             const r = await ACC.entrarConCodigo(tel, String(req.body.codigo || ''), req.headers['user-agent'], IP);
             if (!r.ok) return res.status(401).json({ ok: false, error: r.error });
-            if (r.tenant && r.tenant.id !== 0 && !r.maestra && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.', desvinculado: true }); }
+            if (r.tenant && r.tenant.id !== 0 && !r.maestra && r.tenant.telefono && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.', desvinculado: true }); }
             ACC.ponerCookie(res, r.token);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar', ip: IP });
-            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
-            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra, contrasena_pendiente: !!r.contrasena_pendiente, tiene_contrasena: !!r.tiene_contrasena });
+            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid, r.miembro);
+            return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra, miembro: r.miembro || null, contrasena_pendiente: !!r.contrasena_pendiente, tiene_contrasena: !!r.tiene_contrasena });
         }
         if (action === 'acceso_salir' && req.method === 'POST') { await ACC.cerrarSesion(tokenSes); ACC.borrarCookie(res); return res.status(200).json({ ok: true }); }
         if (action === 'acceso_ticket' && req.method === 'POST') {
@@ -2933,6 +2934,8 @@ module.exports = async function handler(req, res) {
             // ══ PANEL DEL UNIVERSO (orden owner 2026-09-22): resumen, autos, calendario de citas, miembros (vendedores del lote), número ══
             const ensureMiembros = async () => { await run('CREATE TABLE IF NOT EXISTS vendedores_universo (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, nombre TEXT, telefono TEXT, codigo_hash TEXT, codigo_expira INTEGER, activo INTEGER DEFAULT 0, created INTEGER)'); await run('CREATE INDEX IF NOT EXISTS idx_vend_univ ON vendedores_universo(tenant_id, telefono)'); };
             const shaC = x => require('crypto').createHash('sha256').update(String(x)).digest('hex');
+            const SOLO_DUENO = { ok: false, error: 'El panel general es solo del dueño del lote.', miembro: true };
+            if (['panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar'].includes(action) && SES && SES.miembro) return res.status(403).json(SOLO_DUENO);
             if (action === 'panel_info') {
                 if (!TV) return err(400, 'el panel es por universo');
                 await ensureMiembros();

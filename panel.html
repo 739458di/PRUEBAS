@@ -140,7 +140,9 @@ const VIVAS = ['viva', 'en_camino', 'pospuesta'];
 (async () => {
   const v = new URLSearchParams(location.search).get('vendedor');
   if (v) { const r = await get('tenant_marca', { vendedor: v }); if (r.ok) { const m = r.marca || r.nombre; $('lg-marca').textContent = m; document.title = m; } }
-  const yo = await get('acceso_yo'); if (yo.ok && yo.sesion && yo.sesion.tenant && (Number(yo.sesion.tenant.id) || (yo.sesion.maestra && v))) { SES = yo.sesion; await entrar(); }   // la maestra (Sales Brain) entra con ?vendedor=ID
+  const yo = await get('acceso_yo');
+  if (yo.ok && yo.sesion && yo.sesion.miembro) { const c = document.querySelector('#login .card'); c.innerHTML = '<h1>Hola, ' + esc(yo.sesion.miembro.nombre) + '</h1><p>El panel general es del dueño del lote. Tu lugar de trabajo es tu FyraChat.</p><a class="btn w" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="/fyrachat.html?vendedor=' + Number(yo.sesion.tenant.id) + '">Abrir mi FyraChat</a><div class="err"></div><button class="btn sec w" id="lg-salir">Salir</button>'; document.getElementById('lg-salir').onclick = async () => { await post('acceso_salir', {}); location.reload(); }; return; }
+  if (yo.ok && yo.sesion && yo.sesion.tenant && (Number(yo.sesion.tenant.id) || (yo.sesion.maestra && v))) { SES = yo.sesion; await entrar(); }   // la maestra (Sales Brain) entra con ?vendedor=ID
 })();
 $('lg-go').onclick = async () => {
   const b = $('lg-go'); b.disabled = true; $('lg-err').textContent = '';
