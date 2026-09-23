@@ -547,6 +547,31 @@ select.inp option{background:#09183F;color:#fff}
 .cf ol li.e .p{background:var(--pos);border-color:var(--pos)}.cf ol li.x .p{border-color:var(--muted);opacity:.5}.cf ol li.x{color:var(--muted)}.cf ol li.sig{background:rgba(31,111,255,.10)}
 .cf ol li .q{color:var(--txt2)}.cf ol li small{display:block;color:var(--muted);font-size:11.5px}
 .cf .ev{font-size:12px;line-height:18px;color:var(--txt2);font-variant-numeric:tabular-nums}
+
+/* ═══════════ ESCRITORIO (Mac): lista de chats a la izquierda, conversación a la derecha (orden owner 2026-09-23) ═══════════ */
+#chat-vacio{display:none}
+@media (min-width:900px){
+  body{align-items:stretch}
+  #app{max-width:none;display:grid;grid-template-columns:400px minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;box-shadow:none}
+  #app > .scr{position:relative;inset:auto;grid-column:1;grid-row:1;border-right:1px solid var(--sep);min-height:0}
+  #app > #scr-chat{grid-column:2;grid-row:1 / 3;display:flex;border-right:0;transform:none;visibility:visible;transition:none}
+  #tabbar{position:relative;grid-column:1;grid-row:2;left:auto;right:auto;bottom:auto}
+  #tabbar.hide{display:flex}
+  .lista{padding-bottom:12px}
+  #scr-chat .ch-h .back{display:none}
+  #scr-chat:not(.on) > *{display:none}
+  #scr-chat:not(.on) > #chat-vacio{display:flex}
+  #chat-vacio{flex:1;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center;padding:40px;font-size:15px}
+  #chat-vacio b{color:var(--txt);font-size:18px;font-weight:600}
+  #chat-vacio .ic{width:40px;height:40px;opacity:.5}
+  .fila.sel{background:rgba(255,255,255,.07)}
+  :root[data-tema="blanco"] .fila.sel{background:#F0F0F1}
+  .sh-bg{align-items:center}
+  .sh{max-width:560px;border-radius:24px;border-bottom:1px solid var(--border)}
+  .sh.full{max-width:680px;height:92%;max-height:92%;border-radius:24px;border:1px solid var(--border)}
+  #acceso{align-items:center}#acceso > *{width:100%;max-width:420px}
+  .aviso{left:auto;right:16px;max-width:440px}
+}
 </style>
 </head>
 <body>
@@ -667,6 +692,7 @@ select.inp option{background:#09183F;color:#fff}
 
   <!-- ═══════ CHAT ABIERTO ═══════ -->
   <div class="scr" id="scr-chat">
+    <div id="chat-vacio"><i data-ico="chat"></i><b>Elige un chat</b>Aquí se abre la conversación.</div>
     <div class="ch-h">
       <div class="l1">
         <button class="back" onclick="cerrarChat()" aria-label="Volver"><i data-ico="back"></i></button>
@@ -1232,6 +1258,7 @@ function abrirChat(id){
   $('msgs').innerHTML = h.msgs.length ? '' : '<div class="cargando">Cargando…</div>';
   if (h.msgs.length) { pintarMensajes(h); }
   $('scr-chat').classList.add('on'); $('tabbar').classList.add('hide');
+  document.querySelectorAll('.fila.sel').forEach(x => x.classList.remove('sel')); { const fs = $('lista').querySelector('.fila[data-id="' + CSS.escape(String(id)) + '"]'); if (fs) fs.classList.add('sel'); }   // escritorio: fila seleccionada
   if (!HIST) { try { history.pushState({ chat: id }, ''); HIST = true; } catch(e){} }
   cfBarra(id);
   cargarHilo(id).then(r => {
@@ -1246,7 +1273,7 @@ function abrirChat(id){
 function cerrarChat(){
   if (SELECCION) { try { SELECCION.bar.querySelector('#sel-x').click(); } catch (e) {} }
   if (!CHAT_ID) return;
-  CHAT_ID = null; $('scr-chat').classList.remove('on'); $('tabbar').classList.remove('hide'); $('nuevos').classList.remove('on');
+  CHAT_ID = null; $('scr-chat').classList.remove('on'); $('tabbar').classList.remove('hide'); document.querySelectorAll('.fila.sel').forEach(x => x.classList.remove('sel')); $('nuevos').classList.remove('on');
   if (HIST) { HIST = false; try { history.back(); } catch(e){} }
 }
 window.addEventListener('popstate', () => { if (CHAT_ID) { HIST = false; cerrarChat(); } });
