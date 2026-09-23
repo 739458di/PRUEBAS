@@ -61,7 +61,14 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .com.q{background:var(--a2-05,var(--s1));border:1px solid var(--a2-15,var(--ln))}.com.ok{background:var(--okbg);color:var(--ok)}.com.ok b{color:var(--ok)}.com.no{background:var(--offbg);color:var(--off)}
 .com.fy{background:var(--a2-08,var(--s1));color:var(--txt2)}.com.fy.ok{background:var(--okbg);color:var(--ok)}.com.fy.no{background:var(--offbg);color:var(--off)}
 .com .mon{display:inline-flex;align-items:center;gap:2px;font-weight:700;color:var(--txt)}.com .ci{width:74px;height:26px;border:1px solid var(--ln);border-radius:6px;padding:0 6px;font:700 12px var(--f);color:var(--txt);background:#fff}
-.com .cb{height:26px;border-radius:6px;padding:0 10px;font:700 12px var(--f);border:1px solid var(--ln);background:#fff;color:var(--txt);cursor:pointer}.com .cb.ok{background:var(--acento,#16A34A);border-color:var(--acento,#16A34A);color:#fff}.com .cb.no{color:var(--txt2)}
+.com .cb{height:28px;border-radius:7px;padding:0 12px;font:700 12px var(--f);border:1px solid var(--ln);background:#fff;color:var(--txt);cursor:pointer}.com .cb.ok{background:#16A34A;border-color:#16A34A;color:#fff}.com .cb.ok:hover{background:#15803D}.com .cb.no{background:#DC2626;border-color:#DC2626;color:#fff}.com .cb.no:hover{background:#B91C1C}
+/* notificación de Seb: monito + globo */
+.com.sebn{background:transparent;border:0;padding:4px 0 0;gap:8px;align-items:flex-end;flex-wrap:nowrap}
+.com.sebn .sebm{width:34px;height:auto;flex:0 0 34px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.18));animation:sebpop .5s cubic-bezier(.2,.8,.2,1)}
+.com.sebn .globo{flex:1;min-width:0;background:#fff;border:1px solid var(--a2-15,var(--ln));border-radius:12px;border-bottom-left-radius:4px;padding:8px 10px;box-shadow:0 4px 14px rgba(11,23,48,.06)}
+.com.sebn .quien{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--acento2,var(--txt2));margin-bottom:3px}
+.com.sebn .txt{color:var(--txt);font-size:12.5px;line-height:18px}.com.sebn .btns{display:flex;gap:6px;margin-top:7px}
+@keyframes sebpop{from{transform:translateY(6px) scale(.9);opacity:0}to{transform:none;opacity:1}}
 .com .cl{border:0;background:none;color:inherit;text-decoration:underline;font:600 12px var(--f);cursor:pointer;padding:0}
 /* calendario */
 .calh{display:flex;align-items:center;gap:8px;margin:0 0 10px}.calh b{font-size:15px;flex:1;font-weight:600}.calh .ib{width:34px;height:34px}
@@ -334,7 +341,7 @@ function comisionHTML(a){
   if (c.estado === 'aceptada') return '<div class="com ok">Comisión a Fyradrive <b>' + fmtDinero(c.monto) + '</b> ✓' + (AUTOS_META.puede_editar ? ' <button class="cl" data-com="cambiar" data-id="' + a.id + '">cambiar</button>' : '') + '</div>';
   if (c.estado === 'rechazada') return '<div class="com no">Sin comisión a Fyradrive' + (AUTOS_META.puede_editar ? ' <button class="cl" data-com="cambiar" data-id="' + a.id + '">cambiar</button>' : '') + '</div>';
   if (!AUTOS_META.puede_editar) return '<div class="com">Comisión a Fyradrive propuesta: <b>' + fmtDinero(c.propuesto) + '</b> · pendiente</div>';
-  return '<div class="com q" data-cid="' + a.id + '"><span>Si Fyradrive te consigue el cliente y le vende tu auto, ¿le das</span><span class="mon">$<input class="ci" value="' + c.propuesto + '" inputmode="numeric" aria-label="Monto"></span><span>?</span><button class="cb ok" data-com="aceptada" data-id="' + a.id + '">Aceptar</button><button class="cb no" data-com="rechazada" data-id="' + a.id + '">Rechazar</button></div>';
+  return '<div class="com q sebn" data-cid="' + a.id + '"><img class="sebm" src="/seb-like.webp" alt="Seb" draggable="false"><div class="globo"><div class="quien">Seb · Fyradrive</div><div class="txt">Si Fyradrive te consigue el cliente y le vende tu auto, ¿le das <span class="mon">$<input class="ci" value="' + c.propuesto + '" inputmode="numeric" aria-label="Monto"></span>?</div><div class="btns"><button class="cb ok" data-com="aceptada" data-id="' + a.id + '">Aceptar</button><button class="cb no" data-com="rechazada" data-id="' + a.id + '">Rechazar</button></div></div></div>';
 }
 function bindComision(root){
   root.querySelectorAll('.com .ci').forEach(i => { i.onclick = e => e.stopPropagation(); });
