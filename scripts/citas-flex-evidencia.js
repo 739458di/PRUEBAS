@@ -1,5 +1,5 @@
 // PRUEBAS DE LA REGLA GENERAL (orden owner 2026-09-21): REALIDAD ANTERIOR + EVIDENCIA → SOLO CAMBIA LA PARTE QUE LA EVIDENCIA TOCÓ.
-// Corre contra el motor REAL de TERRA (universo 9, sandbox: nada sale a WhatsApp). Teléfonos de prueba explícitos; limpia lo que crea.
+// Corre contra el motor REAL de TERRA (universo 12 LABORATORIO, sandbox: nada sale a WhatsApp). Teléfonos de prueba explícitos; limpia lo que crea.
 //   node scripts/citas-flex-evidencia.js            (todos)      node scripts/citas-flex-evidencia.js A,E   (algunos)
 process.env.CITAF_SIN_MAQUILLAJE = '1';   // estas pruebas verifican la MECÁNICA con las plantillas base (el maquillaje de la IA se prueba aparte)
 const fs = require('fs'); fs.readFileSync(__dirname + '/../.env', 'utf8').split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) process.env[l.slice(0, i).trim()] = process.env[l.slice(0, i).trim()] || l.slice(i + 1).trim(); });
@@ -9,9 +9,9 @@ const JUE = '2026-09-24', VIE = '2026-09-25', SAB = '2026-09-26', DOM = '2026-09
 
 async function caso(letra, titulo, tel, pasos) {
     if (SOLO.length && !SOLO.includes(letra)) return;
-    const T = (await query('SELECT id,telefono,nombre,config_json FROM tenants WHERE id=9'))[0]; T.config = JSON.parse(T.config_json); T.demo = true;
+    const T = (await query('SELECT id,telefono,nombre,config_json FROM tenants WHERE id=12'))[0];   // LABORATORIO (sandbox) T.config = JSON.parse(T.config_json); T.demo = true;
     await DEMO.delegar({ tenant: T, tel, auto_id: 1081, auto_nombre: 'Nissan Sentra Sr 2023', nombre: 'Juan Evidencia' });
-    const ch = (await query('SELECT id,telefono,nombre,tenant_id FROM conversaciones WHERE tenant_id=9 AND telefono=?', [tel]))[0];
+    const ch = (await query('SELECT id,telefono,nombre,tenant_id FROM conversaciones WHERE tenant_id=12 AND telefono=?', [tel]))[0];
     const io0 = C.ioPara(T, ch); const out = [], ven = []; let vUlt = 0;
     const io = Object.assign({}, io0, { mandar: async (tx, ts) => { out.push(tx.replace(/\n/g, ' ⏎ ')); return io0.mandar(tx, ts); }, vendedor: async tx => { ven.push(tx); return io0.vendedor(tx); } });
     console.log('\n══ ' + letra + ' · ' + titulo);

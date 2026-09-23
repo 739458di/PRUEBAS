@@ -64,6 +64,24 @@ const { intentarEleccionAparador, arranqueCarrusel, opcionesEnFlujo } = LIB_APAR
 const { RE_PETICION_POS, RE_HERR_SIN_DATOS } = LIB_REGEX_COMUNES;
 
 
+// ══ MIEMBROS DEL LOTE — DDL idempotente UNA vez por instancia (2026-09-23). Antes corría en cada panel_info/miembro_*:
+//    ALTER (fallaba "duplicate column" → 3 reintentos + 1.5 s de pausa en db.js) + CREATE + INDEX = ~2.4 s por request.
+//    Mismo estado final: tabla + índice + columna rol (solo se hace ALTER si la columna falta).
+let _ensMiembros = null;
+function ensureMiembrosUnaVez() {
+    if (_ensMiembros) return _ensMiembros;
+    _ensMiembros = (async () => {
+        await run('CREATE TABLE IF NOT EXISTS vendedores_universo (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, nombre TEXT, telefono TEXT, codigo_hash TEXT, codigo_expira INTEGER, activo INTEGER DEFAULT 0, created INTEGER)');
+        const [cols] = await Promise.all([
+            query('PRAGMA table_info(vendedores_universo)').then(r => new Set(r.map(c => String(c.name)))).catch(() => new Set()),
+            run('CREATE INDEX IF NOT EXISTS idx_vend_univ ON vendedores_universo(tenant_id, telefono)')
+        ]);
+        if (!cols.has('rol')) { try { await run('ALTER TABLE vendedores_universo ADD COLUMN rol TEXT'); } catch (e) { /* ya existe */ } }
+        return true;
+    })().catch(e => { _ensMiembros = null; throw e; });
+    return _ensMiembros;
+}
+
 async function logEscala(tel, motivo) {
     try {
         await run("CREATE TABLE IF NOT EXISTS escalas_log (id INTEGER PRIMARY KEY AUTOINCREMENT, telefono TEXT, motivo TEXT, ts INTEGER)");
@@ -946,9 +964,13 @@ module.exports = async function handler(req, res) {
         if (action === 'tenant_info') {
             const t = await tenantDeParam(VEND_PARAM);
             if (!t) return res.status(404).json({ ok: false, error: 'vendedor no dado de alta' });
-            let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
+            // RENDIMIENTO (2026-09-23): estado del puente y autos del universo no dependen entre sí → en paralelo
+            const [s2, autos] = await Promise.all([
+                query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]).catch(() => []),
+                autosDeTenant(t)
+            ]);
+            let sesion = s2[0] || null;
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
-            const autos = await autosDeTenant(t);
             return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, marca: (t.config && t.config.marca) || null, tema: (t.config && t.config.tema) || null, acento: (t.config && t.config.acento) || null, acento2: (t.config && t.config.acento2) || null, miembro: (SES && SES.miembro) ? { id: SES.miembro.id, nombre: SES.miembro.nombre, rol: SES.miembro.rol || 'vendedor' } : null, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
@@ -991,7 +1013,7 @@ module.exports = async function handler(req, res) {
             if (!/^521\d{10}$/.test(telD)) return R(400, { ok: false, error: 'teléfono inválido — 10 dígitos' });
             const autos = await autosDeTenant(t);
             let auto = autos.find(a => Number(a.id) === Number(body.auto_id) || Number(a.fyradrive_web_id) === Number(body.auto_id));
-            if (!auto && body.entrante === true && !body.auto_id && autos.length) auto = autos[0];   // ENTRANTE de un desconocido (todo_entra): nace con el primer auto del universo en foco; el cerebro afina cuál quiere
+            if (!auto && body.entrante === true && !body.auto_id) auto = autos[0] || { id: null, fyradrive_web_id: null, marca: '', modelo: '', anio: null, sin_auto: true };   // ENTRANTE de un desconocido (todo_entra): nace con el primer auto del universo en foco (o SIN auto si el lote aún no tiene catálogo: el chat existe y el cerebro pregunta/escala); el cerebro afina cuál quiere
             if (!auto) return R(400, { ok: false, error: 'ese auto no es del vendedor', necesita: 'auto' });
             const autoNombre = [auto.marca, auto.modelo, auto.anio].filter(Boolean).join(' ');
             const nomC = String(body.nombre || '').trim();
@@ -2664,21 +2686,25 @@ module.exports = async function handler(req, res) {
                 const antes = Number(req.query.antes) || 0;
                 const desde = Number(req.query.desde) || 0;   // solo lo NUEVO (ts > desde), en orden ascendente; para refrescar un hilo abierto
                 const SEL = 'SELECT id, msg_id, direccion, emisor, texto, ts, tipo, ai_generated FROM mensajes WHERE conversacion_id=?';
-                const rowsM = antes
-                    ? await query(SEL + ' AND ts < ? ORDER BY ts DESC, id DESC LIMIT ?', [c.id, antes, limit + 1])
-                    : (desde
-                        ? await query(SEL + ' AND ts > ? ORDER BY ts ASC, id ASC LIMIT ?', [c.id, desde, limit + 1])
-                        : await query(SEL + ' ORDER BY ts DESC, id DESC LIMIT ?', [c.id, limit + 1]));
+                // RENDIMIENTO (2026-09-23): mensajes, no_leidos, foco, catálogo y delegación son lecturas independientes → en paralelo
+                // (antes 6 viajes en fila). El UPDATE de "leído" sigue dependiendo de haber leído no_leidos; las portadas, del catálogo + foco.
+                const [rowsM, nlRow, focoH, cat, deleg] = await Promise.all([
+                    antes
+                        ? query(SEL + ' AND ts < ? ORDER BY ts DESC, id DESC LIMIT ?', [c.id, antes, limit + 1])
+                        : (desde
+                            ? query(SEL + ' AND ts > ? ORDER BY ts ASC, id ASC LIMIT ?', [c.id, desde, limit + 1])
+                            : query(SEL + ' ORDER BY ts DESC, id DESC LIMIT ?', [c.id, limit + 1])),
+                    query('SELECT no_leidos FROM conversaciones WHERE id=?', [c.id]).catch(() => []).then(r => r[0]),
+                    focoDe(tV, c.telefono).catch(() => null),
+                    autosDeTenant(tV),
+                    U.delegacionActiva(c.id).catch(() => null)
+                ]);
                 const hay_mas = rowsM.length > limit;
                 const asc = desde ? rowsM.slice(0, limit) : rowsM.slice(0, limit).reverse();
                 // chatPorId no trae no_leidos (COLS_CHAT): 1 lectura chica para reportarlo y, sin `antes`, 1 UPDATE condicionado (marca leído)
-                const nlRow = (await query('SELECT no_leidos FROM conversaciones WHERE id=?', [c.id]).catch(() => []))[0];
                 const noLeidosAntes = Number(nlRow && nlRow.no_leidos) || 0;
                 if (!antes && noLeidosAntes) await run('UPDATE conversaciones SET no_leidos=0 WHERE id=? AND COALESCE(no_leidos,0)>0', [c.id]).catch(() => { });   // con `antes` (historial) NO se marca leído
-                const focoH = await focoDe(tV, c.telefono).catch(() => null);
-                const cat = await autosDeTenant(tV);
                 const portadasH = await portadasDe(cat.slice(0, 200).map(a => a.fyradrive_web_id).concat(focoH && focoH.web_id ? [focoH.web_id] : []));
-                const deleg = await U.delegacionActiva(c.id).catch(() => null);
                 return okJ({
                     chat: {
                         chat_id: Number(c.id), telefono: String(c.telefono), nombre: nombreDe(c), ini: iniDe(c.nombre),
@@ -2699,7 +2725,7 @@ module.exports = async function handler(req, res) {
                 const env = await MSJ.enviar({ tenantId: TV, chatId: c.id, origen: 'manual', clave, texto, manual: true, sesionId: SID, accion: 'manual' });
                 // "cita confirmada/cancelada" en el chat del dueño (t0): la señal va DESPUÉS de la puerta y solo si no es un reintento repetido de la misma clave (antes se disparaba dos veces al reintentar)
                 if (!TV && !env.repetido) { try { await citasVivas.senalManual(c.telefono, texto); } catch (e) { console.error('[senalManual v2]', e.message); } }
-                if (env.ok && TV && !env.repetido && tV.config && Number(tV.config.seb_auto) === 1) { try { await VOZ.entregar({ tenant: tV, chat: c, motivo: 'contestaste tú', avisar: false, fuente: 'vendedor' }); } catch (e) { } }   // escribir a mano = tomar la voz
+                if (env.ok && TV && !env.repetido && tV.config && Number(tV.config.seb_auto) === 1) { try { await VOZ.entregar({ tenant: tV, chat: c, motivo: 'contestaste tú', avisar: false, fuente: 'vendedor', miembro: SES && SES.miembro ? SES.miembro : null }); } catch (e) { } }   // escribir a mano = tomar la voz
                 if (!env.ok) return res.status(env.status && env.status >= 400 ? env.status : 502).json({ ok: false, error: env.error || 'no se pudo mandar', chat_id: Number(c.id), clave, en_vuelo: !!env.en_vuelo });
                 return okJ({ mensaje: env.mensaje, chat_id: Number(c.id), clave, simulado: !!env.simulado, repetido: !!env.repetido });
             }
@@ -2949,16 +2975,20 @@ module.exports = async function handler(req, res) {
 
             // 11) AUTOS_MIOS — autos del universo (t0 = inventario activo completo, límite 200) con portada, km, fotos y estado
             // ══ PANEL DEL UNIVERSO (orden owner 2026-09-22): resumen, autos, calendario de citas, miembros (vendedores del lote), número ══
-            const ensureMiembros = async () => { try { await run('ALTER TABLE vendedores_universo ADD COLUMN rol TEXT'); } catch (e) { } await run('CREATE TABLE IF NOT EXISTS vendedores_universo (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, nombre TEXT, telefono TEXT, codigo_hash TEXT, codigo_expira INTEGER, activo INTEGER DEFAULT 0, created INTEGER)'); await run('CREATE INDEX IF NOT EXISTS idx_vend_univ ON vendedores_universo(tenant_id, telefono)'); };
+            const ensureMiembros = () => ensureMiembrosUnaVez();   // RENDIMIENTO (2026-09-23): DDL una vez por instancia (antes ALTER+CREATE+INDEX en CADA panel_info: ~2.4 s)
             const shaC = x => require('crypto').createHash('sha256').update(String(x)).digest('hex');
             const SOLO_DUENO = { ok: false, error: 'El panel general es solo del dueño del lote.', miembro: true };
             if (['panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar'].includes(action) && SES && SES.miembro && SES.miembro.rol !== 'admin') return res.status(403).json(SOLO_DUENO);   // admin del lote (rol 'admin') sí administra
             if (action === 'panel_info') {
                 if (!TV) return err(400, 'el panel es por universo');
                 await ensureMiembros();
-                const miembros = (await query('SELECT id, nombre, telefono, activo, created, rol FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV])).map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, rol: m.rol || 'vendedor', activo: Number(m.activo) === 1, created: Number(m.created) }));
-                let citas = { filas: [], cerradas: [] }; try { if (CITAF.activo(tV)) citas = await CITAF.tablero({ tenant: tV }); } catch (e) { }
-                const chats = (await query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]))[0];
+                // RENDIMIENTO (2026-09-23): miembros, tablero de citas y conteo de chats no dependen entre sí → en paralelo (antes: uno tras otro)
+                const [filasM, citas, chats] = await Promise.all([
+                    query('SELECT id, nombre, telefono, activo, created, rol FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV]),
+                    (async () => { try { if (CITAF.activo(tV)) return await CITAF.tablero({ tenant: tV }); } catch (e) { } return { filas: [], cerradas: [] }; })(),
+                    query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]).then(r => r[0])
+                ]);
+                const miembros = filasM.map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, rol: m.rol || 'vendedor', activo: Number(m.activo) === 1, created: Number(m.created) }));
                 return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, acento: (tV.config && tV.config.acento) || null, acento2: (tV.config && tV.config.acento2) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
                     citas: (citas.filas || []).concat(citas.cerradas || []).map(f => ({ cita_id: f.cita_id, chat_id: f.chat_id, nombre: f.nombre, auto: f.auto, estado: f.estado, cuando: f.cuando, ini_ts: f.ini_ts, fin_ts: f.fin_ts, situacion: f.situacion, precision: f.precision || null, hora: f.hora || null, dias: f.dias || [], proxima: f.proxima || null })),
                     miembros, chats_delegados: Number(chats.n) || 0 });
@@ -3004,11 +3034,14 @@ module.exports = async function handler(req, res) {
                 }
                 const webIds = rows.map(r => r.fyradrive_web_id).filter(Boolean).map(Number);
                 const webEstado = {}, fotosN = {};
-                if (webIds.length) {
-                    for (const w of await query(`SELECT id, estado FROM autos WHERE id IN (${ph(webIds)})`, webIds).catch(() => [])) webEstado[Number(w.id)] = String(w.estado || '');
-                    for (const f of await query(`SELECT auto_id, COUNT(*) n FROM imagenes_autos WHERE auto_id IN (${ph(webIds)}) AND url_imagen IS NOT NULL GROUP BY auto_id`, webIds).catch(() => [])) fotosN[Number(f.auto_id)] = Number(f.n);
-                }
-                const portadas = await portadasDe(webIds);
+                // RENDIMIENTO (2026-09-23): las 3 lecturas por web_id son independientes → en paralelo
+                const [rowsW, rowsF, portadas] = await Promise.all([
+                    webIds.length ? query(`SELECT id, estado FROM autos WHERE id IN (${ph(webIds)})`, webIds).catch(() => []) : [],
+                    webIds.length ? query(`SELECT auto_id, COUNT(*) n FROM imagenes_autos WHERE auto_id IN (${ph(webIds)}) AND url_imagen IS NOT NULL GROUP BY auto_id`, webIds).catch(() => []) : [],
+                    portadasDe(webIds)
+                ]);
+                for (const w of rowsW) webEstado[Number(w.id)] = String(w.estado || '');
+                for (const f of rowsF) fotosN[Number(f.auto_id)] = Number(f.n);
                 const estadoDe = r => { const w = webEstado[Number(r.fyradrive_web_id)]; if (w === 'en_revision' || w === 'no_aprobado') return 'revision'; if (w === 'vendido' || r.estado === 'vendido') return 'vendido'; if (r.estado === 'activo' || w === 'activo') return 'activo'; return 'revision'; };
                 return okJ({ autos: rows.map(r => ({ id: Number(r.id), web_id: r.fyradrive_web_id == null ? null : Number(r.fyradrive_web_id), nombre: nombreAuto(r), marca: r.marca, modelo: r.modelo, anio: r.anio == null ? null : Number(r.anio), precio: r.precio == null ? null : Number(r.precio), km: r.kilometraje == null ? null : Number(r.kilometraje), portada: (r.fyradrive_web_id && portadas[Number(r.fyradrive_web_id)]) || null, estado: estadoDe(r), fotos: fotosN[Number(r.fyradrive_web_id)] || 0, rol: r.rol || (TV ? null : 'comercializa') })), tenant_id: TV });
             }

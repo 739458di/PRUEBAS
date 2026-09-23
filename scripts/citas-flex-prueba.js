@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path'); const RAIZ = path.join(__dirna
 fs.readFileSync(path.join(RAIZ, '.env'), 'utf8').split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) process.env[l.slice(0, i).trim()] = process.env[l.slice(0, i).trim()] || l.slice(i + 1).trim(); });
 const { query, run } = require('../lib/seb/db.js'); const DEMO = require('../lib/seb/demo.js'); const CITAF = require('../lib/seb/citas-flex.js');
 const { at } = CITAF._t; const H = 3600000, MIN = 60000;
-const TEN = 9, AUTO_WEB = 1081, AUTO2_INV = 236;   // Sentra (catálogo de TERRA) · Mazda 3 (segundo auto SOLO durante la prueba)
+const TEN = 12, AUTO_WEB = 1081, AUTO2_INV = 236;   // LABORATORIO (universo 12, sandbox) · Sentra (catálogo del LAB) · Mazda 3 (segundo auto SOLO durante la prueba)
 const MIE = '2026-09-23', VIE = '2026-09-25', SAB = '2026-09-26', DOM = '2026-09-27', LUN = '2026-09-28';
 const soloEstos = (process.argv[2] || '').split(',').map(Number).filter(Boolean);
 let T, fallas = 0; const resumen = [];

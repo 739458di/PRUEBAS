@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#FFFFFF">
 <title>Panel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{--bg:#FFFFFF;--side:#FAFAFA;--s1:#F4F4F5;--ln:#E5E7EB;--ln2:#EEF0F3;--txt:#111827;--txt2:#6B7280;--mut:#9CA3AF;--ok:#16A34A;--okbg:#ECFDF3;--warn:#B45309;--warnbg:#FEF3C7;--off:#6B7280;--offbg:#F3F4F6;--acc:#111827;--r:10px;--f:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
 *{box-sizing:border-box}html,body{margin:0;height:100%}
@@ -187,8 +187,9 @@ $('salir').onclick = salir; $('tb-salir').onclick = salir;
 let TID = 0;
 async function entrar(){
   TID = Number(new URLSearchParams(location.search).get('vendedor')) || Number(SES.tenant.id);
-  const r = await get('panel_info', { vendedor: String(TID) }); if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
-  INFO = r; const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || [];
+  const [r, a] = await Promise.all([get('panel_info', { vendedor: String(TID) }), get('autos_mios', { vendedor: String(TID) })]);   // en paralelo (rendimiento 2026-09-23)
+  if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
+  INFO = r; AUTOS = (a.ok && a.autos) || [];
   const t = INFO.tenant, m = t.marca || t.nombre; document.title = m;
   aplicarAcentos(t);
   $('sd-marca').textContent = m; $('tb-marca').textContent = m; $('sd-mk').textContent = m[0]; $('tb-mk').textContent = m[0];

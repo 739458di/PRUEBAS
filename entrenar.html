@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Playground de citas · TERRA</title>
+<title>Playground de citas · LAB</title>
 <style>
 :root{
   --bg:#0c0e13; --p1:#12151d; --p2:#191d28; --ln:#252b3b; --ln2:#343d55;
@@ -134,7 +134,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}button
 </div>
 <div class="tip" id="tip" hidden></div>
 <script>
-const API = '/api/seb-panel'; const QS = new URLSearchParams(location.search); const VEND = QS.get('vendedor') || '9';
+const API = '/api/seb-panel'; const QS = new URLSearchParams(location.search); const VEND = QS.get('vendedor') || '12';   // LABORATORIO (sandbox); TERRA (9) ya es real: jamás jugar ahí
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clave = p => p + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);

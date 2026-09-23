@@ -8,6 +8,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FyraChat">
 <meta name="color-scheme" content="dark">
+<script>/* RENDIMIENTO (2026-09-23): pre-pinta el tema/acentos del universo desde caché local ANTES del primer cuadro, para no ver el flash oscuro→blanco
+   mientras llegan tenant_marca/tenant_info (~0.3-1.5 s). La caché la escribe aplicarTemaYMarca con la respuesta real del servidor; si no hay caché, no pasa nada. */
+(function(){try{var v=new URLSearchParams(location.search).get('vendedor');var c=JSON.parse(localStorage.getItem('fyra_marca_'+((v&&v!=='0')?v:'ses'))||'null');if(!c||c.tema!=='blanco')return;var h=document.documentElement,ok=function(x){return /^#[0-9a-f]{6}$/i.test(String(x||''))};h.dataset.tema='blanco';h.dataset.pre='1';var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content','#FFFFFF');if(ok(c.acento2)){var a2=c.acento2,a1=ok(c.acento)?c.acento:a2,r=h.style;r.setProperty('--pri',a2);r.setProperty('--pri2',a2);r.setProperty('--pos',a2);r.setProperty('--out',a2);r.setProperty('--grad','linear-gradient(135deg,'+a2+','+a2+')');r.setProperty('--acento',a1);r.setProperty('--acento2',a2);r.setProperty('--a2-08',a2+'14');r.setProperty('--a2-12',a2+'1f');r.setProperty('--a1-12',a1+'1f');h.dataset.acentos='1';if(mt)mt.setAttribute('content',a2);}}catch(e){}})();
+</script>
 <title>FyraChat</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2309183F'/%3E%3Ctext x='32' y='42' font-size='30' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23fff'%3EF%3C/text%3E%3C/svg%3E">
 <link rel="apple-touch-icon" sizes="180x180" href="/icono-180.png">
@@ -905,7 +909,7 @@ function mostrarAcceso(aviso){ $a('acceso').classList.add('on'); if (aviso) $a('
   // MODO PRUEBA: ?demo=1 → teléfono del usuario PRUEBAS# prellenado + leyenda del código fijo (solo vale para ese tenant)
   if (q.get('demo') === '1') { $a('acc-tel').value = '8888888888'; $a('acc-demo1').style.display = 'block'; $a('acc-demo').style.display = 'block'; }
   const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
-async function accSalir(){ await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/fyrachat.html'); }
+async function accSalir(){ try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace('/fyrachat.html'); }
 function fechaCorta(x){ try { return new Date(ms(x)).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
 async function abrirDispositivos(){
   const sh = sheet({ titulo:'Tus dispositivos', html:'<p class="hint">Cada dispositivo donde entraste con tu código.</p><div class="grupo" id="disp-lista"><div class="row"><div class="sq">' + ico('devices') + '</div><div class="tx"><div class="t">Cargando…</div></div></div></div>', pie:'<button type="button" class="cta rojo" id="disp-cerrar">Cerrar todas las sesiones</button>' });
@@ -963,6 +967,10 @@ function telFmtDe(t){ const telV = String(t || '').replace(/\D/g, ''); return te
 // ══════════ TEMA Y MARCA POR UNIVERSO (config.tema / config.marca; p.ej. TERRA IA en blanco) ══════════
 function aplicarTemaYMarca(t){
   if (!t) return;
+  // caché del tema para el pre-pintado del <head> (por ?vendedor=, o 'ses' para la sesión sin parámetro; se borra al salir)
+  try { const v = new URLSearchParams(location.search).get('vendedor'); const pack = JSON.stringify({ tema: t.tema || null, acento: t.acento || null, acento2: t.acento2 || null }); if (v && v !== '0') localStorage.setItem('fyra_marca_' + v, pack); else if (t.id != null) localStorage.setItem('fyra_marca_ses', pack); } catch (e) { }
+  // si el pre-pintado adivinó "blanco" pero este universo NO es blanco (caché vieja), se deshace y vuelve el tema oscuro de siempre
+  if (t.tema !== 'blanco' && document.documentElement.dataset.pre) { const h = document.documentElement; delete h.dataset.pre; delete h.dataset.tema; delete h.dataset.acentos; h.removeAttribute('style'); const mt0 = document.querySelector('meta[name="theme-color"]'); if (mt0) mt0.setAttribute('content', '#050C2A'); }
   if (t.tema === 'blanco') { document.documentElement.dataset.tema = 'blanco'; const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', '#FFFFFF'); }
   // ACENTOS DE MARCA (orden owner 2026-09-23, Autos Universales): fondo blanco siempre; acento2 = azul oscuro (botones, burbujas mías, positivo); acento = rojo (detalles: etiqueta, campana con no leídos)
   if (t.tema === 'blanco' && /^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) {
@@ -1003,7 +1011,7 @@ async function apiPost(action, body){
   catch (e) { return { ok: false, error: 'Sin conexión' }; }
 }
 let SES_CAIDA = false;
-function sesionCaida(){ if (SES_CAIDA) return; SES_CAIDA = true; try { if (WS) WS.close(); } catch(e){} mostrarAcceso('Tu sesión terminó. Vuelve a entrar.'); }
+function sesionCaida(){ if (SES_CAIDA) return; SES_CAIDA = true; try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} try { if (WS) WS.close(); } catch(e){} mostrarAcceso('Tu sesión terminó. Vuelve a entrar.'); }
 // error inline (nunca toasts de éxito; los errores sí se dicen, sin alert)
 let AVISO_T = null;
 function avisoError(txt){ const a = $('aviso'); $('aviso-t').textContent = txt; a.classList.add('on'); clearTimeout(AVISO_T); AVISO_T = setTimeout(ocultarAviso, 6000); }
