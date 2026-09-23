@@ -961,6 +961,8 @@ async function cargarTenantInfo(){
   if (!d.ok) { avisoError(d.error || 'Este link no corresponde a un vendedor dado de alta'); return; }
   TENANT = Object.assign({}, TENANT, d.tenant, { autos: d.autos || [], sesion: d.sesion || null });
   aplicarTemaYMarca(TENANT);
+  // ÚLTIMO LUGAR (orden owner 2026-09-24): el admin del lote cae donde se quedó (panel o FyraChat). Solo al entrar "en limpio" (sin ?chat=).
+  try { const qsL = new URLSearchParams(location.search); if (TENANT.miembro && TENANT.miembro.rol === 'admin' && localStorage.getItem('fyra_lugar') === 'panel' && !qsL.get('chat') && !window.__yaCambie) { window.__yaCambie = 1; location.replace('/panel.html'); return; } localStorage.setItem('fyra_lugar', 'fyrachat'); } catch (e) { }
   if (TENANT.demo) { document.body.classList.add('demo'); document.title = TENANT.marca ? (TENANT.marca + (TENANT.sandbox ? ' · SANDBOX' : '')) : (TENANT.sandbox ? ('FyraChat · ' + (TENANT.nombre || '') + ' · SANDBOX') : 'FyraChat · PRUEBAS# · MODO PRUEBA'); }
   pintarUniverso();
   if (!TENANT.demo && !T0 && (!TENANT.sesion || TENANT.sesion.estado !== 'vinculado')) avisoError('Tu WhatsApp aún no está vinculado al asistente. Vincúlalo en fyradrive.com/seb.');
@@ -1064,7 +1066,7 @@ function pintarMas(){
   c.innerHTML =
     '<div class="grupo">' +
       masRow('user', 'Tu cuenta', 'Perfil y datos', 'abrirCuenta()') +
-      (TENANT && TENANT.miembro && TENANT.miembro.rol === 'admin' ? masRow('usercheck', 'Vendedores del lote', 'Da de alta y administra a tu equipo', "location.href='/panel.html'") : '') +
+      (TENANT && TENANT.miembro && TENANT.miembro.rol === 'admin' ? masRow('monitor', 'Panel del lote', 'Autos, chats de tus vendedores, citas y miembros', "try{localStorage.setItem('fyra_lugar','panel')}catch(e){};location.href='/panel.html'") : '') +
       masRow('devices', 'Tus dispositivos', 'Dónde está abierto tu FyraChat', 'abrirDispositivos()') +
       masRow('bell', 'Notificaciones', 'Configura tus alertas', "abrirPronto('Notificaciones', 'Aquí vas a elegir qué alertas te llegan y cuándo.')") +
       masRow('help', 'Ayuda', 'Tutoriales y soporte', 'abrirAyuda()') +

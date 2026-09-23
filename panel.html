@@ -214,6 +214,8 @@ async function entrar(){
   $('sd-nombre').textContent = t.nombre; $('sd-user').textContent = t.usuario || ''; $('sd-av').textContent = ini(t.nombre);
   $('titulo').textContent = 'Configuración de ' + m;
   pintarSideFC();
+  try { localStorage.setItem('fyra_lugar', 'panel'); } catch (e) { }
+  if (SES && SES.miembro && SES.miembro.rol === 'admin') { const irMi = () => { try { localStorage.setItem('fyra_lugar', 'fyrachat'); } catch (e) { } location.href = '/fyrachat.html?vendedor=' + TID; }; const b1 = document.createElement('button'); b1.className = 'nav'; b1.innerHTML = ico('chat') + 'Mi FyraChat'; b1.onclick = irMi; document.querySelector('.snav').insertBefore(b1, document.querySelector('.snav .grp')); const b2 = document.createElement('button'); b2.className = 'x'; b2.textContent = 'Mi FyraChat'; b2.onclick = irMi; document.querySelector('.topbar .x').before(b2); }
   $('login').style.display = 'none'; $('app').classList.add('on'); MES = null; ir('general');
 }
 document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => ir(b.dataset.v));
