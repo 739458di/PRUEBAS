@@ -980,7 +980,8 @@ module.exports = async function handler(req, res) {
             if (t.demo) telD = DEMO.telComprador(telD);   // MODO PRUEBA: el comprador es SIEMPRE del carril de pruebas
             if (!/^521\d{10}$/.test(telD)) return R(400, { ok: false, error: 'teléfono inválido — 10 dígitos' });
             const autos = await autosDeTenant(t);
-            const auto = autos.find(a => Number(a.id) === Number(body.auto_id) || Number(a.fyradrive_web_id) === Number(body.auto_id));
+            let auto = autos.find(a => Number(a.id) === Number(body.auto_id) || Number(a.fyradrive_web_id) === Number(body.auto_id));
+            if (!auto && body.entrante === true && !body.auto_id && autos.length) auto = autos[0];   // ENTRANTE de un desconocido (todo_entra): nace con el primer auto del universo en foco; el cerebro afina cuál quiere
             if (!auto) return R(400, { ok: false, error: 'ese auto no es del vendedor', necesita: 'auto' });
             const autoNombre = [auto.marca, auto.modelo, auto.anio].filter(Boolean).join(' ');
             const nomC = String(body.nombre || '').trim();
@@ -2715,7 +2716,7 @@ module.exports = async function handler(req, res) {
                     return res.status(codigoDe(rI)).json(rI);
                 }
                 if (tV.config && Number(tV.config.todo_entra) === 1 && (E.modo || 'silencio') === 'silencio' && E.entrante !== true) return err(400, 'En este universo agregar un comprador es mandarle el primer mensaje: elige qué le mandas.', { necesita: 'modo' });
-                const body = { telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
+                const body = { telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, entrante: E.entrante === true, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
                 const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'delegar_v2', sesionId: SID }, async () => {
                     const rD = await delegarCore(tV, body, { sesionId: SID, clave });
                     const o = rD.out || {};

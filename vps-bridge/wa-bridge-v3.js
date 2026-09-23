@@ -528,7 +528,7 @@ function crearUniverso(tenant) {
         genConexion: 0, reconectTimer: null, conectando: false, ghostTimer: null, reintentos: 0,
         enviadosPorPanel: new Set(), sentStore: new Map(), getMsgRetries: new Map(), getMsgMemo: new Map(), sesionReseteada: new Map(),
         lidAPhone: lidMapDe(tenant.id).lidAPhone, phoneALid: lidMapDe(tenant.id).phoneALid, colasPorTel: new Map(),   // CUOTA: caché a nivel PROCESO (sobrevive reconexiones y re-aperturas)
-        autoOpenerTimers: new Map(), autoOpenerEnVuelo: new Set(), autoOpenerPendiente: new Set(),
+        autoOpenerTimers: new Map(), autoOpenerEnVuelo: new Set(), autoOpenerPendiente: new Set(), delegando: new Map(),
         ilegibleAvisado: new Map(), ghostEnCurso: false,
         chatsActivos: new Map(),                                     // tel → fila de chats_activos (Fase 2: delegación)
     };
@@ -832,7 +832,12 @@ async function conectar() {
                 if (jidD.endsWith('@g.us') || jidD.endsWith('@broadcast') || jidD === 'status@broadcast' || jidD.endsWith('@newsletter')) continue;
                 if (m.messageStubType === STUB_CIPHERTEXT) continue;              // cifrado ilegible: ni siquiera se registra
                 const telD = telefonoReal(m);
-                const chatD = telD ? U.chatsActivos.get(String(telD)) : null;
+                let chatD = telD ? U.chatsActivos.get(String(telD)) : null;
+                // NÚMERO DEDICADO (orden owner 2026-09-23, TERRA): con config.todo_entra=1 TODO entrante de un desconocido ya es del giro →
+                // nace como chat del universo (delegar_v2 entrante en fyrachat, misma puerta que el sandbox) y sigue por el camino normal.
+                if (!chatD && telD && tenant.config && Number(tenant.config.todo_entra) === 1 && !m.key.fromMe && m.message && !esInvisible(m.message) && !(m.messageStubType === STUB_CIPHERTEXT)) {
+                    chatD = await U.autoDelegar(String(telD), m.pushName || null);
+                }
                 if (!chatD) continue;                                              // lo no delegado NO EXISTE
                 const mkD = Object.keys(m.message || {});
                 if (!m.message || esInvisible(m.message)) continue;               // protocolo/llaves/reacciones: sin burbuja
@@ -1434,6 +1439,22 @@ async function registrarManualIlegible(m) {
     };
     // ══ VINCULACIÓN POR CÓDIGO (sin QR): WhatsApp → Dispositivos vinculados → Vincular con número
     // de teléfono. El vendedor teclea el código en SU teléfono. Solo mientras no esté registrado.
+    // TODO_ENTRA: da de alta al desconocido como chat del universo (idempotente por clave; una sola llamada en vuelo por teléfono).
+    U.autoDelegar = async (tel, nombre) => {
+        if (U.delegando.has(tel)) return U.delegando.get(tel);
+        const pr = (async () => {
+            try {
+                const r = await fetch('https://fyrachat.vercel.app/api/seb-panel?action=delegar_v2', { method: 'POST', headers: HDR_PUENTE,
+                    body: cuerpoPanel({ vendedor: String(tenant.id), clave: 'entrante:' + tenant.id + ':' + tel, telefono: tel, nombre: nombre || '', entrada: { modo: 'silencio', entrante: true } }) });
+                const j = await r.json().catch(() => ({}));
+                console.log('[t' + tenant.id + '] todo_entra · alta ' + jidHash(tel) + ' → ' + (j.ok ? 'ok chat ' + j.chat_id : 'falló ' + (j.error || r.status)));
+            } catch (e) { console.error('[t' + tenant.id + '] todo_entra alta:', e.message); }
+            return U.chatsActivos.get(tel) || null;
+        })();
+        U.delegando.set(tel, pr);
+        pr.finally(() => U.delegando.delete(tel));
+        return pr;
+    };
     U.codigoVinculacion = async () => {
         if (!U.sock) return { ok: false, error: 'universo sin socket' };
         // INVARIANTE 6 (spec 2026-09-10): con creds.registered=true JAMÁS se limpia auth salvo que el estado REPORTADO del
