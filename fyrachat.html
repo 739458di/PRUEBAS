@@ -573,6 +573,8 @@ select.inp option{background:#09183F;color:#fff}
   .aviso{left:auto;right:16px;max-width:440px}
 }
 :root[data-tema="blanco"] .tag{background:#EDEEF0;color:#111}
+:root[data-tema="blanco"] .tag{background:var(--acento, #EDEEF0);color:#fff}
+:root[data-tema="blanco"]:not([style*="--acento"]) .tag{background:#EDEEF0;color:#111}
 </style>
 </head>
 <body>
@@ -949,6 +951,8 @@ function telFmtDe(t){ const telV = String(t || '').replace(/\D/g, ''); return te
 function aplicarTemaYMarca(t){
   if (!t) return;
   if (t.tema === 'blanco') { document.documentElement.dataset.tema = 'blanco'; const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', '#FFFFFF'); }
+  // ACENTOS DE MARCA (orden owner 2026-09-23, Autos Universales): fondo blanco siempre; acento2 = azul oscuro (botones, burbujas mías, positivo); acento = rojo (detalles: etiqueta, campana con no leídos)
+  if (t.tema === 'blanco' && /^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) { const r = document.documentElement.style; r.setProperty('--pri', t.acento2); r.setProperty('--pri2', t.acento2); r.setProperty('--pos', t.acento2); r.setProperty('--out', t.acento2); r.setProperty('--grad', 'linear-gradient(135deg,' + t.acento2 + ',' + t.acento2 + ')'); if (/^#[0-9a-f]{6}$/i.test(String(t.acento || ''))) { r.setProperty('--danger', t.acento); r.setProperty('--acento', t.acento); } }
   if (t.marca) {
     const m = String(t.marca).trim(); const partes = m.split(/\s+/); const html = partes.length > 1 ? esc(partes.slice(0, -1).join(' ')) + ' <b>' + esc(partes[partes.length - 1]) + '</b>' : esc(m);
     document.querySelectorAll('.wm').forEach(el => { el.innerHTML = html; });

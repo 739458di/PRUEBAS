@@ -941,7 +941,7 @@ module.exports = async function handler(req, res) {
         }
         if (action === 'tenant_marca') {   // PÚBLICA: solo nombre, marca y tema (para pintar la pantalla de entrada del universo)
             const tM = await tenantDeParam(VEND_PARAM); if (!tM || !Number(tM.id)) return res.status(404).json({ ok: false });
-            return res.status(200).json({ ok: true, nombre: tM.nombre, marca: (tM.config && tM.config.marca) || null, tema: (tM.config && tM.config.tema) || null });
+            return res.status(200).json({ ok: true, nombre: tM.nombre, marca: (tM.config && tM.config.marca) || null, tema: (tM.config && tM.config.tema) || null, acento: (tM.config && tM.config.acento) || null, acento2: (tM.config && tM.config.acento2) || null });
         }
         if (action === 'tenant_info') {
             const t = await tenantDeParam(VEND_PARAM);
@@ -949,7 +949,7 @@ module.exports = async function handler(req, res) {
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, marca: (t.config && t.config.marca) || null, tema: (t.config && t.config.tema) || null, miembro: (SES && SES.miembro) ? { id: SES.miembro.id, nombre: SES.miembro.nombre } : null, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, marca: (t.config && t.config.marca) || null, tema: (t.config && t.config.tema) || null, acento: (t.config && t.config.acento) || null, acento2: (t.config && t.config.acento2) || null, miembro: (SES && SES.miembro) ? { id: SES.miembro.id, nombre: SES.miembro.nombre } : null, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
@@ -2956,7 +2956,7 @@ module.exports = async function handler(req, res) {
                 const miembros = (await query('SELECT id, nombre, telefono, activo, created FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV])).map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, activo: Number(m.activo) === 1, created: Number(m.created) }));
                 let citas = { filas: [], cerradas: [] }; try { if (CITAF.activo(tV)) citas = await CITAF.tablero({ tenant: tV }); } catch (e) { }
                 const chats = (await query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]))[0];
-                return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
+                return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, acento: (tV.config && tV.config.acento) || null, acento2: (tV.config && tV.config.acento2) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
                     citas: (citas.filas || []).concat(citas.cerradas || []).map(f => ({ cita_id: f.cita_id, chat_id: f.chat_id, nombre: f.nombre, auto: f.auto, estado: f.estado, cuando: f.cuando, ini_ts: f.ini_ts, fin_ts: f.fin_ts, situacion: f.situacion, precision: f.precision || null, hora: f.hora || null, dias: f.dias || [], proxima: f.proxima || null })),
                     miembros, chats_delegados: Number(chats.n) || 0 });
             }

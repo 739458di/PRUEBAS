@@ -42,7 +42,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer}
 .topbar{display:none}
 h1{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 18px}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--ln);margin:0 0 24px;overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
-.tab{border:0;background:none;padding:10px 14px;font-size:14px;color:var(--txt2);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}.tab.on{color:var(--txt);font-weight:600;border-bottom-color:var(--txt)}
+.tab{border:0;background:none;padding:10px 14px;font-size:14px;color:var(--txt2);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}.tab.on{color:var(--txt);font-weight:600;border-bottom-color:var(--acc)}
 h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .desc{color:var(--txt2);max-width:640px;margin:0 0 18px}
 .tools{display:flex;gap:10px;margin-bottom:12px}
@@ -61,7 +61,7 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .calh{display:flex;align-items:center;gap:8px;margin:0 0 10px}.calh b{font-size:15px;flex:1;font-weight:600}.calh .ib{width:34px;height:34px}
 .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--ln);border-radius:var(--r);overflow:hidden;background:var(--ln)}.cal>div{background:#fff;min-width:0}
 .cal .dn{font-size:11px;font-weight:600;color:var(--txt2);text-align:center;padding:8px 0;background:var(--side)}
-.cal .d{min-height:86px;padding:6px;font-size:12px}.cal .d.out{background:#FCFCFC;color:var(--mut)}.cal .d .n{font-weight:600;margin-bottom:4px;width:22px;height:22px;display:grid;place-items:center;border-radius:6px}.cal .d.hoy .n{background:var(--txt);color:#fff}
+.cal .d{min-height:86px;padding:6px;font-size:12px}.cal .d.out{background:#FCFCFC;color:var(--mut)}.cal .d .n{font-weight:600;margin-bottom:4px;width:22px;height:22px;display:grid;place-items:center;border-radius:6px}.cal .d.hoy .n{background:var(--acc);color:#fff}
 .cal .ev{display:block;font-size:11px;line-height:15px;padding:2px 6px;border-radius:5px;background:#EEF2FF;color:#3730A3;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid #4F46E5}
 .cal .ev.fin{background:var(--offbg);color:var(--off);border-left-color:#9CA3AF}.cal .ev.camino{background:var(--okbg);color:#166534;border-left-color:var(--ok)}
 /* formulario agregar */
@@ -147,6 +147,7 @@ async function entrar(){
   const r = await get('panel_info', { vendedor: String(TID) }); if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
   INFO = r; const a = await get('autos_mios', { vendedor: String(TID) }); AUTOS = (a.ok && a.autos) || [];
   const t = INFO.tenant, m = t.marca || t.nombre; document.title = m;
+  if (/^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) { const r = document.documentElement.style; r.setProperty('--acc', t.acento2); r.setProperty('--txt', '#111827'); document.querySelectorAll('.brand .mk').forEach(e => { e.style.background = t.acento2; }); if (/^#[0-9a-f]{6}$/i.test(String(t.acento || ''))) { r.setProperty('--warn', t.acento); r.setProperty('--warnbg', t.acento + '14'); document.querySelectorAll('.brand .tag').forEach(e => { e.style.color = t.acento; e.style.borderColor = t.acento + '55'; }); } }   // acentos de marca (fondo blanco base)
   $('sd-marca').textContent = m; $('tb-marca').textContent = m; $('sd-mk').textContent = m[0]; $('tb-mk').textContent = m[0];
   $('sd-nombre').textContent = t.nombre; $('sd-user').textContent = t.usuario || ''; $('sd-av').textContent = ini(t.nombre);
   $('titulo').textContent = 'Configuración de ' + m;
