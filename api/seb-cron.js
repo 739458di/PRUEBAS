@@ -30,6 +30,7 @@ module.exports = async function handler(req, res) {
         // Misma puerta idempotente que el ghost_scan del puente (clave 'prog:<id>' / 'rescate:<folio>:<etapa>'): sin dobles.
         // 2 lecturas por índice por tick (pendientes vencidos), sin barridos.
         // VISITAS FLEXIBLES (universos con citas_flex): el paso del tiempo también es realidad → mismas casillas, misma puerta, reclamo idempotente
+        try { r.catalogo_fyradrive = await require('../lib/seb/universo.js').sincronizarCatalogoFyradrive(); } catch (e) { r.catalogo_fyradrive = { error: e.message }; }   // barredor: altas/bajas de cualquier lote → Autos Fyradrive
         try { r.citas_flex = await require('../lib/seb/citas-flex.js').tickTodos(); } catch (e) { r.citas_flex = { error: e.message }; }
         try { r.programados = await require('../lib/seb/programados.js').despachar({ ahora: Date.now() }); } catch (e) { r.programados = { error: e.message }; }
         try { r.rescates = await require('../lib/seb/rescate.js').despachar({ ahora: Date.now() }); } catch (e) { r.rescates = { error: e.message }; }
