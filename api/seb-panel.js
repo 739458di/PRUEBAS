@@ -2946,14 +2946,14 @@ module.exports = async function handler(req, res) {
 
             // 11) AUTOS_MIOS — autos del universo (t0 = inventario activo completo, límite 200) con portada, km, fotos y estado
             // ══ PANEL DEL UNIVERSO (orden owner 2026-09-22): resumen, autos, calendario de citas, miembros (vendedores del lote), número ══
-            const ensureMiembros = async () => { await run('CREATE TABLE IF NOT EXISTS vendedores_universo (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, nombre TEXT, telefono TEXT, codigo_hash TEXT, codigo_expira INTEGER, activo INTEGER DEFAULT 0, created INTEGER)'); await run('CREATE INDEX IF NOT EXISTS idx_vend_univ ON vendedores_universo(tenant_id, telefono)'); };
+            const ensureMiembros = async () => { try { await run('ALTER TABLE vendedores_universo ADD COLUMN rol TEXT'); } catch (e) { } await run('CREATE TABLE IF NOT EXISTS vendedores_universo (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, nombre TEXT, telefono TEXT, codigo_hash TEXT, codigo_expira INTEGER, activo INTEGER DEFAULT 0, created INTEGER)'); await run('CREATE INDEX IF NOT EXISTS idx_vend_univ ON vendedores_universo(tenant_id, telefono)'); };
             const shaC = x => require('crypto').createHash('sha256').update(String(x)).digest('hex');
             const SOLO_DUENO = { ok: false, error: 'El panel general es solo del dueño del lote.', miembro: true };
-            if (['panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar'].includes(action) && SES && SES.miembro) return res.status(403).json(SOLO_DUENO);
+            if (['panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar'].includes(action) && SES && SES.miembro && SES.miembro.rol !== 'admin') return res.status(403).json(SOLO_DUENO);   // admin del lote (rol 'admin') sí administra
             if (action === 'panel_info') {
                 if (!TV) return err(400, 'el panel es por universo');
                 await ensureMiembros();
-                const miembros = (await query('SELECT id, nombre, telefono, activo, created FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV])).map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, activo: Number(m.activo) === 1, created: Number(m.created) }));
+                const miembros = (await query('SELECT id, nombre, telefono, activo, created, rol FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV])).map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, rol: m.rol || 'vendedor', activo: Number(m.activo) === 1, created: Number(m.created) }));
                 let citas = { filas: [], cerradas: [] }; try { if (CITAF.activo(tV)) citas = await CITAF.tablero({ tenant: tV }); } catch (e) { }
                 const chats = (await query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]))[0];
                 return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, acento: (tV.config && tV.config.acento) || null, acento2: (tV.config && tV.config.acento2) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
