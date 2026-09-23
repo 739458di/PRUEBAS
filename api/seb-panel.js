@@ -949,7 +949,7 @@ module.exports = async function handler(req, res) {
             let sesion = null; try { const s2 = await query("SELECT estado, motivo, ultimo_mensaje, updated FROM wa_sessions WHERE tenant_id=?", [t.id]); sesion = s2[0] || null; } catch (e) { }
             if (t.demo) sesion = { estado: 'vinculado', motivo: 'demo', ultimo_mensaje: null, updated: Date.now() };   // MODO PRUEBA: el universo no depende del puente
             const autos = await autosDeTenant(t);
-            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, marca: (t.config && t.config.marca) || null, tema: (t.config && t.config.tema) || null, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
+            return res.status(200).json({ ok: true, tenant: { id: t.id, nombre: t.nombre, telefono: t.telefono, marca: (t.config && t.config.marca) || null, tema: (t.config && t.config.tema) || null, miembro: (SES && SES.miembro) ? { id: SES.miembro.id, nombre: SES.miembro.nombre } : null, demo: !!t.demo, sandbox: DEMO.esSandbox(t), todo_entra: !!(t.config && Number(t.config.todo_entra) === 1), citas_flex: CITAF.activo(t), comprador_prueba: t.demo ? DEMO.DEMO_COMPRADOR : undefined }, sesion, autos: autos.map(a => ({ id: a.id, web_id: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })) });
         }
         // NUEVO COMPRADOR / DELEGAR (única puerta de delegación, orden owner 2026-09-07):
         // nombre del auto + teléfono → chat delegado en el universo del vendedor + opener UNA vez.
@@ -2583,6 +2583,7 @@ module.exports = async function handler(req, res) {
                     }
                 } else {
                     const w = ['COALESCE(tenant_id,0)=?', "source='whatsapp'", 'ult_msg_ts IS NOT NULL'], a = [TV];
+                    if (SES && SES.miembro && !MAESTRA) { w.push('(miembro_id = ? OR miembro_id IS NULL)'); a.push(Number(SES.miembro.id)); }   // miembro: SUS chats + los que aún no tienen vendedor
                     if (cursor) { w.push('ult_msg_ts < ?'); a.push(cursor); }
                     if (q) {
                         const d = q.replace(/\D/g, '');
@@ -2733,6 +2734,8 @@ module.exports = async function handler(req, res) {
                     const okD = rD.status < 400 && o.ok !== false;
                     // enviado = el TEXTO que salió (opener o texto de la acción); true si salió algo sin texto (fotos); false si nada
                     const envD = !okD ? false : (o.texto_enviado ? String(o.texto_enviado) : (o.opener_enviado && o.opener ? String(o.opener) : (o.accion_ok ? true : false)));
+                    // CHAT → VENDEDOR (orden owner 2026-09-23 "renderiza acorde a mi id"): el comprador que agrega un miembro queda a SU nombre
+                    if (okD && o.chat_id && SES && SES.miembro) { try { await run('UPDATE conversaciones SET miembro_id = ? WHERE id = ? AND COALESCE(tenant_id,0) = ? AND miembro_id IS NULL', [Number(SES.miembro.id), Number(o.chat_id), TV]); } catch (e) { } }
                     return { ok: okD, status: rD.status, chat_id: o.chat_id || null, telefono: o.telefono || null, nombre: o.nombre || null, auto: o.auto || null, modo: o.modo || null, ya_delegado: !!o.ya_delegado, opener_enviado: !!o.opener_enviado, accion_ejecutada: o.accion_ejecutada || null, enviado: envD, detalle: o.enviado != null ? o.enviado : (o.opener_enviado ? 'opener' : null), simulado: !!o.simulado, error: o.error || undefined, necesita: o.necesita || undefined };
                 });
                 return res.status(codigoDe(r)).json(r);

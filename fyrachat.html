@@ -572,6 +572,7 @@ select.inp option{background:#09183F;color:#fff}
   #acceso{align-items:center}#acceso > *{width:100%;max-width:420px}
   .aviso{left:auto;right:16px;max-width:440px}
 }
+:root[data-tema="blanco"] .tag{background:#EDEEF0;color:#111}
 </style>
 </head>
 <body>
@@ -959,7 +960,7 @@ function aplicarTemaYMarca(t){
 (async () => { try { const v = new URLSearchParams(location.search).get('vendedor'); if (v && v !== '0') { const r = await fetch(API + '?action=tenant_marca&vendedor=' + encodeURIComponent(v)).then(x => x.json()); if (r && r.ok) aplicarTemaYMarca(r); } } catch (e) { } })();   // antes del login: la pantalla de entrada ya sale con el tema del universo
 function pintarUniverso(){
   const el = $('univ'); if (!TENANT) return; try { pintarQuien(); } catch (e) {}
-  el.innerHTML = TENANT.sandbox ? '<span class="tag">SANDBOX</span>' : (TENANT.demo ? '<span class="tag">PRUEBA</span>' : '');
+  el.innerHTML = (TENANT.sandbox ? '<span class="tag">SANDBOX</span>' : (TENANT.demo ? '<span class="tag">PRUEBA</span>' : '')) + (TENANT.miembro && TENANT.miembro.nombre ? '<span class="tag">' + esc(String(TENANT.miembro.nombre).split(/\s+/)[0]) + '</span>' : '');   // miembro: su nombre junto al título (renderiza acorde a su id)
   el.title = TENANT.nombre || '';
 }
 
@@ -1042,7 +1043,8 @@ function abrirCuenta(){
   const vinc = T0 || (TENANT.sesion && TENANT.sesion.estado === 'vinculado');
   const s = sheet({ titulo: 'Tu cuenta', html:
     '<div class="grupo">' +
-      '<div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(TENANT.nombre || 'Mi universo') + '</div><div class="s">Universo ' + esc(TENANT.id) + (TENANT.demo ? ' · modo prueba' : '') + '</div></div></div>' +
+      (TENANT.miembro ? '<div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(TENANT.miembro.nombre) + '</div><div class="s">Vendedor de ' + esc(TENANT.marca || TENANT.nombre || '') + '</div></div></div>' : '') +
+      '<div class="row"><div class="sq">' + ico(TENANT.miembro ? 'home' : 'user') + '</div><div class="tx"><div class="t">' + esc(TENANT.nombre || 'Mi universo') + '</div><div class="s">Universo ' + esc(TENANT.id) + (TENANT.demo ? ' · modo prueba' : '') + '</div></div></div>' +
       '<div class="row"><div class="sq">' + ico('phone') + '</div><div class="tx"><div class="t">' + esc(telFmtDe(tel) || 'Sin teléfono') + '</div><div class="s">Teléfono</div></div></div>' +
       '<div class="row"><div class="sq">' + ico('wa') + '</div><div class="tx"><div class="t">WhatsApp</div><div class="s">' + (vinc ? 'Seb atiende desde tu número' : 'Vincúlalo en fyradrive.com/seb') + '</div></div><span class="este' + (vinc ? '' : ' off') + '">' + (vinc ? 'Vinculado' : 'Desvinculado') + '</span></div>' +
     '</div>' +
