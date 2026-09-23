@@ -63,6 +63,7 @@ a{color:var(--pri2)}
 .seb img{position:static;display:block;width:32px;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none;filter:drop-shadow(0 4px 10px rgba(0,0,0,.35))}
 .bell{position:relative;width:40px;height:40px;border-radius:50%;background:var(--s1);display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 40px;transition:transform .12s}
 .bell:active{transform:scale(.96)}
+.bell.perfil{font-size:12px;font-weight:800;letter-spacing:.02em;background:var(--pri);color:#fff}html[data-acentos] .bell.perfil{background:var(--acento2);color:#fff}
 .bell .ic{width:22px;height:22px}
 .bell .b{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:14px;display:none;align-items:center;justify-content:center;border:2px solid var(--bg)}
 .bell .b.on{display:flex}
@@ -666,6 +667,7 @@ html[data-acentos] .buscar:focus-within{border-color:var(--acento2)}
         <div class="seb"><img src="/seb-like.webp" alt="" draggable="false"></div>
         <div class="der">
           <button class="bell" id="bell" aria-label="No leídos" onclick="bellClick()"><i data-ico="bell"></i><span class="b" id="bell-b">0</span></button>
+          <button class="bell perfil" id="perfil" aria-label="Tu cuenta" onclick="abrirPerfil()" hidden><span id="perfil-ini">?</span></button>
         </div>
       </div>
       <div class="titulo"><h1>Chats<span id="univ"></span></h1></div>
@@ -996,8 +998,17 @@ function aplicarTemaYMarca(t){
   }
 }
 (async () => { try { const v = new URLSearchParams(location.search).get('vendedor'); if (v && v !== '0') { const r = await fetch(API + '?action=tenant_marca&vendedor=' + encodeURIComponent(v)).then(x => x.json()); if (r && r.ok) aplicarTemaYMarca(r); } } catch (e) { } })();   // antes del login: la pantalla de entrada ya sale con el tema del universo
+function abrirPerfil(){
+  if (!TENANT) return; const m = TENANT.miembro; const nom = (m && m.nombre) || TENANT.nombre || ''; const admin = !!(m && m.rol === 'admin'); const esLote = !!(TENANT.marca);
+  const s = sheet({ titulo: 'Tu cuenta', html: '<div class="grupo"><div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(nom) + '</div><div class="s">' + esc(m ? (admin ? 'Administrador de ' : 'Vendedor de ') + (TENANT.marca || TENANT.nombre) : (TENANT.marca || TENANT.nombre)) + '</div></div></div></div>' +
+    '<div class="grupo" style="margin-top:12px">' + (admin || (!m && esLote) ? masRow('monitor', 'Panel del lote', 'Autos, chats de tus vendedores, citas y miembros', "try{localStorage.setItem('fyra_lugar','panel')}catch(e){};location.href='/panel.html'") : '') + masRow('chat', 'Mi FyraChat', 'Aquí estás ahora', 'cerrarHojas()') + '</div>' +
+    '<div class="grupo" style="margin-top:12px">' + masRow('logout', 'Cerrar sesión', 'Solo aquí termina tu sesión', 'accSalir()', 'rojo') + '</div>' });
+  return s;
+}
+function cerrarHojas(){ try { while (SHEETS.length) SHEETS[SHEETS.length - 1].cerrar(); } catch (e) {} }
 function pintarUniverso(){
   const el = $('univ'); if (!TENANT) return; try { pintarQuien(); } catch (e) {}
+  try { const p = $('perfil'); if (p) { const nom = (TENANT.miembro && TENANT.miembro.nombre) || TENANT.nombre || ''; p.hidden = !nom; $('perfil-ini').textContent = nom.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase(); } } catch (e) {}
   el.innerHTML = (TENANT.sandbox ? '<span class="tag">SANDBOX</span>' : (TENANT.demo ? '<span class="tag">PRUEBA</span>' : '')) + (TENANT.miembro && TENANT.miembro.nombre ? '<span class="tag">' + esc(String(TENANT.miembro.nombre).split(/\s+/)[0]) + '</span>' : '');   // miembro: su nombre junto al título (renderiza acorde a su id)
   el.title = TENANT.nombre || '';
 }

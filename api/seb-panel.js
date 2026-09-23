@@ -143,7 +143,7 @@ const ORIGEN_PROPIO = 'https://fyrachat.vercel.app';
 module.exports = async function handler(req, res) {
     // ══ CORS (bloque 6): sin '*'. Solo los orígenes de CORS_ORIGENES (vacío por defecto) reciben ACAO.
     const origin = String((req.headers && req.headers.origin) || '');
-    const CORS_OK = (process.env.CORS_ORIGENES || '').split(',').map(s => s.trim()).filter(Boolean);
+    const CORS_OK = (process.env.CORS_ORIGENES || '').split(',').map(s => s.trim()).filter(Boolean).concat(['https://www.fyradrive.com', 'https://fyradrive.com']);   // la portada pregunta si ya hay sesión (acceso_yo con credenciales)
     if (origin && CORS_OK.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Vary', 'Origin');
@@ -366,7 +366,8 @@ module.exports = async function handler(req, res) {
             return res.status(r.ok ? 200 : 400).json(r);
         }
 
-        if (action === 'acceso_yo') return res.status(200).json({ ok: true, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff, miembro: SES.miembro || null, contrasena_pendiente: !!SES.contrasena_pendiente, tiene_contrasena: !!SES.tiene_contrasena, via: SES.via } : null, desvinculado: DESV ? { tenant: DESV } : null });
+        if (action === 'acceso_yo') { let destino = null; try { if (SES) { const tRow = await ACC.tenantPorId(SES.tenant_id); destino = ACC.inicioDe(tRow || SES.tenant, SES.miembro || null); if (SES.maestra && !SES.miembro && !(tRow && /"inicio"/.test(tRow.config_json || ''))) destino = '/fyrachat.html'; } } catch (e) { }
+        return res.status(200).json({ ok: true, destino, nombre: SES ? ((SES.miembro && SES.miembro.nombre) || SES.tenant.nombre) : null, sesion: SES ? { tenant: SES.tenant, maestra: SES.maestra, staff: esStaff, miembro: SES.miembro || null, contrasena_pendiente: !!SES.contrasena_pendiente, tiene_contrasena: !!SES.tiene_contrasena, via: SES.via } : null, desvinculado: DESV ? { tenant: DESV } : null }); }
         // ── CONTRASEÑA (orden owner 2026-09-12) ──
         if (action === 'acceso_modo' && req.method === 'POST') {   // ¿este número entra con contraseña o con código? (no revela si el número existe)
             const telM = String(req.body.telefono || '').replace(/\D/g, '');
