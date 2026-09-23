@@ -24,6 +24,8 @@ async function inventario() {
     if (Date.now() - CACHE.t < 60000 && CACHE.autos.length) return CACHE.autos;
     const rows = await query("SELECT id, fyradrive_web_id, marca, modelo, version, anio, precio, kilometraje, color, transmision, tipo_carroceria, agencia_nombre FROM inventario_autos WHERE estado='activo' AND fyradrive_web_id IS NOT NULL ORDER BY listed_at DESC, id DESC");
     const puntos = {}; for (const p of await query('SELECT auto_id, name, address, maps_link FROM punto_envio').catch(() => [])) puntos[Number(p.auto_id)] = { nombre: p.name || null, direccion: p.address || null, mapa: p.maps_link || null };
+    const lotes = {}; for (const t of await query("SELECT nombre, config_json FROM tenants WHERE activo = 1").catch(() => [])) { let c = {}; try { c = JSON.parse(t.config_json || '{}') || {}; } catch (e) { } if (c.tipo === 'lote') lotes[norm(t.nombre)] = { marca: c.marca || t.nombre, zona: c.zona || c.direccion || null, mapa: c.mapa_url || null }; }
+    CACHE.lotes = lotes;
     const ids = rows.map(r => Number(r.fyradrive_web_id)).filter(Boolean);
     const fotos = {};
     if (ids.length) {
@@ -34,7 +36,8 @@ async function inventario() {
     }
     const autos = rows.map(r => {
         const w = Number(r.fyradrive_web_id); const fs = fotos[w] || [];
-        return { id: w, nombre: nombre(r), marca: r.marca, modelo: r.modelo, anio: Number(r.anio) || null, precio: Number(r.precio) || null, km: Number(r.kilometraje) || null, color: r.color && !/no espec/i.test(r.color) ? r.color : null, transmision: r.transmision || null, tipo: tipoDe(r), origen: origenDe(r), foto: fs[0] || null, fotos: fs.slice(0, 12), link: 'https://www.fyradrive.com/car/' + w, lote: r.agencia_nombre || null, punto: puntos[Number(r.id)] || null };
+        const lt = r.agencia_nombre ? (lotes[norm(r.agencia_nombre)] || null) : null;
+        return { id: w, nombre: nombre(r), marca: r.marca, modelo: r.modelo, anio: Number(r.anio) || null, precio: Number(r.precio) || null, km: Number(r.kilometraje) || null, color: r.color && !/no espec/i.test(r.color) ? r.color : null, transmision: r.transmision || null, tipo: tipoDe(r), origen: origenDe(r), foto: fs[0] || null, fotos: fs.slice(0, 12), link: 'https://www.fyradrive.com/car/' + w, lote: r.agencia_nombre || null, lote_marca: lt ? lt.marca : null, zona: lt ? lt.zona : ((puntos[Number(r.id)] || {}).direccion || null), punto: puntos[Number(r.id)] || null };
     }).filter(a => a.foto);
     CACHE = { t: Date.now(), autos };
     return autos;
@@ -62,7 +65,7 @@ function sistema(autos) {
 REGLAS:
 - "intencion": mostrar = quiere ver autos (lista, filtro, "qué tienes", "japoneses", "SUV", "algo de 300 mil"); ver_auto = pregunta por UN auto concreto (pon su auto_id); agendar = quiere ir a verlo / prueba de manejo / cita (pon auto_id si lo menciona); ubicacion = pregunta dónde están, dónde ve el auto, dirección, mapa (pon auto_id si habla de un auto); platicar = saludo, duda general de cómo funciona Fyradrive, gracias; fuera = no tiene que ver con autos.
 - Filtros solo cuando el comprador los dice: marcas (nombres tal cual), origen, tipo, precios en pesos (0 = sin límite), anio_min (0 = sin límite), transmision, lote (si nombra un lote/agencia del inventario, p. ej. "autos universales", "autos lozano"; '' si no).
-- "respuesta": UNA frase corta y natural en español de México, tuteando, sin emojis, sin inventar datos ni precios; si vas a mostrar autos di algo como "Esto es lo que tenemos en SUV:" (las tarjetas las arma el sistema). Si es 'fuera' di amablemente que solo ayudas con los autos de Fyradrive.
+- "respuesta": UNA frase corta y natural en español de México, tuteando, sin emojis, sin inventar datos ni precios. Eres un AGENTE que brinda opciones de distintos vendedores (particulares y lotes), no un solo lote: si vas a mostrar autos di algo como "Claro, mira lo que encontré en SUV:" (el sistema agrupa por vendedor y arma las tarjetas). Si es 'fuera' di amablemente que solo ayudas con autos.
 - Para agendar: extrae nombre, telefono (10 dígitos) y cuando (día/hora) si los dice; deja '' lo que no diga. No confirmes tú la cita: el sistema pregunta lo que falte.
 - Datos de Fyradrive: se paga de contado o con crédito bancario (HEY Banco); enganche desde 25% aprox; los autos se ven en Monterrey con cita.
 INVENTARIO ACTIVO (id, nombre, precio, km, tipo, origen):
@@ -96,6 +99,15 @@ function filtrar(autos, f) {
     if (f.transmision) out = out.filter(a => norm(a.transmision).startsWith(f.transmision === 'manual' ? 'manual' : 'auto'));
     if (f.lote) { const l = norm(f.lote).replace(/\s+/g, ' '); out = out.filter(a => norm(a.lote).includes(l) || l.includes(norm(a.lote)) && a.lote); }
     return out;
+}
+// HazloGPT no es "un mismo organismo": es un agente que brinda opciones de distintos vendedores. Agrupa: particulares primero, luego cada lote con dónde está.
+const tituloCaso = s => String(s || '').toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+function agrupar(sel) {
+    const part = sel.filter(a => !a.lote); const porLote = {}; for (const a of sel.filter(a => a.lote)) (porLote[a.lote] = porLote[a.lote] || []).push(a);
+    const grupos = [];
+    if (part.length) grupos.push({ titulo: 'Vendedores particulares', intro: (grupos.length ? 'También' : 'Mira, aquí') + ' te tengo ' + (part.length === 1 ? 'una opción' : 'unas opciones') + ' de vendedores particulares:', autos: part });
+    for (const [lote, autos] of Object.entries(porLote)) { const nombreL = autos[0].lote_marca ? String(autos[0].lote_marca).replace(/\s+IA$/i, '') : tituloCaso(lote); const zona = autos[0].zona; grupos.push({ titulo: nombreL, intro: (grupos.length ? 'Y estas son' : 'Mira, estas son') + ' de lote, de ' + nombreL + (zona ? ', que está en ' + zona : '') + ':', autos }); }
+    return grupos;
 }
 const hayFiltro = f => (f.marcas && f.marcas.length) || f.origen || f.tipo || f.precio_min > 0 || f.precio_max > 0 || f.anio_min > 0 || f.transmision || f.lote;
 async function ensureTabla() { await run('CREATE TABLE IF NOT EXISTS hazlo_solicitudes (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, telefono TEXT, cuando TEXT, auto_id INTEGER, auto_nombre TEXT, sesion TEXT, created INTEGER)'); }
@@ -144,8 +156,8 @@ module.exports = async (req, res) => {
             }
             if (L.intencion === 'mostrar' || L.intencion === 'ver_auto') {
                 const sel = hayFiltro(L) ? filtrar(autos, L) : autos;
-                if (!sel.length) return res.status(200).json({ ok: true, texto: 'Ahorita no tenemos uno así en inventario. Esto es lo que sí tenemos:', autos: autos.slice(0, 12), cita: null });
-                return res.status(200).json({ ok: true, texto: L.respuesta || (hayFiltro(L) ? 'Esto es lo que tenemos:' : `Tenemos ${autos.length} autos disponibles:`), autos: sel, cita: null });
+                if (!sel.length) return res.status(200).json({ ok: true, texto: 'Ahorita no tengo uno así entre mis vendedores. Esto es lo que sí hay:', autos: autos.slice(0, 12), grupos: agrupar(autos.slice(0, 12)), cita: null });
+                return res.status(200).json({ ok: true, texto: L.respuesta || (hayFiltro(L) ? 'Claro, esto es lo que hay:' : `Tengo ${autos.length} opciones de varios vendedores:`), autos: sel, grupos: agrupar(sel), cita: null });
             }
             return res.status(200).json({ ok: true, texto: L.respuesta || 'Cuéntame qué auto buscas y te enseño lo que tenemos.', autos: [], cita: null });
         }

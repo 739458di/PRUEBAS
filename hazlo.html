@@ -110,7 +110,8 @@ async function enviar(texto,extra){if(busy)return;busy=true;go.disabled=true;$('
   th.remove();
   if(!r||!r.ok){add('a','<div class="b">'+esc((r&&r.error)||'Se me fue la señal un segundo, ¿me lo repites?')+'</div>');busy=false;go.disabled=false;return}
   cita=r.cita||null;hist.push({rol:'a',texto:r.texto});
-  add('a','<div class="b">'+esc(r.texto)+'</div>'+carrusel(r.autos)+(r.wa?'<div><a class="wa" href="'+esc(r.wa)+'" target="_blank" rel="noopener">Confirmar por WhatsApp</a></div>':''));
+  const cuerpo = (r.grupos && r.grupos.length>1) ? r.grupos.map(g=>'<div class="b" style="margin-top:6px">'+esc(g.intro)+'</div>'+carrusel(g.autos)).join('') : ((r.grupos&&r.grupos.length===1&&r.grupos[0].autos.length)?'<div class="b" style="margin-top:6px">'+esc(r.grupos[0].intro)+'</div>'+carrusel(r.grupos[0].autos):carrusel(r.autos));
+  add('a','<div class="b">'+esc(r.texto)+'</div>'+cuerpo+(r.wa?'<div><a class="wa" href="'+esc(r.wa)+'" target="_blank" rel="noopener">Confirmar por WhatsApp</a></div>':''));
   busy=false;go.disabled=false;inp.focus()}
 </script>
 </body>
