@@ -133,7 +133,7 @@ const ACC_PUBLICAS = new Set(['acceso_entrar_usuario', 'tenant_marca', 'acceso_y
 // CONTRASEÑA (orden owner 2026-09-12): con sesión pero SIN contraseña creada, solo se permiten estas acciones (la UI obliga a crearla)
 const ACC_SIN_CONTRASENA = new Set(['acceso_contrasena_crear', 'acceso_sesiones', 'acceso_cerrar_sesion', 'acceso_cerrar_todas', 'tenant_info']);
 const ACC_PUENTE = new Set(['entrante_v2', 'opener_auto', 'ghost_scan', 'recepcion_activa', 'recepcion_foto', 'carga_pieza', 'rescate_turno', 'rescate_manual', 'cierre_timbre', 'cita_entrante', 'casilla_ejecutar', 'casillas_pendientes']);
-const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_entrar_remoto', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
+const ACC_PANEL = new Set(['acceso_ticket_maestra', 'acceso_ticket', 'acceso_entrar_remoto', 'acceso_codigo_pedir_remoto', 'acceso_codigo_entrar_remoto', 'acceso_cerrar_todas_tenant', 'recepcion_pendientes', 'recepcion_publicar', 'recepcion_rechazar', 'casillas_estado', 'cancelar_match_manual', 'match_directo', 'confirmar_match',
     'cita_vendedor_agregar', 'cita_vendedor_confirmar', 'cita_vendedor_lista', 'rescate_agenda', 'rescate_cancelar', 'rescate_reactivar', 'prog_crear', 'prog_cancelar', 'prog_machote',
     'flags_msgs', 'flags_msgs_done', 'citas_backfill', 'universo_backfill']);
 // prog_crear/prog_machote también los usa copilot.html (el vendedor programa "te aviso" desde su FyraChat) → K_PANEL **o** SESIÓN
@@ -188,10 +188,13 @@ module.exports = async function handler(req, res) {
         const duenoT0 = !!(SES && Number(SES.tenant_id) === 0);
         // 'vendedor=0' = FyraChat de Fyradrive (tenant 0 clásico): su dueño, la maestra, STAFF o la key pueden pedirlo así
         if (pidioT0 && (conPuente || conPanel || MAESTRA || esStaff || duenoT0)) VEND_PARAM = '';
+        // SESIÓN ÚNICA (orden owner 2026-09-24: "en ningún escenario se mezclan datos"): si la página pide OTRO universo del de la sesión
+        // (pestaña vieja tras iniciar sesión con otra cuenta, link ajeno), NO se cambia en silencio: 403 sesion_ajena y la página se recarga en su lugar.
+        const SESION_AJENA = { ok: false, error: 'Esta sesión es de otra cuenta. Se recarga.', sesion_ajena: true };
         if (SES && !MAESTRA) {
-            if (duenoT0) VEND_PARAM = '';   // el dueño del número principal opera SU universo (el 0), como cualquier vendedor el suyo
+            if (duenoT0) { if (VEND_PARAM && !pidioT0) return res.status(403).json(SESION_AJENA); VEND_PARAM = ''; }   // el dueño del número principal opera SU universo (el 0)
             else if (esStaff && pidioT0) { /* STAFF en tenant 0 */ }
-            else if (esStaff && VEND_PARAM && VEND_PARAM !== String(SES.tenant_id)) return res.status(403).json({ ok: false, error: 'Ese universo no es tuyo' });
+            else if (VEND_PARAM && VEND_PARAM !== String(SES.tenant_id)) return res.status(403).json(SESION_AJENA);
             else VEND_PARAM = String(SES.tenant_id);   // toda sesión de vendedor abre SU universo
         } else if (MAESTRA && !VEND_PARAM && !pidioT0) VEND_PARAM = String(SES.tenant_id);   // la maestra sin ?vendedor= abre su universo; con ?vendedor= el que pida
 
@@ -476,7 +479,7 @@ module.exports = async function handler(req, res) {
             // LOTE con panel (config.usuario o tipo 'lote'): el pase del Sales Brain abre su PANEL general, no el chat (orden owner 2026-09-23)
             let esLote = false;
             if (r.destino && r.maestra) { try { const tl = await query('SELECT config_json FROM tenants WHERE id = ?', [Number(r.destino)]); const cl = tl.length ? JSON.parse(tl[0].config_json || '{}') : {}; esLote = !!(cl.usuario || cl.tipo === 'lote'); } catch (e) { } }
-            if (r.origen === 'web' && /^\/[a-z0-9_./?=&-]*$/i.test(String(r.destino || ''))) { res.setHeader('Location', String(r.destino)); return res.status(302).end(); }   // login desde fyradrive.com: cae donde está dado de alta
+            if (/^web/.test(String(r.origen || '')) && /^\/[a-z0-9_./?=&-]*$/i.test(String(r.destino || ''))) { res.setHeader('Location', String(r.destino)); return res.status(302).end(); }   // login desde fyradrive.com (contraseña o código): cae donde está dado de alta
             res.setHeader('Location', r.destino && r.maestra ? (esLote ? '/panel.html?vendedor=' : '/fyrachat.html?vendedor=') + encodeURIComponent(r.destino) : '/fyrachat.html?bienvenida=1'); return res.status(302).end();
         }
         if (action === 'acceso_entrar_remoto' && req.method === 'POST') {
@@ -487,6 +490,28 @@ module.exports = async function handler(req, res) {
             if (!rR.ok) return res.status(rR.limite ? 429 : 401).json({ ok: false, error: rR.error });
             await ACC.accesosLog({ sesion_id: null, tenant_id: rR.tenant_id, action: 'acceso_entrar_remoto', ip: String(req.body.ip || IP) });
             return res.status(200).json({ ok: true, url: ORIGEN_PROPIO + '/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(rR.token), destino: rR.destino });
+        }
+        // ══ CÓDIGO POR WHATSAPP DESDE LA PORTADA (orden owner 2026-09-24): sin contraseña → se manda código al número dado de alta → pase de un solo uso ══
+        if (action === 'acceso_codigo_pedir_remoto' && req.method === 'POST') {
+            if (!conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
+            const telIn = String(req.body.telefono || '').replace(/\D/g, '');
+            if (telIn.length < 10) return res.status(400).json({ ok: false, error: 'Escribe tu WhatsApp de 10 dígitos.' });
+            const r = await ACC.pedirCodigo(telIn, String(req.body.ip || IP));
+            if (r.limite === 'ip') return res.status(429).json({ ok: false, error: r.error });
+            if (!r.silencioso && r.codigo && !DEMO.esDemo(r.tenant)) {
+                const env = await citasVivas.enviarWA(r.telefono || r.tenant.telefono, ACC.textoCodigo(r.codigo, r.vida_min), 0);
+                if (!env.ok) console.error('[acceso_codigo_pedir_remoto] envío falló:', env.error);
+            }
+            return res.status(200).json({ ok: true, vida_min: r.vida_min || 3, tel_mascara: '••• ••• ' + telIn.slice(-4) });   // respuesta uniforme: exista o no el número
+        }
+        if (action === 'acceso_codigo_entrar_remoto' && req.method === 'POST') {
+            if (!conPanel) return res.status(401).json({ ok: false, error: 'key inválida' });
+            const ipC = String(req.body.ip || IP);
+            if ((await ACC.contarLimite('codrem:ip:' + ipC, 30, 10 * 60 * 1000)).excedido) return res.status(429).json({ ok: false, error: 'Demasiados intentos. Espera unos minutos.' });
+            const rC = await ACC.crearTicketPorCodigo({ telefono: req.body.telefono, codigo: req.body.codigo });
+            if (!rC.ok) return res.status(401).json({ ok: false, error: rC.error });
+            await ACC.accesosLog({ sesion_id: null, tenant_id: rC.tenant_id, action: 'acceso_codigo_entrar_remoto', ip: ipC });
+            return res.status(200).json({ ok: true, url: ORIGEN_PROPIO + '/api/seb-panel?action=acceso_canjear&t=' + encodeURIComponent(rC.token), destino: rC.destino });
         }
         if (action === 'acceso_ticket_maestra' && req.method === 'POST') {
             // Solo el Sales Brain (K_PANEL, tras su PIN): pase de un solo uso con la sesión MAESTRA que abre el FyraChat del universo pedido

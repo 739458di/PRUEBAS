@@ -10,7 +10,7 @@
 <meta name="color-scheme" content="dark">
 <script>/* RENDIMIENTO (2026-09-23): pre-pinta el tema/acentos del universo desde caché local ANTES del primer cuadro, para no ver el flash oscuro→blanco
    mientras llegan tenant_marca/tenant_info (~0.3-1.5 s). La caché la escribe aplicarTemaYMarca con la respuesta real del servidor; si no hay caché, no pasa nada. */
-(function(){try{var v=new URLSearchParams(location.search).get('vendedor');var h=document.documentElement;var c=JSON.parse(localStorage.getItem('fyra_marca_'+((v&&v!=='0')?v:'ses'))||localStorage.getItem('fyra_marca_ses')||'null');if(!c){h.setAttribute('data-tema-espera','1');setTimeout(function(){h.removeAttribute('data-tema-espera')},2500);return;}if(c.tema!=='blanco')return;var ok=function(x){return /^#[0-9a-f]{6}$/i.test(String(x||''))};h.dataset.tema='blanco';h.dataset.pre='1';var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content','#FFFFFF');if(ok(c.acento2)){var a2=c.acento2,a1=ok(c.acento)?c.acento:a2,r=h.style;r.setProperty('--pri',a2);r.setProperty('--pri2',a2);r.setProperty('--pos',a2);r.setProperty('--out',a2);r.setProperty('--grad','linear-gradient(135deg,'+a2+','+a2+')');r.setProperty('--acento',a1);r.setProperty('--acento2',a2);r.setProperty('--a2-08',a2+'14');r.setProperty('--a2-12',a2+'1f');r.setProperty('--a1-12',a1+'1f');h.dataset.acentos='1';if(mt)mt.setAttribute('content',a2);}}catch(e){}})();
+(function(){try{var v=new URLSearchParams(location.search).get('vendedor');var h=document.documentElement;var c=JSON.parse(localStorage.getItem('fyra_marca_'+((v&&v!=='0')?v:'ses'))||localStorage.getItem('fyra_marca_ses')||'null');if(!c){h.setAttribute('data-tema-espera','1');setTimeout(function(){h.removeAttribute('data-tema-espera')},2500);return;}if(c.tema!=='blanco')return;var ok=function(x){return /^#[0-9a-f]{6}$/i.test(String(x||''))};h.dataset.tema='blanco';h.dataset.pre='1';var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content','#FFFFFF');/* acentos solo con ?vendedor= explícito: la caché 'ses' es del último universo abierto y pintaba los colores de OTRO lote (Universales en TERRA) */if(v&&v!=='0'&&ok(c.acento2)){var a2=c.acento2,a1=ok(c.acento)?c.acento:a2,r=h.style;r.setProperty('--pri',a2);r.setProperty('--pri2',a2);r.setProperty('--pos',a2);r.setProperty('--out',a2);r.setProperty('--grad','linear-gradient(135deg,'+a2+','+a2+')');r.setProperty('--acento',a1);r.setProperty('--acento2',a2);r.setProperty('--a2-08',a2+'14');r.setProperty('--a2-12',a2+'1f');r.setProperty('--a1-12',a1+'1f');h.dataset.acentos='1';if(mt)mt.setAttribute('content',a2);}}catch(e){}})();
 </script>
 <style>html[data-tema-espera]{background:#F2F4F8}html[data-tema-espera] body{visibility:hidden}</style>
 <title>FyraChat</title>
@@ -993,6 +993,8 @@ function aplicarTemaYMarca(t){
   // si el pre-pintado adivinó "blanco" pero este universo NO es blanco (caché vieja), se deshace y vuelve el tema oscuro de siempre
   if (t.tema !== 'blanco' && document.documentElement.dataset.pre) { const h = document.documentElement; delete h.dataset.pre; delete h.dataset.tema; delete h.dataset.acentos; h.removeAttribute('style'); const mt0 = document.querySelector('meta[name="theme-color"]'); if (mt0) mt0.setAttribute('content', '#050C2A'); }
   if (t.tema === 'blanco') { document.documentElement.dataset.tema = 'blanco'; const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.setAttribute('content', '#FFFFFF'); }
+  // este universo NO tiene acentos de marca → se borran los que haya dejado el pre-pintado de otro lote (bug TERRA con colores de Universales, 2026-09-24)
+  if (!(t.tema === 'blanco' && /^#[0-9a-f]{6}$/i.test(String(t.acento2 || '')))) { const h = document.documentElement; delete h.dataset.acentos; ['--pri', '--pri2', '--pos', '--out', '--grad', '--acento', '--acento2', '--a2-08', '--a2-12', '--a1-12'].forEach(k => h.style.removeProperty(k)); const mt2 = document.querySelector('meta[name="theme-color"]'); if (mt2) mt2.setAttribute('content', t.tema === 'blanco' ? '#FFFFFF' : '#050C2A'); }
   // ACENTOS DE MARCA (orden owner 2026-09-23, Autos Universales): fondo blanco siempre; acento2 = azul oscuro (botones, burbujas mías, positivo); acento = rojo (detalles: etiqueta, campana con no leídos)
   if (t.tema === 'blanco' && /^#[0-9a-f]{6}$/i.test(String(t.acento2 || ''))) {
     const a2 = t.acento2, a1 = /^#[0-9a-f]{6}$/i.test(String(t.acento || '')) ? t.acento : t.acento2; const r = document.documentElement.style;
@@ -1035,17 +1037,21 @@ const INFLIGHT = new Map();
 function correr(key, fn){ if (INFLIGHT.has(key)) return INFLIGHT.get(key); const p = Promise.resolve().then(fn).finally(() => INFLIGHT.delete(key)); INFLIGHT.set(key, p); return p; }
 async function apiGet(action, params){
   const u = API + '?action=' + action + (params ? '&' + new URLSearchParams(params).toString() : '') + vendQS();
-  try { const r = await fetch(u, { credentials: 'same-origin' }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); if (j && j.contrasena_pendiente) contrasenaPendiente(); return j; }
+  try { const r = await fetch(u, { credentials: 'same-origin' }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); if (j && j.sesion_ajena) sesionAjena(); if (j && j.contrasena_pendiente) contrasenaPendiente(); return j; }
   catch (e) { return { ok: false, error: 'Sin conexión' }; }
 }
 let CP_MOSTRADA = false;
 function contrasenaPendiente(){ if (CP_MOSTRADA) return; CP_MOSTRADA = true; sessionStorage.setItem('acc_dest', '/fyrachat.html?bienvenida=1'); mostrarCrearContrasena({ opcional: false }); }
 async function apiPost(action, body){
   const b = Object.assign({}, body || {}, { action }); if (VPARAM() != null) b.vendedor = VPARAM();
-  try { const r = await fetch(API + '?action=' + action + vendQS(), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); if (j && j.contrasena_pendiente) contrasenaPendiente(); return j; }
+  try { const r = await fetch(API + '?action=' + action + vendQS(), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({ ok: false, error: 'Respuesta inválida (' + r.status + ')' })); if (r.status === 401 || j.login) sesionCaida(); if (j && j.sesion_ajena) sesionAjena(); if (j && j.contrasena_pendiente) contrasenaPendiente(); return j; }
   catch (e) { return { ok: false, error: 'Sin conexión' }; }
 }
 let SES_CAIDA = false;
+/* SESIÓN ÚNICA (orden owner 2026-09-24): la cookie cambió (otra cuenta inició sesión en este navegador) → esta pantalla se recarga en el universo de la sesión; nada de mezclar. */
+function sesionAjena(){ if (SES_CAIDA) return; SES_CAIDA = true; try { if (WS) WS.close(); } catch(e){} location.replace(location.pathname); }
+const firmaSesion = s => s ? [s.tenant && s.tenant.id, s.miembro && s.miembro.id, s.maestra ? 1 : 0].join(':') : '';
+document.addEventListener('visibilitychange', async () => { if (document.visibilityState !== 'visible' || !SESION) return; try { const yo = await fetch(API+'?action=acceso_yo').then(x=>x.json()); if (!yo || !yo.sesion) { sesionCaida(); return; } if (firmaSesion(yo.sesion) !== firmaSesion(SESION)) sesionAjena(); } catch(e){} });
 function sesionCaida(){ if (SES_CAIDA) return; SES_CAIDA = true; try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} try { if (WS) WS.close(); } catch(e){} location.replace(PORTADA); }   // sesión vencida → de vuelta a la portada, sin limbo
 // error inline (nunca toasts de éxito; los errores sí se dicen, sin alert)
 let AVISO_T = null;

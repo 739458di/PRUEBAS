@@ -197,8 +197,12 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const I = { logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>', home: '<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>', car: '<path d="M5 16l1.5-5h11L19 16M5 16h14v3H5zM7 19v2M17 19v2"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>', cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-5-6.3"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', chat: '<path d="M4 5h16v11H8l-4 4z"/>', chev: '<path d="m6 9 6 6 6-6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', ext: '<path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', l: '<path d="m15 18-6-6 6-6"/>', r: '<path d="m9 18 6-6-6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>' };
 const ico = n => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[n] || '') + '</svg>';
 document.body.innerHTML = document.body.innerHTML.replace(/\{\{(\w+)\}\}/g, (m, k) => ico(k));
-const post = (action, body) => fetch(API + '?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json()).catch(() => ({ ok: false, error: 'Sin conexión' }));
-const get = (action, q) => fetch(API + '?action=' + action + (q ? '&' + new URLSearchParams(q) : '')).then(r => r.json()).catch(() => ({ ok: false, error: 'Sin conexión' }));
+/* SESIÓN ÚNICA (orden owner 2026-09-24): si el servidor dice que esta página pide otro universo del de la sesión (la cookie cambió en otra pestaña), se recarga en su lugar; jamás se mezclan datos. */
+const guardia = j => { if (j && j.sesion_ajena) { location.replace('/panel.html'); return { ok: false, error: 'Sesión cambió' }; } return j; };
+const post = (action, body) => fetch(API + '?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json()).then(guardia).catch(() => ({ ok: false, error: 'Sin conexión' }));
+const get = (action, q) => fetch(API + '?action=' + action + (q ? '&' + new URLSearchParams(q) : '')).then(r => r.json()).then(guardia).catch(() => ({ ok: false, error: 'Sin conexión' }));
+const firmaSesion = s => s ? [s.tenant && s.tenant.id, s.miembro && s.miembro.id, s.maestra ? 1 : 0].join(':') : '';
+document.addEventListener('visibilitychange', async () => { if (document.visibilityState !== 'visible' || !SES) return; const yo = await get('acceso_yo'); if (!yo.ok || !yo.sesion) { location.replace(PORTADA); return; } if (firmaSesion(yo.sesion) !== firmaSesion(SES)) location.replace('/panel.html'); });
 let SES = null, INFO = null, AUTOS = [], VISTA = 'general', MES = null, Q = '', AF = 'todos', AUTO_ID = null;
 const fmtDinero = n => n == null ? '' : '$' + Number(n).toLocaleString('es-MX');
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -218,7 +222,9 @@ const PORTADA = 'https://www.fyradrive.com/';
 const salir = async () => { await post('acceso_salir', {}); location.replace(PORTADA); };
 let TID = 0;
 async function entrar(){
-  TID = Number(new URLSearchParams(location.search).get('vendedor')) || Number(SES.tenant.id);
+  const pedido = Number(new URLSearchParams(location.search).get('vendedor')) || 0;
+  TID = (SES.maestra && !SES.miembro && pedido) ? pedido : Number(SES.tenant.id);   // la sesión manda; solo la maestra del owner puede pedir otro universo
+  if (pedido && pedido !== TID) history.replaceState(null, '', location.pathname);
   const [r, a] = await Promise.all([get('panel_info', { vendedor: String(TID) }), get('autos_mios', { vendedor: String(TID) })]);
   if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
   INFO = r; AUTOS = (a.ok && a.autos) || []; AUTOS_META = { lote_fyradrive: !!(a && a.lote_fyradrive), puede_editar: !!(a && a.puede_editar) };
