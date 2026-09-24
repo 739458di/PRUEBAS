@@ -132,6 +132,11 @@ html[data-acentos] .cal .d.hoy .n{background:var(--acento)}
 html[data-acentos] .cal .ev{background:var(--a2-10);color:var(--acento2);border-left-color:var(--acento2)}
 html[data-acentos] .pill.warn{color:var(--acento);background:var(--a1-10)}
 html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}html[data-acentos] .topbar .mk{background:#fff;color:var(--acento2)}html[data-acentos] .topbar .x{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:#fff}
+/* ═══ NÚMERO · VINCULAR ═══ */
+.numrow{display:flex;gap:8px;align-items:center;max-width:320px}.numrow .pre{height:40px;display:grid;place-items:center;padding:0 12px;border:1px solid var(--ln);border-radius:8px;background:var(--s1);font-weight:600;color:var(--txt2)}
+.codigo{font:700 32px/1 var(--f);letter-spacing:.14em;background:var(--s1);border:1px dashed var(--ln);border-radius:12px;padding:18px;text-align:center;margin:14px 0 6px;color:var(--acento2,var(--txt));user-select:all}
+.pasos{margin:8px 0 0;padding-left:18px;color:var(--txt2);font-size:13px;line-height:20px}.pasos li{margin:4px 0}
+.numacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.numacts .btn{height:36px;font-size:13px}
 /* ═══ CUENTA · MENÚ ═══ */
 .cta-btn{border:0;background:none;text-align:left;width:100%;cursor:pointer;font:inherit;color:inherit}.cta-btn .who{flex:1;min-width:0}.cta-btn .ic{color:var(--txt2);width:16px;height:16px}.cta-btn:hover{background:var(--s1)}
 .menu-bg[hidden]{display:none}
@@ -239,6 +244,7 @@ async function entrar(){
 }
 document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => ir(b.dataset.v));
 function ir(v){ VISTA = v; Q = ''; document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v)); contar(); pintar(); window.scrollTo(0, 0); }
+const _pintarOrig = () => {}; document.addEventListener('click', e => { if (e.target && e.target.id === 'num-btn') vincularNumero(); });
 /* ══ CAMBIAR DE CUENTA (orden owner 2026-09-24): un solo menú, corto. La cuenta del lote entra como cualquiera de sus vendedores; el miembro salta a su WhatsApp. */
 function menuCuenta(){
   const t = INFO.tenant; const esMiembro = !!(SES && SES.miembro); const act = INFO.miembros.filter(x => x.activo);
@@ -277,8 +283,14 @@ function pintar(keep){
     $('mb-go').onclick = async () => { const b = $('mb-go'); b.disabled = true; const h = $('mb-h'); h.textContent = ''; try { const r = await post('miembro_agregar', { nombre: $('mb-n').value, telefono: $('mb-t').value, vendedor: String(t.id) }); if (!r.ok) { h.textContent = r.error || 'No se pudo'; h.style.color = '#DC2626'; return; } h.style.color = ''; h.textContent = r.enviado ? 'Código enviado por WhatsApp. Escríbelo y dale de alta.' : (r.codigo_prueba ? 'Modo prueba: el código es ' + r.codigo_prueba : 'No se pudo mandar el código por WhatsApp.'); $('mb-c').focus(); } finally { b.disabled = false; } };
     $('mb-ok').onclick = async () => { const b = $('mb-ok'); b.disabled = true; const h = $('mb-h'); try { const r = await post('miembro_confirmar', { telefono: $('mb-t').value, codigo: $('mb-c').value, vendedor: String(t.id) }); if (!r.ok) { h.textContent = r.error || 'No se pudo'; h.style.color = '#DC2626'; return; } await recargar(); } finally { b.disabled = false; } };
   } else if (VISTA === 'numero') {
+    /* VINCULAR WHATSAPP (orden owner 2026-09-24): número → código de vinculación en pantalla → "Vinculado" cuando el puente lo confirma */
+    const vinc = INFO.wa_estado === 'vinculado'; const esperando = /esperando_codigo|esperando_qr|reconectando/.test(INFO.wa_estado || '');
+    const pillN = vinc ? '<span class="pill ok"><i></i>Vinculado</span>' : esperando ? '<span class="pill warn"><i></i>Esperando vinculación</span>' : '<span class="pill off"><i></i>Sin vincular</span>';
     M.innerHTML = '<h2>Número</h2><div class="grid">' +
-      '<div class="cd"><div class="lg">' + ico('phone') + '</div><div class="bd"><div class="t">WhatsApp del lote' + (t.telefono ? '<span class="pill ok"><i></i>Vinculado</span>' : '<span class="pill off"><i></i>Sin número</span>') + '</div><div class="s">' + (t.telefono ? '+52 ' + esc(telFmt(t.telefono)) : 'Todavía no hay número. Cuando lo tengas se vincula aquí.') + '</div></div></div>' +
+      '<div class="cd"><div class="lg">' + ico('phone') + '</div><div class="bd"><div class="t">WhatsApp del lote' + pillN + '</div>' +
+        (vinc ? '<div class="s">+52 ' + esc(telFmt(t.telefono)) + '</div><div class="s" style="margin-top:6px">Este número recibe y manda los mensajes del lote.</div>'
+          : '<div class="s">Escribe el WhatsApp del lote y sigue los pasos en tu teléfono.</div><label class="lbl" for="num-tel">Número de WhatsApp</label><div class="numrow"><span class="pre">+52</span><input class="inp" id="num-tel" inputmode="numeric" maxlength="10" placeholder="10 dígitos" value="' + esc(String(t.telefono || '').replace(/\D/g, '').slice(-10)) + '"></div><button class="btn" id="num-btn" style="margin-top:10px">Vincular WhatsApp</button><div class="err" id="num-err"></div><div id="num-out"></div>') +
+      '</div></div>' +
       (t.horario ? '<div class="cd"><div class="lg">' + ico('cal') + '</div><div class="bd"><div class="t">Horario de atención</div><div class="s" style="margin-top:8px"><div class="kv">' + horarioTxt(t.horario) + '</div></div></div></div>' : '') + '</div>';
   }
 }
@@ -401,6 +413,24 @@ function aplicarAcentos(t){
   r.setProperty('--acento2', a2); r.setProperty('--acento', a1); r.setProperty('--acc', a2);
   [['a2', a2], ['a1', a1]].forEach(([k, h]) => [5, 8, 10, 15, 20, 25].forEach(p => r.setProperty('--' + k + '-' + (p < 10 ? '0' + p : p), h + Math.round(p * 2.55).toString(16).padStart(2, '0'))));
   document.documentElement.dataset.acentos = '1';
+}
+let NUM_POLL = null;
+async function vincularNumero(){
+  const b = $('num-btn'), e = $('num-err'), out = $('num-out'); const tel = ($('num-tel').value || '').replace(/\D/g, '');
+  e.textContent = ''; if (tel.length !== 10) { e.textContent = 'Escribe los 10 dígitos del WhatsApp.'; return; }
+  b.disabled = true; b.textContent = 'Pidiendo código…';
+  const r = await post('numero_vincular', { vendedor: String(TID), telefono: tel });
+  b.disabled = false; b.textContent = 'Vincular WhatsApp';
+  if (!r.ok) { e.textContent = r.error || 'No se pudo. Intenta de nuevo.'; return; }
+  if (r.vinculado) { await recargar(); return; }
+  out.innerHTML = '<div class="codigo">' + esc(r.codigo) + '</div>' +
+    '<ol class="pasos"><li>En el teléfono con el número +52 ' + esc(telFmt(tel)) + ' abre WhatsApp → <b>Dispositivos vinculados</b>.</li><li>Toca <b>Vincular un dispositivo</b> y abajo <b>Vincular con número de teléfono</b>.</li><li>Escribe el código de arriba. En cuanto WhatsApp lo acepte, aquí dirá <b>Vinculado</b>.</li></ol>' +
+    '<div class="s" id="num-espera">Esperando a WhatsApp… el código vence en poco más de un minuto.</div>' +
+    '<div class="numacts"><button class="btn sec" id="num-otro">Pedir otro código</button><button class="btn sec" id="num-qr">Prefiero escanear un QR</button></div><div id="num-qrbox"></div>';
+  $('num-otro').onclick = vincularNumero;
+  $('num-qr').onclick = async () => { const q = await get('numero_qr', { vendedor: String(TID) }); const box = $('num-qrbox'); if (!q.ok || !q.qr) { box.innerHTML = '<div class="s">Todavía no hay QR listo. Intenta en unos segundos.</div>'; return; } box.innerHTML = '<div class="s" style="margin:10px 0 6px">WhatsApp → Dispositivos vinculados → Vincular un dispositivo → escanea:</div><div id="num-qrimg" style="background:#fff;padding:10px;display:inline-block;border:1px solid var(--ln);border-radius:12px"></div>'; const pinta = () => { $('num-qrimg').innerHTML = ''; new QRCode($('num-qrimg'), { text: q.qr, width: 220, height: 220 }); }; if (window.QRCode) pinta(); else { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = pinta; document.head.appendChild(sc); } };
+  if (NUM_POLL) clearInterval(NUM_POLL); let n = 0;
+  NUM_POLL = setInterval(async () => { if (VISTA !== 'numero') { clearInterval(NUM_POLL); return; } n++; const st = await get('numero_estado', { vendedor: String(TID) }); if (st.ok && st.estado === 'vinculado') { clearInterval(NUM_POLL); await recargar(); return; } if (n > 60) { clearInterval(NUM_POLL); const w = $('num-espera'); if (w) w.textContent = 'No se vinculó. Pide otro código y vuelve a intentarlo.'; } }, 4000);
 }
 async function recargar(){ const r = await get('panel_info', { vendedor: String(INFO.tenant.id) }); if (r.ok) { INFO = r; contar(); pintar(); } }
 </script>

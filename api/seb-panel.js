@@ -2554,7 +2554,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'comision_responder', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
+        const V2 = new Set(['numero_vincular', 'numero_estado', 'numero_qr', 'inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'comision_responder', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -3020,20 +3020,51 @@ module.exports = async function handler(req, res) {
             const ensureMiembros = () => ensureMiembrosUnaVez();   // RENDIMIENTO (2026-09-23): DDL una vez por instancia (antes ALTER+CREATE+INDEX en CADA panel_info: ~2.4 s)
             const shaC = x => require('crypto').createHash('sha256').update(String(x)).digest('hex');
             const SOLO_DUENO = { ok: false, error: 'El panel general es solo del dueño del lote.', miembro: true };
-            if (['panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar'].includes(action) && SES && SES.miembro && SES.miembro.rol !== 'admin') return res.status(403).json(SOLO_DUENO);   // admin del lote (rol 'admin') sí administra
+            if (['panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'numero_vincular', 'numero_qr'].includes(action) && SES && SES.miembro && SES.miembro.rol !== 'admin') return res.status(403).json(SOLO_DUENO);   // admin del lote (rol 'admin') sí administra
             if (action === 'panel_info') {
                 if (!TV) return err(400, 'el panel es por universo');
                 await ensureMiembros();
                 // RENDIMIENTO (2026-09-23): miembros, tablero de citas y conteo de chats no dependen entre sí → en paralelo (antes: uno tras otro)
-                const [filasM, citas, chats] = await Promise.all([
+                const [filasM, citas, chats, waS] = await Promise.all([
                     query('SELECT id, nombre, telefono, activo, created, rol FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV]),
+                    query('SELECT estado, motivo, updated FROM wa_sessions WHERE tenant_id = ?', [TV]).catch(() => []),
                     (async () => { try { if (CITAF.activo(tV)) return await CITAF.tablero({ tenant: tV }); } catch (e) { } return { filas: [], cerradas: [] }; })(),
                     query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]).then(r => r[0])
                 ]);
                 const miembros = filasM.map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, rol: m.rol || 'vendedor', activo: Number(m.activo) === 1, created: Number(m.created) }));
                 return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, acento: (tV.config && tV.config.acento) || null, acento2: (tV.config && tV.config.acento2) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
                     citas: (citas.filas || []).concat(citas.cerradas || []).map(f => ({ cita_id: f.cita_id, chat_id: f.chat_id, nombre: f.nombre, auto: f.auto, estado: f.estado, cuando: f.cuando, ini_ts: f.ini_ts, fin_ts: f.fin_ts, situacion: f.situacion, precision: f.precision || null, hora: f.hora || null, dias: f.dias || [], proxima: f.proxima || null })),
-                    miembros, chats_delegados: Number(chats.n) || 0 });
+                    miembros, chats_delegados: Number(chats.n) || 0, wa_estado: (waS[0] && waS[0].estado) || 'sin_sesion' });
+            }
+            // ══ VINCULAR WHATSAPP DESDE EL PANEL (orden owner 2026-09-24): el dueño escribe el número → se guarda en el universo → el puente abre el
+            //    universo con ese número y pide el código de vinculación → la pantalla lo muestra con los pasos y pregunta el estado hasta 'vinculado'.
+            //    Misma maquinaria que la card del Sales Brain (/tenant/<id>/open|close|codigo, /qr/<id>); aquí el código se muestra en pantalla (no hay número de casa que lo mande).
+            if (action === 'numero_estado') {
+                if (!TV) return err(400, 'el panel es por universo');
+                const ses = (await query('SELECT estado, motivo, updated FROM wa_sessions WHERE tenant_id = ?', [TV]).catch(() => []))[0] || null;
+                return okJ({ telefono: tV.telefono || null, estado: (ses && ses.estado) || 'sin_sesion', motivo: ses ? ses.motivo : null, updated: ses ? Number(ses.updated) || null : null });
+            }
+            if (action === 'numero_vincular' || action === 'numero_qr') {
+                if (!TV) return err(400, 'el panel es por universo');
+                const PB = (process.env.BRIDGE_SEND_URL || 'http://137.184.199.19:3000/api/send').replace(/\/api\/send$/, ''); const PK = process.env.K_PUENTE || process.env.BRIDGE_API_KEY || '';
+                if (!PK) return err(503, 'K_PUENTE no configurada');
+                const puente = async (path, method, body) => { try { const r = await fetch(PB + path, { method, headers: { 'Content-Type': 'application/json', 'x-api-key': PK }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(45000) }); return await r.json().catch(() => ({ ok: false, error: 'puente ' + r.status })); } catch (e) { return { ok: false, error: 'puente: ' + e.message }; } };
+                if (action === 'numero_qr') { const q = await puente('/qr/' + TV, 'GET'); return okJ({ qr: q.qr || null, estado: q.estado || null, error: q.ok ? null : q.error }); }
+                if (req.method !== 'POST') return err(405, 'POST');
+                let telN = String(req.body.telefono || '').replace(/\D/g, ''); if (telN.length === 10) telN = '521' + telN; if (/^52\d{10}$/.test(telN)) telN = '521' + telN.slice(2);
+                if (!/^521\d{10}$/.test(telN)) return err(400, 'Escribe un WhatsApp de 10 dígitos.');
+                const otro = (await query('SELECT id, nombre FROM tenants WHERE telefono = ? AND id <> ? AND activo = 1', [telN, TV]))[0];
+                if (otro) return err(409, 'Ese WhatsApp ya está vinculado a otro universo (' + otro.nombre + ').');
+                if (String(tV.telefono || '') !== telN) await run('UPDATE tenants SET telefono = ? WHERE id = ?', [telN, TV]);
+                // el puente guarda el teléfono al abrir el universo → se reabre en limpio (sin borrar credenciales) para que lea el número nuevo
+                await puente('/tenant/' + TV + '/close', 'POST', { borrar_credenciales: false });
+                const op = await puente('/tenant/' + TV + '/open', 'POST');
+                if (!op.ok) return err(502, 'No se pudo abrir el universo en el puente: ' + (op.error || ''));
+                const cod = await puente('/tenant/' + TV + '/codigo', 'POST');
+                if (cod.vinculado) return okJ({ vinculado: true, telefono: telN });
+                if (!cod.ok) return err(502, cod.error || 'WhatsApp no dio código; intenta de nuevo');
+                await ACCIONES.registrar({ tenant_id: TV, chat_id: null, tipo: 'numero_vincular', meta: { telefono: telN, repetido: !!cod.repetido }, actor: 'vendedor', sesion_id: SID }).catch(() => { });
+                return okJ({ codigo: cod.codigo, telefono: telN, repetido: !!cod.repetido });
             }
             if (action === 'miembro_agregar' && req.method === 'POST') {
                 if (!TV) return err(400, 'el panel es por universo');
