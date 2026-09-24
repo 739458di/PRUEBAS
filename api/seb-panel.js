@@ -24,6 +24,7 @@ const citasVivas = require('../lib/seb/citas-vivas.js');
 const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10): el universo lo dicta la cookie, no la barra
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
+const COMPUERTA = require('../lib/seb/compuerta-entrada.js');
 const VOZ = require('../lib/seb/voz.js');   // LA VOZ del chat: Seb o el vendedor (human-on-the-loop)
 const CITAF = require('../lib/seb/citas-flex.js');   // CITAS FLEXIBLES (ventana + eventos + reloj virtual) — solo universos con config.citas_flex=1 (TERRA MOTORS)
 const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
@@ -320,6 +321,15 @@ module.exports = async function handler(req, res) {
                 const cl = await run('INSERT OR IGNORE INTO seb_turnos (chat_id, ultimo_in_id, ts) VALUES (?,?,?)', [Number(chS.id), Number(ui.m), Date.now()]);
                 if (!Number(cl.rowsAffected)) return res.status(200).json({ ok: true, chat_id: Number(chS.id), repetido: true, seb: { ok: false, motivo: 'turno_repetido' } });
             } catch (e) { console.error('[seb_turno] candado:', e.message); }
+            // ══ COMPUERTA DE ENTRADA (orden owner 2026-09-24): primer contacto que NO detona la venta → silencio total (sin cerebro, sin citas, sin escalar) ══
+            try {
+                const cmp = await COMPUERTA.evaluar({ tenant: tS, chat: chS, autos: await autosDeTenant(tS) });
+                if (!cmp.pasa) {
+                    const notaC = COMPUERTA.NOTA + ' (' + cmp.motivo + ')';
+                    try { if (tS.demo) await DEMO.sistema(tS, telS, notaC); else await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'compuerta:' + Number(chS.id), Date.now(), 'out', 'sistema', notaC, 'sistema', 0, Date.now()]); } catch (e) { }
+                    return res.status(200).json({ ok: true, chat_id: Number(chS.id), compuerta: cmp, seb: { ok: false, motivo: 'fuera_flujo' } });
+                }
+            } catch (e) { console.error('[compuerta]', e.message); }
             const correrCerebro = async (soloTexto) => {
             // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
             try {
@@ -1045,7 +1055,7 @@ module.exports = async function handler(req, res) {
             if (!/^521\d{10}$/.test(telD)) return R(400, { ok: false, error: 'teléfono inválido — 10 dígitos' });
             const autos = await autosDeTenant(t);
             let auto = autos.find(a => Number(a.id) === Number(body.auto_id) || Number(a.fyradrive_web_id) === Number(body.auto_id));
-            if (!auto && body.entrante === true && !body.auto_id) auto = autos[0] || { id: null, fyradrive_web_id: null, marca: '', modelo: '', anio: null, sin_auto: true };   // ENTRANTE de un desconocido (todo_entra): nace con el primer auto del universo en foco (o SIN auto si el lote aún no tiene catálogo: el chat existe y el cerebro pregunta/escala); el cerebro afina cuál quiere
+            if (!auto && body.entrante === true && !body.auto_id) auto = { id: null, fyradrive_web_id: null, marca: '', modelo: '', anio: null, sin_auto: true };   // ENTRANTE de un desconocido: SIN auto en foco (orden owner 2026-09-24: antes nacía con el primer auto del lote y Seb lo pitcheaba)   // ENTRANTE de un desconocido (todo_entra): nace con el primer auto del universo en foco (o SIN auto si el lote aún no tiene catálogo: el chat existe y el cerebro pregunta/escala); el cerebro afina cuál quiere
             if (!auto) return R(400, { ok: false, error: 'ese auto no es del vendedor', necesita: 'auto' });
             const autoNombre = [auto.marca, auto.modelo, auto.anio].filter(Boolean).join(' ');
             const nomC = String(body.nombre || '').trim();
