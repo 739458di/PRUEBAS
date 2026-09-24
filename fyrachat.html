@@ -1021,6 +1021,7 @@ async function abrirPerfil(){
   const loteCorto = String(TENANT.marca || TENANT.nombre || '').replace(/\s+IA$/i, '');
   const s = sheet({ titulo: 'Cambiar de cuenta', html: '<div class="grupo"><div class="row on"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(nom) + '</div><div class="s">' + esc(m ? (viendoComo ? 'Viendo como ' + nom.split(' ')[0] : (admin ? 'Administrador · ' : 'Vendedor · ') + loteCorto) : loteCorto) + '</div></div></div></div>' +
     ((viendoComo || admin || (!m && esLote) || filasVend) ? '<div class="grupo" style="margin-top:12px">' + ((viendoComo || admin || (!m && esLote)) ? masRow('monitor', 'Panel', loteCorto, "location.href='/panel.html'") : '') + filasVend + '</div>' : '') +
+    (!TENANT.demo ? '<div class="grupo" style="margin-top:12px">' + masRow('settings', 'Cambiar contraseña', '', 'cerrarHojas();abrirCambiarContrasena()') + '</div>' : '') +
     '<div class="grupo" style="margin-top:12px">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>' });
   return s;
 }

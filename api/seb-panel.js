@@ -3071,15 +3071,19 @@ module.exports = async function handler(req, res) {
                 await ensureMiembros();
                 const nombreM = String(req.body.nombre || '').trim().slice(0, 60); let telM = String(req.body.telefono || '').replace(/\D/g, ''); if (telM.length === 10) telM = '521' + telM;
                 if (!nombreM) return err(400, 'Escribe el nombre.'); if (!/^521\d{10}$/.test(telM)) return err(400, 'Escribe un WhatsApp de 10 dígitos.');
-                const codigo = String(Math.floor(100000 + Math.random() * 900000)); const ahora = Date.now();
+                // ALTA DIRECTA (orden owner 2026-09-24): el código que le llega ES su contraseña inicial y su usuario es su WhatsApp; queda activo de inmediato
+                // (entra en fyradrive.com con número + código) y cambia la contraseña en su perfil. 8 dígitos = cumple el mínimo de contraseña.
+                const codigo = String(require('crypto').randomInt(10000000, 100000000)); const ahora = Date.now();
                 const ex = (await query('SELECT id, activo FROM vendedores_universo WHERE tenant_id = ? AND telefono = ?', [TV, telM]))[0];
                 if (ex && Number(ex.activo) === 1) return err(409, 'Ese número ya es miembro.');
-                if (ex) await run('UPDATE vendedores_universo SET nombre = ?, codigo_hash = ?, codigo_expira = ? WHERE id = ?', [nombreM, shaC(codigo), ahora + 15 * 60000, Number(ex.id)]);
-                else await run('INSERT INTO vendedores_universo (tenant_id, nombre, telefono, codigo_hash, codigo_expira, activo, created) VALUES (?,?,?,?,?,0,?)', [TV, nombreM, telM, shaC(codigo), ahora + 15 * 60000, ahora]);
+                let midN;
+                if (ex) { await run('UPDATE vendedores_universo SET nombre = ?, codigo_hash = NULL, codigo_expira = NULL, activo = 1 WHERE id = ?', [nombreM, Number(ex.id)]); midN = Number(ex.id); }
+                else { const ins = await run('INSERT INTO vendedores_universo (tenant_id, nombre, telefono, codigo_hash, codigo_expira, activo, created) VALUES (?,?,?,?,?,1,?)', [TV, nombreM, telM, null, null, ahora]); midN = Number(ins.lastInsertRowid) || Number(((await query('SELECT id FROM vendedores_universo WHERE tenant_id = ? AND telefono = ? ORDER BY id DESC LIMIT 1', [TV, telM]))[0] || {}).id); }
+                const pw = await ACC.ponerContrasenaMiembro(midN, codigo, { forzar: true }); if (!pw.ok) return err(500, 'No se pudo crear su contraseña: ' + pw.error);
                 const marcaM = (tV.config && tV.config.marca) || tV.nombre || 'el panel';
-                let enviado = false; if (!DEMO.esDemo(tV)) { try { enviado = !!(await citasVivas.enviarWA(telM, 'Tu código para entrar a ' + marcaM + ' es ' + codigo + '. Vence en 15 minutos.', 0)); } catch (e) { } }
+                let enviado = false; if (!DEMO.esDemo(tV)) { try { enviado = !!(await citasVivas.enviarWA(telM, 'Bienvenido a ' + marcaM + '. Entra en fyradrive.com con tu WhatsApp como usuario y esta contraseña: ' + codigo + '. Puedes cambiarla en tu perfil.', 0)); } catch (e) { } }
                 await ACCIONES.registrar({ tenant_id: TV, chat_id: null, tipo: 'miembro_codigo', meta: { telefono: telM, nombre: nombreM, enviado }, actor: 'vendedor', sesion_id: SID }).catch(() => { });
-                return okJ({ telefono: telM, nombre: nombreM, enviado, codigo_prueba: DEMO.esDemo(tV) ? codigo : undefined });   // sandbox: el código se muestra aquí (no hay WhatsApp)
+                return okJ({ telefono: telM, nombre: nombreM, enviado, activo: true, codigo_prueba: DEMO.esDemo(tV) ? codigo : undefined });   // sandbox: el código se muestra aquí (no hay WhatsApp)
             }
             if (action === 'miembro_confirmar' && req.method === 'POST') {
                 if (!TV) return err(400, 'el panel es por universo');
