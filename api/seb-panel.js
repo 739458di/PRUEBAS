@@ -395,7 +395,7 @@ module.exports = async function handler(req, res) {
             if (!tU || !(await ACC.verificarContrasena(tU.id, contrasena))) return res.status(401).json(ERRU);
             const tFull = await ACC.tenantPorId(tU.id); const r = await ACC.abrirSesion(tFull || tU, req.headers['user-agent'], IP, 'usuario');
             if (!r.ok) return res.status(401).json(ERRU);
-            ACC.ponerCookie(res, r.token);
+            ACC.ponerCookie(res, r.token); if (ACC.esSesionDelOwner(r)) ACC.marcarDispositivoOwner(res);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar_usuario', ip: IP });
             return res.status(200).json({ ok: true, tenant: r.tenant, maestra: !!r.maestra });
         }
@@ -403,9 +403,9 @@ module.exports = async function handler(req, res) {
             const r = await ACC.entrarConContrasena(req.body.telefono, req.body.contrasena, req.headers['user-agent'], IP);
             if (!r.ok) return res.status(r.limite ? 429 : 401).json({ ok: false, error: r.error });
             if (r.tenant && r.tenant.id !== 0 && !r.maestra && r.tenant.telefono && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb.' }); }
-            ACC.ponerCookie(res, r.token);
+            ACC.ponerCookie(res, r.token); if (ACC.esSesionDelOwner(r)) ACC.marcarDispositivoOwner(res);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar_contrasena', ip: IP });
-            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
+            if (!ACC.esDispositivoOwner(req)) await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);
             return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra, contrasena_pendiente: false });
         }
         if (action === 'acceso_contrasena_crear' && req.method === 'POST') {
@@ -447,9 +447,9 @@ module.exports = async function handler(req, res) {
             const r = await ACC.entrarConCodigo(tel, String(req.body.codigo || ''), req.headers['user-agent'], IP);
             if (!r.ok) return res.status(401).json({ ok: false, error: r.error });
             if (r.tenant && r.tenant.id !== 0 && !r.maestra && r.tenant.telefono && await ACC.estaDesvinculado(r.tenant.id)) { await ACC.cerrarSesion(r.token); return res.status(409).json({ ok: false, error: 'Tu WhatsApp ya no está vinculado. Vuelve a vincularlo en fyradrive.com/seb y tu FyraChat se abre solo.', desvinculado: true }); }
-            ACC.ponerCookie(res, r.token);
+            ACC.ponerCookie(res, r.token); if (ACC.esSesionDelOwner(r)) ACC.marcarDispositivoOwner(res);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_entrar', ip: IP });
-            await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid, r.miembro);
+            if (!ACC.esDispositivoOwner(req)) await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid, r.miembro);
             return res.status(200).json({ ok: true, tenant: r.tenant, maestra: r.maestra, miembro: r.miembro || null, contrasena_pendiente: !!r.contrasena_pendiente, tiene_contrasena: !!r.tiene_contrasena });
         }
         if (action === 'acceso_salir' && req.method === 'POST') { await ACC.cerrarSesion(tokenSes); ACC.borrarCookie(res); return res.status(200).json({ ok: true }); }
@@ -473,9 +473,9 @@ module.exports = async function handler(req, res) {
         if (action === 'acceso_canjear') {
             const r = await ACC.canjearTicket(String(req.query.t || ''), req.headers['user-agent'], IP);
             if (!r.ok) { res.setHeader('Location', '/fyrachat.html?vendedor=entrar&aviso=' + encodeURIComponent(r.error)); return res.status(302).end(); }
-            ACC.ponerCookie(res, r.token);
+            ACC.ponerCookie(res, r.token); if (ACC.esSesionDelOwner(r)) ACC.marcarDispositivoOwner(res);
             await ACC.accesosLog({ sesion_id: r.sid, tenant_id: r.tenant.id, action: 'acceso_canjear', ip: IP });
-            if (r.origen !== 'sb') await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);   // el pase del Sales Brain no avisa (es el owner)
+            if (r.origen !== 'sb' && !ACC.esDispositivoOwner(req)) await ACC.avisarSesionNueva(r.tenant, req.headers['user-agent'], IP, r.sid);   // el pase del Sales Brain no avisa (es el owner)
             // LOTE con panel (config.usuario o tipo 'lote'): el pase del Sales Brain abre su PANEL general, no el chat (orden owner 2026-09-23)
             let esLote = false;
             if (r.destino && r.maestra) { try { const tl = await query('SELECT config_json FROM tenants WHERE id = ?', [Number(r.destino)]); const cl = tl.length ? JSON.parse(tl[0].config_json || '{}') : {}; esLote = !!(cl.usuario || cl.tipo === 'lote'); } catch (e) { } }
