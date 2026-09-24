@@ -48,7 +48,7 @@ a{color:var(--pri2)}
 .ic.l{width:24px;height:24px}
 
 /* ═══════════ columna de la app (móvil primero; desktop = panel de teléfono centrado sobre el navy) ═══════════ */
-#app{position:relative;width:100%;max-width:430px;height:100dvh;min-height:100svh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+#app{position:relative;width:100%;max-width:430px;height:100dvh;min-height:100svh;display:flex;flex-direction:column;overflow:hidden;overflow:clip;background:var(--bg)}
 @media (min-width:640px){#app{box-shadow:0 0 0 1px rgba(55,110,255,.14),0 30px 80px rgba(0,0,0,.5)}}
 .scr{position:absolute;inset:0;display:none;flex-direction:column;min-height:0}
 .scr.on{display:flex}
