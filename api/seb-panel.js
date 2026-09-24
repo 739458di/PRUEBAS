@@ -25,6 +25,7 @@ const ACC = require('../lib/seb/acceso.js');   // ACCESO POR SESIÓN (2026-09-10
 const DEMO = require('../lib/seb/demo.js');
 const SUBIR = require('../lib/seb/subir-chat.js');
 const COMPUERTA = require('../lib/seb/compuerta-entrada.js');
+const LOTE = require('../lib/seb/lote.js');
 const VOZ = require('../lib/seb/voz.js');   // LA VOZ del chat: Seb o el vendedor (human-on-the-loop)
 const CITAF = require('../lib/seb/citas-flex.js');   // CITAS FLEXIBLES (ventana + eventos + reloj virtual) — solo universos con config.citas_flex=1 (TERRA MOTORS)
 const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
@@ -330,6 +331,51 @@ module.exports = async function handler(req, res) {
                     return res.status(200).json({ ok: true, chat_id: Number(chS.id), compuerta: cmp, seb: { ok: false, motivo: 'fuera_flujo' } });
                 }
             } catch (e) { console.error('[compuerta]', e.message); }
+            // ══ UNIVERSO DE LOTE (orden owner 2026-09-24: "cada tenant es uno solo"): sin auto en foco NO corre el cerebro de Fyradrive.
+            //    (a) nombra un auto del catálogo → foco + ficha · (b) sin foco → pregunta qué busca / filtra su inventario / lista y pide elegir ·
+            //    (c) cita con ≥2 autos en el historial y sin nombrar cuál → se pregunta · (d) contesta cuál → foco y se pide el cuándo.
+            const esLote = Number(tS.id) !== 0;
+            if (esLote) {
+                try {
+                    const catL = await autosDeTenant(tS); const catE = await LOTE.enriquecer(catL);
+                    const uiL = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const ultimoInTxt = (uiL && uiL.texto) || '';
+                    const focoL = await focoDe(tS, telS);
+                    const mandarL = async (texto) => MSJ.enviar({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: 'lote:' + Number(chS.id) + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 7), manual: false, accion: 'seb_turno', voz_gen: VOZ_GEN, texto });
+                    const notaL = async (txt) => { try { if (tS.demo) await DEMO.sistema(tS, telS, txt); else await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'lote:' + Number(chS.id) + ':' + Date.now(), Date.now(), 'out', 'sistema', txt, 'sistema', 0, Date.now()]); } catch (e) { } };
+                    const nombreInv = inv => [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
+                    const abrirSobre = async (inv, motivo) => { await ponerFoco(tS, telS, inv); const ri = await ejecutarAccion(tS, telS, 'info', { auto_id: inv.id }); await notaL('🏬 ' + LOTE.marcaCorta(tS) + ' · foco: ' + nombreInv(inv) + ' (' + motivo + ')' + (ri && ri.out && ri.out.ok ? ' · ficha enviada' : ' · ficha: ' + ((ri && ri.out && ri.out.error) || 'no salió'))); return ri; };
+                    const salirL = (tipo, n, textos) => res.status(200).json({ ok: true, chat_id: Number(chS.id), lote: tipo, seb: { ok: true, modo: 'lote', tipo, segmentos: n, textos: textos || [] } });
+                    const { lote: ltPrev, ej: ejPrev } = await LOTE.leerLote(tS, telS);
+                    // (d) estaba eligiendo el auto de la CITA
+                    if (ltPrev && ltPrev.cita && ltPrev.fase === 'opciones') {
+                        const ops = (ltPrev.opciones || []).map(id => catE.find(a => Number(a.id) === Number(id))).filter(Boolean);
+                        const el = LOTE.eleccion(ultimoInTxt, ops) || LOTE.matchCatalogo(ultimoInTxt, ops).foco;
+                        if (el) { await ponerFoco(tS, telS, el); await LOTE.guardarLote(tS, telS, ejPrev, { fase: 'foco' }); await mandarL('Perfecto, va sobre el ' + nombreInv(el) + '. ¿Qué día y a qué hora te queda bien venir a verlo?'); await notaL('🏬 cita: auto elegido ' + nombreInv(el)); return salirL('cita_auto_elegido', 1); }
+                    }
+                    // (a) nombra un auto del catálogo → foco (primer contacto o cambio de auto)
+                    const nomL = LOTE.matchCatalogo(ultimoInTxt, catE);
+                    if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
+                    // (b) sin foco → el lote pregunta / filtra / lista
+                    if (!focoL) {
+                        const rL = await LOTE.turno({ tenant: tS, chat: chS, texto: ultimoInTxt, catalogo: catL });
+                        for (const sgm of rL.segmentos) await mandarL(sgm);
+                        if (rL.foco) await abrirSobre(rL.foco, rL.motivo); else await notaL('🏬 ' + LOTE.marcaCorta(tS) + ' · ' + rL.motivo);
+                        if (rL.escalar) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: 'lote: ' + rL.motivo }); } catch (e) { } }
+                        return salirL(rL.motivo, rL.segmentos.length, rL.segmentos);
+                    }
+                    // (c) cita sin auto claro
+                    if (CITAF.activo(tS) && LOTE.esAgenda(ultimoInTxt)) {
+                        const idsA = await LOTE.autosDelChat(chS.id);
+                        const ops = idsA.map(id => catE.find(a => Number(a.id) === Number(id) || Number(a.fyradrive_web_id) === Number(id))).filter(Boolean).slice(0, 4);
+                        if (ops.length >= 2) {
+                            await LOTE.guardarLote(tS, telS, ejPrev, { fase: 'opciones', opciones: ops.map(a => Number(a.id)), cita: 1 });
+                            await mandarL('Claro. ¿La cita sería para cuál?\n' + ops.map((a, i) => (i + 1) + ') ' + a.nombre).join('\n'));
+                            await notaL('🏬 cita: auto no claro entre ' + ops.length + ' → se preguntó');
+                            return salirL('cita_auto_pregunta', 1);
+                        }
+                    }
+                } catch (e) { console.error('[lote]', e.message); }
+            }
             const correrCerebro = async (soloTexto) => {
             // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
             try {
@@ -356,7 +402,7 @@ module.exports = async function handler(req, res) {
                 const segs = out.segmentos.map(x => String(x || '').trim()).filter(Boolean); const fotos = Array.isArray(out.fotos) ? out.fotos : [];
                 const fi = out.fotos_after_index == null ? segs.length - 1 : Number(out.fotos_after_index); const pi = out.pin_after_index == null ? segs.length - 1 : Number(out.pin_after_index);
                 if (out.pin_primero) await pin();
-                for (let i = 0; i < segs.length; i++) { await mandarS({ texto: segs[i] }); if (fotos.length && i === fi) await mandarS({ fotos }); if (!out.pin_primero && i === pi) await pin(); }
+                for (let i = 0; i < segs.length; i++) { await mandarS({ texto: LOTE.identidad(segs[i], tS) }); if (fotos.length && i === fi) await mandarS({ fotos }); if (!out.pin_primero && i === pi) await pin(); }
                 if (!segs.length) { if (fotos.length) await mandarS({ fotos }); if (!out.pin_primero) await pin(); }
             }
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
@@ -2294,7 +2340,7 @@ module.exports = async function handler(req, res) {
             const dirAcc = await citasVivas.direccionDe(TID, telFullB, { crear: !TID });
             if (!dirAcc.chat_id) return R(404, { ok: false, error: 'este contacto no tiene chat en este universo (delega primero)' });
             const claveB = String(B.clave || ('boton:' + accB + ':' + dirAcc.chat_id + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8)));
-            const mandar = (extra) => MSJ.enviar(Object.assign({ tenantId: TID, chatId: dirAcc.chat_id, origen: 'boton:' + accB, clave: claveB + ':msg', manual: false, sesionId: SES ? SES.sid : null, accion: 'boton_' + accB, refId: inv.id, meta: { auto: nombreAuto, via: B.via || 'boton' } }, extra || {}));
+            const mandar = (extra) => { if (extra && extra.texto && TID) extra = Object.assign({}, extra, { texto: LOTE.identidad(extra.texto, tAcc) }); return MSJ.enviar(Object.assign({ tenantId: TID, chatId: dirAcc.chat_id, origen: 'boton:' + accB, clave: claveB + ':msg', manual: false, sesionId: SES ? SES.sid : null, accion: 'boton_' + accB, refId: inv.id, meta: { auto: nombreAuto, via: B.via || 'boton' } }, extra || {})); };
             const simTxt = () => DEMO.esSandbox(tAcc) ? '' : ('SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ');
             try {
                 // ── 2) EJECUTAR LITERAL ──
