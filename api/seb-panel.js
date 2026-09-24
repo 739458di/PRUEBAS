@@ -3194,6 +3194,7 @@ module.exports = async function handler(req, res) {
                 await run(`INSERT INTO comisiones_auto (inv_auto_id, tenant_id, monto, propuesto, estado, decidido_por, decidido_ts, updated) VALUES (?,?,?,?,?,?,?,?)
                            ON CONFLICT(inv_auto_id) DO UPDATE SET tenant_id=excluded.tenant_id, monto=excluded.monto, propuesto=excluded.propuesto, estado=excluded.estado, decidido_por=excluded.decidido_por, decidido_ts=excluded.decidido_ts, updated=excluded.updated`, [Number(a.id), TV, monto, propuesto, est, String(quien || '').slice(0, 80), Date.now(), Date.now()]);
                 try { await ACCIONES.registrar({ tenant_id: TV, tipo: 'comision_' + est, ref_id: Number(a.id), meta: { monto, propuesto, quien } }); } catch (e) { }
+                try { await U.sincronizarCatalogoFyradrive({ inv_auto_id: Number(a.id) }); } catch (e) { }   // aceptada → entra a Autos Fyradrive; rechazada/pendiente → sale (owner 2026-09-24)
                 return okJ({ id: Number(a.id), estado: est, monto, propuesto });
             }
             if (action === 'autos_mios') {
