@@ -23,7 +23,7 @@ a{color:inherit;text-decoration:none}button{font-family:inherit;cursor:pointer}
 .btn.sec{background:#fff;color:var(--txt);border-color:var(--ln)}.btn.sec:hover{background:var(--s1)}
 .err{color:#DC2626;font-size:13px;min-height:18px;margin-top:8px}
 /* app shell */
-.app{display:none}.app.on{display:grid;grid-template-columns:270px 1fr;min-height:100vh}
+.app{display:none}.app.on{display:grid;grid-template-columns:270px 1fr;min-height:100vh}.app.on > div{min-width:0}/* sin esto, una vista previa larga (nowrap) ensancha la columna y el iPhone aleja toda la página */
 .side{background:var(--side);border-right:1px solid var(--ln);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:auto}
 .brand{display:flex;align-items:center;gap:10px;padding:16px 18px 12px;font-weight:600;font-size:15px}
 .brand .mk{width:26px;height:26px;border-radius:7px;background:#111827;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
