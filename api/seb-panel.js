@@ -2348,7 +2348,7 @@ module.exports = async function handler(req, res) {
                     // 📄 ENVIAR INFO (owner 2026-08-07): el machote COMPLETO del auto,
                     // copy-paste literal (mismo generador del "más información" del bot)
                     const { machoteDe } = LIB_MACHOTE;
-                    const mch = await machoteDe(inv.id);
+                    const mch = TID ? await require('../lib/seb/machote.js').machoteLote(inv.id, tAcc) : await machoteDe(inv.id);   // lote: su ficha tal cual (owner 2026-09-24); Fyradrive: el machote de siempre
                     if (!mch) return R(200, { ok: false, error: 'no pude armar el machote (al auto le falta precio o año)' });
                     const env = await mandar({ texto: mch });
                     if (!env.ok) return R(200, { ok: false, error: env.error || 'no se pudo mandar el machote', auto: nombreAuto });
