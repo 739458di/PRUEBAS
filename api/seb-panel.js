@@ -3027,9 +3027,9 @@ module.exports = async function handler(req, res) {
                 // RENDIMIENTO (2026-09-23): miembros, tablero de citas y conteo de chats no dependen entre sí → en paralelo (antes: uno tras otro)
                 const [filasM, citas, chats, waS] = await Promise.all([
                     query('SELECT id, nombre, telefono, activo, created, rol FROM vendedores_universo WHERE tenant_id = ? ORDER BY id', [TV]),
-                    query('SELECT estado, motivo, updated FROM wa_sessions WHERE tenant_id = ?', [TV]).catch(() => []),
                     (async () => { try { if (CITAF.activo(tV)) return await CITAF.tablero({ tenant: tV }); } catch (e) { } return { filas: [], cerradas: [] }; })(),
-                    query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]).then(r => r[0])
+                    query('SELECT COUNT(*) n FROM delegaciones WHERE tenant_id = ? AND hasta IS NULL', [TV]).catch(() => [{ n: 0 }]).then(r => r[0]),
+                    query('SELECT estado, motivo, updated FROM wa_sessions WHERE tenant_id = ?', [TV]).catch(() => [])
                 ]);
                 const miembros = filasM.map(m => ({ id: Number(m.id), nombre: m.nombre, telefono: m.telefono, rol: m.rol || 'vendedor', activo: Number(m.activo) === 1, created: Number(m.created) }));
                 return okJ({ tenant: { id: TV, nombre: tV.nombre, marca: (tV.config && tV.config.marca) || null, tema: (tV.config && tV.config.tema) || null, acento: (tV.config && tV.config.acento) || null, acento2: (tV.config && tV.config.acento2) || null, usuario: (tV.config && tV.config.usuario) || null, telefono: tV.telefono || null, horario: (tV.config && tV.config.horario) || null, sandbox: !!DEMO.esSandbox(tV) },
