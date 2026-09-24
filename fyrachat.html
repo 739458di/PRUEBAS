@@ -167,6 +167,17 @@ a{color:var(--pri2)}
 .auto-c .y{font-size:13px;line-height:18px;color:var(--txt2)}
 .tucom{display:inline-block;margin-top:4px;font-size:11px;font-weight:700;color:var(--pos);background:rgba(53,224,176,.14);border-radius:6px;padding:1px 7px;white-space:nowrap}.tucom.off{color:var(--muted);background:var(--s1)}
 :root[data-tema="blanco"] .tucom{color:#15803D;background:#E7F5EE}
+:root[data-tema="blanco"] .sh-bg{background:rgba(17,24,39,.35)}
+:root[data-tema="blanco"] .sh{background:#FFFFFF;border-color:rgba(0,0,0,.08);box-shadow:0 -12px 40px rgba(0,0,0,.14)}
+:root[data-tema="blanco"] .sh-grab{background:#D1D5DB}
+:root[data-tema="blanco"] .sh-head b,:root[data-tema="blanco"] .sh-head .x{color:#111}:root[data-tema="blanco"] .sh-head .x{background:#F4F4F5}
+:root[data-tema="blanco"] .grupo{background:#F6F6F7;box-shadow:none;border:1px solid rgba(0,0,0,.06)}
+:root[data-tema="blanco"] .row{color:#111}:root[data-tema="blanco"] .row .sq{background:#fff;color:#111;border:1px solid rgba(0,0,0,.08)}:root[data-tema="blanco"] .row .s{color:#5B5B63}:root[data-tema="blanco"] .row.on{background:#EEF2FF}
+:root[data-tema="blanco"] .row.rojo{color:#C62828}:root[data-tema="blanco"] .row.rojo .sq{color:#C62828;background:#FDECEC}
+:root[data-tema="blanco"] .hint,:root[data-tema="blanco"] .sh-body p{color:#5B5B63}
+:root[data-tema="blanco"] .sh-body .inp,:root[data-tema="blanco"] .sh-body textarea,:root[data-tema="blanco"] .sh-body select{background:#F4F4F5;color:#111;border-color:rgba(0,0,0,.14)}
+:root[data-tema="blanco"] .sh-body .c{background:#F4F4F5;color:#111;border-color:rgba(0,0,0,.12)}:root[data-tema="blanco"] .sh-body .c.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+:root[data-tema="blanco"] .auto-c,:root[data-tema="blanco"] .fila{color:#111}:root[data-tema="blanco"] .auto-c .nm,:root[data-tema="blanco"] .auto-c .pr{color:#111}:root[data-tema="blanco"] .auto-c .y{color:#5B5B63}
 .auto-c .der{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .auto-c .pr{font-size:14px;line-height:18px;color:var(--pos);font-weight:600}
 .auto-c.nuevo{animation:pop .24s ease-out}
@@ -1003,11 +1014,12 @@ async function abrirPerfil(){
   if (!TENANT) return; const m = TENANT.miembro; const nom = (m && m.nombre) || TENANT.nombre || ''; const admin = !!(m && m.rol === 'admin'); const esLote = !!(TENANT.marca); const viendoComo = !!(m && m.como) || !!COMO;
   let filasVend = '';
   if (!m && esLote) {   // cuenta del lote: puede entrar al FyraChat de cualquiera de sus vendedores
-    try { const p = await apiGet('panel_info', {}); if (p && p.ok) filasVend = (p.miembros || []).filter(x => x.activo).map(x => masRow('user', 'Entrar como ' + x.nombre, 'Su FyraChat: sus clientes y el WhatsApp general', "location.href='/fyrachat.html?vendedor=" + Number(TENANT.id) + "&como=" + Number(x.id) + "'")).join(''); } catch (e) { }
+    try { const p = await apiGet('panel_info', {}); if (p && p.ok) filasVend = (p.miembros || []).filter(x => x.activo).map(x => masRow('user', 'WhatsApp de ' + x.nombre.split(' ')[0], x.rol === 'admin' ? 'Administrador' : 'Vendedor', "location.href='/fyrachat.html?vendedor=" + Number(TENANT.id) + "&como=" + Number(x.id) + "'")).join(''); } catch (e) { }
   }
-  const s = sheet({ titulo: 'Tu cuenta', html: '<div class="grupo"><div class="row"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(nom) + '</div><div class="s">' + esc(m ? (viendoComo ? 'Viendo como ' : (admin ? 'Administrador de ' : 'Vendedor de ')) + (TENANT.marca || TENANT.nombre) : (TENANT.marca || TENANT.nombre)) + '</div></div></div></div>' +
-    '<div class="grupo" style="margin-top:12px">' + (viendoComo ? masRow('monitor', 'Volver al panel del lote', 'Salir de la vista de ' + esc(nom), "location.href='/panel.html'") : '') + (admin && !viendoComo || (!m && esLote) ? masRow('monitor', 'Panel del lote', 'Autos, chats de tus vendedores, citas y miembros', "location.href='/panel.html'") : '') + (!viendoComo ? masRow('chat', 'Mi FyraChat', 'Aquí estás ahora', 'cerrarHojas()') : '') + filasVend + '</div>' +
-    '<div class="grupo" style="margin-top:12px">' + masRow('logout', 'Cerrar sesión', 'Solo aquí termina tu sesión', 'accSalir()', 'rojo') + '</div>' });
+  const loteCorto = String(TENANT.marca || TENANT.nombre || '').replace(/\s+IA$/i, '');
+  const s = sheet({ titulo: 'Cambiar de cuenta', html: '<div class="grupo"><div class="row on"><div class="sq">' + ico('user') + '</div><div class="tx"><div class="t">' + esc(nom) + '</div><div class="s">' + esc(m ? (viendoComo ? 'Viendo como ' + nom.split(' ')[0] : (admin ? 'Administrador · ' : 'Vendedor · ') + loteCorto) : loteCorto) + '</div></div></div></div>' +
+    ((viendoComo || admin || (!m && esLote) || filasVend) ? '<div class="grupo" style="margin-top:12px">' + ((viendoComo || admin || (!m && esLote)) ? masRow('monitor', 'Panel', loteCorto, "location.href='/panel.html'") : '') + filasVend + '</div>' : '') +
+    '<div class="grupo" style="margin-top:12px">' + masRow('logout', 'Cerrar sesión', '', 'accSalir()', 'rojo') + '</div>' });
   return s;
 }
 function cerrarHojas(){ try { while (SHEETS.length) SHEETS[SHEETS.length - 1].cerrar(); } catch (e) {} }

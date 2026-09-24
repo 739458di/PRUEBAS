@@ -109,7 +109,7 @@ h2{font-size:17px;font-weight:600;margin:0 0 6px}
 .m .mt{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:4px;font-size:10.5px;opacity:.75}
 .m.out .vend{background:rgba(255,255,255,.18);color:#fff}
 .pills{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}.pl{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:5px 11px;font:600 12px var(--f);color:var(--txt2);cursor:pointer}.pl.on{background:var(--acento2,#111827);border-color:var(--acento2,#111827);color:#fff}
-@media (max-width:820px){.chats{grid-template-columns:1fr;height:auto;min-height:0}.chats .lst{max-height:50vh;border-right:0;border-bottom:1px solid var(--ln)}.hilo{min-height:50vh}.m{max-width:88%}}
+
 /* ═══ MARCA DEL LOTE (automático para cada lote: --acento2 = identidad, --acento = acción). Fondo blanco base siempre. ═══ */
 html[data-acentos] .brand{background:var(--acento2);color:#fff;margin:0 0 6px;padding:18px 18px 16px}
 html[data-acentos] .brand .mk{background:#fff;color:var(--acento2)}
@@ -132,10 +132,28 @@ html[data-acentos] .cal .d.hoy .n{background:var(--acento)}
 html[data-acentos] .cal .ev{background:var(--a2-10);color:var(--acento2);border-left-color:var(--acento2)}
 html[data-acentos] .pill.warn{color:var(--acento);background:var(--a1-10)}
 html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}html[data-acentos] .topbar .mk{background:#fff;color:var(--acento2)}html[data-acentos] .topbar .x{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:#fff}
+/* ═══ CUENTA · MENÚ ═══ */
+.cta-btn{border:0;background:none;text-align:left;width:100%;cursor:pointer;font:inherit;color:inherit}.cta-btn .who{flex:1;min-width:0}.cta-btn .ic{color:var(--txt2);width:16px;height:16px}.cta-btn:hover{background:var(--s1)}
+.menu-bg{position:fixed;inset:0;background:rgba(17,24,39,.35);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.menu{width:100%;max-width:440px;background:#fff;border-radius:18px 18px 0 0;padding:10px 10px calc(14px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 40px rgba(0,0,0,.18)}
+@media (min-width:821px){.menu-bg{align-items:center}.menu{border-radius:16px;padding:10px}}
+.mh{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);padding:8px 10px 6px}
+.mrow{display:flex;align-items:center;gap:12px;padding:10px;border-radius:12px;color:var(--txt);text-decoration:none;width:100%;border:0;background:none;font:inherit;text-align:left;cursor:pointer}.mrow:hover{background:var(--s1)}
+.mrow .mav{width:36px;height:36px;border-radius:50%;background:var(--a2-10,var(--s1));color:var(--acento2,var(--txt2));display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 36px}.mrow .mav .ic{width:16px;height:16px}
+.mrow .mtx{display:flex;flex-direction:column;min-width:0}.mrow b{font-size:14px;font-weight:600}.mrow small{font-size:12px;color:var(--txt2)}
+.mrow.salir{margin-top:4px;border-top:1px solid var(--ln);border-radius:0}.mrow.salir .mav{background:#FEE2E2;color:#B91C1C}
+.bottombar{display:none}
+.hilo .hh .volver{display:none}
 @media (max-width:820px){
   .app.on{grid-template-columns:1fr}.side{display:none}
+  .bottombar{display:flex;position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--ln);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
+  .bottombar button{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;font:600 10.5px var(--f);color:var(--txt2);padding:4px 0}.bottombar button .ic{width:22px;height:22px}.bottombar button.on{color:var(--acento2,var(--txt))}
+  .main{padding-bottom:96px}
+  .chats{display:block;height:auto;min-height:0;border:0;overflow:visible}.chats .lst{border:1px solid var(--ln);border-radius:var(--r);max-height:none;overflow:visible}.chats .hilo{display:none}
+  .chats.abierto .lst{display:none}.chats.abierto .hilo{display:flex;border:1px solid var(--ln);border-radius:var(--r);height:calc(100vh - 200px);min-height:420px;overflow:hidden}
+  .hilo .hh .volver{display:grid}.m{max-width:88%}
   .topbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--ln);position:sticky;top:0;background:#fff;z-index:3}
-  .topbar .brand{padding:0;flex:1}.topbar .av{width:32px;height:32px;border-radius:8px;border:1px solid var(--ln);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--txt2)}
+  .topbar .brand{padding:0;flex:1}.topbar .av{width:34px;height:34px;border-radius:50%;border:1px solid var(--ln);background:#fff;display:grid;place-items:center;font:700 12px var(--f);color:var(--txt2)}
   .topbar .x{border:1px solid var(--ln);background:#fff;border-radius:8px;height:32px;padding:0 10px;font:600 12px var(--f);color:var(--txt)}
   .main{padding:18px 16px 40px}h1{font-size:20px;margin-bottom:12px}
   .tools{flex-wrap:wrap}.grid{grid-template-columns:1fr}.row3{grid-template-columns:1fr}
@@ -149,33 +167,26 @@ html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}
 </div>
 <div class="app" id="app">
   <aside class="side">
-    <div class="brand"><span class="mk" id="sd-mk">T</span><span id="sd-marca">Panel</span><span class="tag">LOTE</span></div>
+    <div class="brand"><span class="mk" id="sd-mk">T</span><span id="sd-marca">Panel</span></div>
     <nav class="snav">
-      <button class="nav" data-v="general">{{home}}Inicio</button>
-      <button class="nav" data-v="chats">{{chat}}Chats<span class="n" id="n-chats"></span></button>
-      <div class="grp">Chats de tus vendedores {{chev}}</div>
-      <div id="sd-fc"></div>
-      <div class="grp">Operación {{chev}}</div>
-      <button class="nav" data-v="autos">{{car}}Autos<span class="n" id="n-autos"></span></button>
+      <button class="nav" data-v="chats">{{chat}}Mensajes de WhatsApp<span class="n" id="n-chats"></span></button>
+      <button class="nav" data-v="autos">{{car}}Mis autos<span class="n" id="n-autos"></span></button>
       <button class="nav" data-v="citas">{{cal}}Citas<span class="n" id="n-citas"></span></button>
-      <div class="grp">Organización {{chev}}</div>
-      <button class="nav" data-v="miembros">{{users}}Miembros<span class="n" id="n-miembros"></span></button>
+      <button class="nav" data-v="miembros">{{users}}Mis vendedores<span class="n" id="n-miembros"></span></button>
       <button class="nav" data-v="numero">{{phone}}Número</button>
     </nav>
     <div class="sp"></div>
-    <div class="sfoot"><div class="av" id="sd-av">TE</div><div><div class="t" id="sd-nombre"></div><div class="s" id="sd-user"></div></div><button id="salir">Salir</button></div>
+    <button class="sfoot cta-btn" id="sd-cuenta" title="Cambiar de cuenta"><div class="av" id="sd-av">TE</div><div class="who"><div class="t" id="sd-nombre"></div><div class="s" id="sd-user"></div></div>{{chev}}</button>
   </aside>
   <div>
-    <header class="topbar"><div class="brand"><span class="mk" id="tb-mk">T</span><span id="tb-marca">Panel</span></div><button class="x" data-v="chats">Chats</button><button class="x" id="tb-salir">Salir</button></header>
-    <main class="main">
-      <h1 id="titulo">Configuración</h1>
-      <div class="tabs" id="tabs">
-        <button class="tab" data-v="general">General</button><button class="tab" data-v="chats">Chats</button><button class="tab" data-v="autos">Autos</button><button class="tab" data-v="citas">Citas</button><button class="tab" data-v="miembros">Miembros</button><button class="tab" data-v="numero">Número</button>
-      </div>
-      <div id="main"></div>
-    </main>
+    <header class="topbar"><div class="brand"><span class="mk" id="tb-mk">T</span><span id="tb-marca">Panel</span></div><button class="av" id="tb-av" title="Cambiar de cuenta">?</button></header>
+    <main class="main"><div id="main"></div></main>
+    <nav class="bottombar">
+      <button data-v="chats">{{chat}}<span>Mensajes</span></button><button data-v="autos">{{car}}<span>Autos</span></button><button data-v="citas">{{cal}}<span>Citas</span></button><button data-v="miembros">{{users}}<span>Vendedores</span></button><button data-v="numero">{{phone}}<span>Número</span></button>
+    </nav>
   </div>
 </div>
+<div class="menu-bg" id="menu-bg" hidden><div class="menu" id="menu"></div></div>
 <script>
 const API = '/api/seb-panel';
 const $ = id => document.getElementById(id);
@@ -202,31 +213,34 @@ const VIVAS = ['viva', 'en_camino', 'pospuesta'];
 })();
 const PORTADA = 'https://www.fyradrive.com/';
 const salir = async () => { await post('acceso_salir', {}); location.replace(PORTADA); };
-$('salir').onclick = salir; $('tb-salir').onclick = salir;
 let TID = 0;
 async function entrar(){
   TID = Number(new URLSearchParams(location.search).get('vendedor')) || Number(SES.tenant.id);
-  const [r, a] = await Promise.all([get('panel_info', { vendedor: String(TID) }), get('autos_mios', { vendedor: String(TID) })]);   // en paralelo (rendimiento 2026-09-23)
+  const [r, a] = await Promise.all([get('panel_info', { vendedor: String(TID) }), get('autos_mios', { vendedor: String(TID) })]);
   if (!r.ok) { $('lg-card').textContent = r.error || 'No se pudo cargar el panel'; return; }
   INFO = r; AUTOS = (a.ok && a.autos) || []; AUTOS_META = { lote_fyradrive: !!(a && a.lote_fyradrive), puede_editar: !!(a && a.puede_editar) };
   const t = INFO.tenant, m = t.marca || t.nombre; document.title = m;
   aplicarAcentos(t);
   $('sd-marca').textContent = m; $('tb-marca').textContent = m; $('sd-mk').textContent = m[0]; $('tb-mk').textContent = m[0];
-  $('sd-nombre').textContent = t.nombre; $('sd-user').textContent = t.usuario || ''; $('sd-av').textContent = ini(t.nombre);
-  // bolita del lote: cambiar de cuenta → entrar al FyraChat de cualquiera de sus vendedores (vista "como" ese vendedor) o al del lote
-  const cambiarCuenta = () => { const act = INFO.miembros.filter(m => m.activo); const html = '<div class="grid">' + (act.map(m => '<a class="cd" href="/fyrachat.html?vendedor=' + TID + '&como=' + m.id + '" style="cursor:pointer"><div class="lg">' + esc(ini(m.nombre)) + '</div><div class="bd"><div class="t">Entrar como ' + esc(m.nombre) + '</div><div class="s">Su FyraChat · ' + esc(m.rol === 'admin' ? 'admin' : 'vendedor') + '</div></div><span class="ib">' + ico('r') + '</span></a>').join('') || '<div class="vacio">Sin vendedores activos.</div>') + '<a class="cd" href="/fyrachat.html?vendedor=' + TID + '" style="cursor:pointer"><div class="lg">' + esc(ini(t.marca || t.nombre)) + '</div><div class="bd"><div class="t">FyraChat del lote</div><div class="s">WhatsApp general, como ' + esc(t.marca || t.nombre) + '</div></div><span class="ib">' + ico('r') + '</span></a></div>'; $('main').innerHTML = '<h2>Cambiar de cuenta</h2><p class="desc">Entra al FyraChat de un vendedor para ver y contestar como él, o al del lote.</p>' + html; document.querySelectorAll('[data-v]').forEach(b => b.classList.remove('on')); window.scrollTo(0, 0); };
-  if (!(SES && SES.miembro)) { $('sd-av').style.cursor = 'pointer'; $('sd-av').title = 'Cambiar de cuenta'; $('sd-av').onclick = cambiarCuenta; $('tb-mk').style.cursor = 'pointer'; $('tb-mk').onclick = cambiarCuenta; }
-  $('titulo').textContent = 'Configuración de ' + m;
-  pintarSideFC();
-  try { localStorage.setItem('fyra_lugar', 'panel'); } catch (e) { }
-  if (SES && SES.miembro && SES.miembro.rol === 'admin') { const irMi = () => { try { localStorage.setItem('fyra_lugar', 'fyrachat'); } catch (e) { } location.href = '/fyrachat.html?vendedor=' + TID; }; const b1 = document.createElement('button'); b1.className = 'nav'; b1.innerHTML = ico('chat') + 'Mi FyraChat'; b1.onclick = irMi; document.querySelector('.snav').insertBefore(b1, document.querySelector('.snav .grp')); const b2 = document.createElement('button'); b2.className = 'x'; b2.textContent = 'Mi FyraChat'; b2.onclick = irMi; document.querySelector('.topbar .x').before(b2); }
-  $('login').style.display = 'none'; $('app').classList.add('on'); MES = null; ir('general');
+  const quien = SES && SES.miembro ? SES.miembro.nombre : t.nombre;
+  $('sd-nombre').textContent = quien; $('sd-user').textContent = SES && SES.miembro ? (SES.miembro.rol === 'admin' ? 'Administrador' : 'Vendedor') : (t.usuario || ''); $('sd-av').textContent = ini(quien); $('tb-av').textContent = ini(quien);
+  $('sd-cuenta').onclick = menuCuenta; $('tb-av').onclick = menuCuenta;
+  try { localStorage.removeItem('fyra_lugar'); } catch (e) { }
+  $('login').style.display = 'none'; $('app').classList.add('on'); MES = null; ir('chats');
 }
 document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => ir(b.dataset.v));
 function ir(v){ VISTA = v; Q = ''; document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v)); contar(); pintar(); window.scrollTo(0, 0); }
-// FyraChat por vendedor: el lote (TERRA) + cada miembro activo. Todos comparten el número del lote; el de un miembro abre sus chats.
-function fcLista(){ const t = INFO.tenant; const out = [{ id: 0, nombre: t.marca || t.nombre, sub: t.telefono ? '+52 ' + telFmt(t.telefono) : 'Sin número todavía', tel: t.telefono, lote: true, href: '/fyrachat.html?vendedor=' + t.id }]; INFO.miembros.filter(m => m.activo).forEach(m => out.push({ id: m.id, nombre: m.nombre, sub: '+52 ' + telFmt(m.telefono), tel: m.telefono, lote: false, href: '/fyrachat.html?vendedor=' + t.id + '&miembro=' + m.id })); return out; }
-function pintarSideFC(){ $('sd-fc').innerHTML = INFO.miembros.filter(m => m.activo).map(m => '<button class="nav" data-vend="' + m.id + '">' + ico('users') + esc(m.nombre) + '</button>').join('') + '<button class="nav" data-vend="sin">' + ico('chat') + 'WhatsApp general</button>'; $('sd-fc').querySelectorAll('[data-vend]').forEach(b => b.onclick = () => { CH.filtro = b.dataset.vend; ir('chats'); }); }
+/* ══ CAMBIAR DE CUENTA (orden owner 2026-09-24): un solo menú, corto. La cuenta del lote entra como cualquiera de sus vendedores; el miembro salta a su WhatsApp. */
+function menuCuenta(){
+  const t = INFO.tenant; const esMiembro = !!(SES && SES.miembro); const act = INFO.miembros.filter(x => x.activo);
+  const fila = (ini_, tt, ss, href) => '<a class="mrow" href="' + href + '"><span class="mav">' + esc(ini_) + '</span><span class="mtx"><b>' + esc(tt) + '</b><small>' + esc(ss) + '</small></span></a>';
+  let html = '<div class="mh">Cambiar de cuenta</div>';
+  if (esMiembro) html += fila(ini(SES.miembro.nombre), 'WhatsApp de ' + SES.miembro.nombre.split(' ')[0], 'Tus clientes', '/fyrachat.html?vendedor=' + TID);
+  else { html += fila(ini(t.marca || t.nombre), 'WhatsApp de ' + (t.marca || t.nombre).replace(/\s+IA$/i, ''), 'General', '/fyrachat.html?vendedor=' + TID); act.forEach(x => { html += fila(ini(x.nombre), 'WhatsApp de ' + x.nombre.split(' ')[0], x.rol === 'admin' ? 'Administrador' : 'Vendedor', '/fyrachat.html?vendedor=' + TID + '&como=' + x.id); }); }
+  html += '<button class="mrow salir" id="m-salir"><span class="mav">' + ico('x') + '</span><span class="mtx"><b>Cerrar sesión</b></span></button>';
+  $('menu').innerHTML = html; $('menu-bg').hidden = false; $('m-salir').onclick = salir;
+}
+$('menu-bg').onclick = e => { if (e.target === $('menu-bg')) $('menu-bg').hidden = true; };
 function contar(){ $('n-autos').textContent = AUTOS.length || ''; $('n-chats').textContent = INFO.chats_delegados || ''; $('n-citas').textContent = INFO.citas.filter(c => VIVAS.includes(c.estado)).length || ''; $('n-miembros').textContent = INFO.miembros.length || ''; }
 function pillEstado(e){ return { viva: '<span class="pill ok"><i></i>Viva</span>', en_camino: '<span class="pill ok"><i></i>En camino</span>', pospuesta: '<span class="pill warn"><i></i>Sin fecha</span>', realizada: '<span class="pill off"><i></i>Realizada</span>', cancelada: '<span class="pill off"><i></i>Cancelada</span>', no_llego: '<span class="pill off"><i></i>No llegó</span>' }[e] || '<span class="pill off">' + esc(e) + '</span>'; }
 const tools = (ph, extra) => '<div class="tools"><label class="search">' + ico('search') + '<input id="q" placeholder="' + esc(ph) + '" value="' + esc(Q) + '"></label>' + (extra || '') + '</div>';
@@ -234,22 +248,11 @@ function bindQ(){ const q = $('q'); if (q) { q.oninput = () => { Q = q.value; pi
 function pintar(keep){
   const M = $('main'); const t = INFO.tenant; const qn = Q.trim().toLowerCase(); const hit = s => !qn || String(s || '').toLowerCase().includes(qn);
   const vivas = INFO.citas.filter(c => VIVAS.includes(c.estado));
-  if (VISTA === 'general') {
-    M.innerHTML = '<h2>Resumen de ' + esc(t.marca || t.nombre) + '</h2><p class="desc">Lo que está pasando hoy en tu lote: autos publicados, citas agendadas y las personas que atienden los chats.</p>' +
-      '<div class="grid">' + [[AUTOS.length, 'autos activos', 'autos'], [vivas.length, 'citas vivas', 'citas'], [INFO.chats_delegados, 'chats en seguimiento', null], [INFO.miembros.filter(m => m.activo).length, 'miembros activos', 'miembros']].map(k => '<div class="cd"><div class="bd"><div class="t" style="font-size:24px;letter-spacing:-.02em">' + k[0] + '</div><div class="s">' + k[1] + '</div></div>' + (k[2] ? '<button class="ib" data-go="' + k[2] + '">' + ico('r') + '</button>' : '') + '</div>').join('') + '</div>' +
-      '<h2 style="margin-top:26px">Chats de tus vendedores</h2><p class="desc">Entra a ver lo que ve cada vendedor: sus clientes y el WhatsApp general.</p><div class="grid">' + [{ id: 'sin', nombre: 'WhatsApp general', sub: t.telefono ? '+52 ' + telFmt(t.telefono) + ' · web, Facebook, anuncios' : 'Sin número todavía' }].concat(INFO.miembros.filter(m => m.activo).map(m => ({ id: m.id, nombre: m.nombre, sub: '+52 ' + telFmt(m.telefono) }))).map(f => '<div class="cd"><div class="lg">' + esc(ini(f.nombre)) + '</div><div class="bd"><div class="t">' + esc(f.nombre) + '</div><div class="s">' + esc(f.sub) + '</div></div><button class="ib" data-vend="' + f.id + '" title="Ver sus chats">' + ico('r') + '</button></div>').join('') + '</div>' + '<h2 style="margin-top:26px">Próximas citas</h2><p class="desc">Las citas vivas más cercanas.</p><div class="grid">' + (vivas.slice(0, 6).map(citaCard).join('') || '<div class="vacio">Sin citas vivas por ahora.</div>') + '</div>';
-    M.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ir(b.dataset.go));
-    M.querySelectorAll('[data-vend]').forEach(b => b.onclick = () => { CH.filtro = b.dataset.vend; CH.sel = null; ir('chats'); });
-  } else if (VISTA === 'auto') { pintarAuto();
+  if (VISTA === 'auto') { pintarAuto();
   } else if (VISTA === 'chats') { pintarChats();
-  } else if (VISTA === 'fyrachat') {
-    const L = fcLista();
-    M.innerHTML = '<h2>FyraChat de cada vendedor</h2><p class="desc">Cada vendedor del lote tiene su FyraChat. Todos atienden desde el mismo WhatsApp de ' + esc(t.marca || t.nombre) + '; el asistente contesta y, cuando escala, el chat le llega al vendedor que lo lleva.</p>' +
-      '<p class="count"><b>' + L.length + '</b> FyraChat' + (L.length === 1 ? '' : 's') + (t.telefono ? '' : ' · el lote todavía no tiene número') + '</p><div class="grid">' + L.map(f => '<div class="cd"><div class="lg">' + esc(ini(f.nombre)) + '</div><div class="bd"><div class="t">' + esc(f.nombre) + (f.lote ? (f.tel ? '<span class="pill ok"><i></i>Lote</span>' : '<span class="pill off"><i></i>Sin número</span>') : '<span class="pill ok"><i></i>Vendedor</span>') + '</div><div class="s">' + esc(f.sub) + '</div><div class="acts" style="margin-top:10px"><a class="btn sec" style="display:inline-flex;align-items:center;height:34px" href="' + f.href + '">Abrir FyraChat</a></div></div></div>').join('') + '</div>' +
-      (INFO.miembros.filter(m => m.activo).length ? '' : '<p class="hint">Cuando des de alta miembros, aquí aparece el FyraChat de cada uno.</p>');
   } else if (VISTA === 'autos') {
     const sel = AUTOS.filter(a => hit(a.nombre) && (AF === 'todos' || (AF === 'activo' ? a.estado === 'activo' : a.estado === 'vendido')));
-    M.innerHTML = '<h2>Autos del lote</h2><p class="desc">Los autos que el asistente conoce y ofrece en los chats. Toca un auto para abrirlo, editarlo, marcarlo vendido o darlo de baja.</p>' + tools('Buscar auto…', '<select class="sel" id="af"><option value="todos"' + (AF === 'todos' ? ' selected' : '') + '>Todos</option><option value="activo"' + (AF === 'activo' ? ' selected' : '') + '>Disponibles</option><option value="vendido"' + (AF === 'vendido' ? ' selected' : '') + '>Vendidos</option></select>') +
+    M.innerHTML = '<h2>Mis autos</h2>' + tools('Buscar auto…', '<select class="sel" id="af"><option value="todos"' + (AF === 'todos' ? ' selected' : '') + '>Todos</option><option value="activo"' + (AF === 'activo' ? ' selected' : '') + '>Disponibles</option><option value="vendido"' + (AF === 'vendido' ? ' selected' : '') + '>Vendidos</option></select>') +
       '<p class="count"><b>' + sel.length + '</b> autos' + (qn ? ' encontrados' : (AF === 'vendido' ? ' vendidos' : AF === 'activo' ? ' disponibles' : '')) + '</p><div class="grid">' + (sel.map(a => '<div class="cd" data-auto="' + a.id + '" style="cursor:pointer"><div class="lg">' + (a.portada ? '<img src="' + esc(a.portada) + '" alt="">' : esc((a.marca || '?')[0])) + '</div><div class="bd"><div class="t">' + esc(a.nombre) + (a.estado === 'activo' ? '<span class="pill ok"><i></i>Disponible</span>' : a.estado === 'vendido' ? '<span class="pill off"><i></i>Vendido</span>' : '<span class="pill warn"><i></i>' + esc(a.estado) + '</span>') + '</div><div class="s">' + fmtDinero(a.precio) + (a.km ? ' · ' + Number(a.km).toLocaleString('es-MX') + ' km' : '') + (a.fotos ? ' · ' + a.fotos + ' fotos' : '') + '</div>' + comisionHTML(a) + '</div><span class="ib" title="Abrir">' + ico('r') + '</span></div>').join('') || '<div class="vacio">Sin autos.</div>') + '</div>';
     bindQ(); const af = $('af'); if (af) af.onchange = () => { AF = af.value; pintar(true); };
     M.querySelectorAll('[data-auto]').forEach(el => el.onclick = e => { if (e.target.closest('.com')) return; abrirAuto(Number(el.dataset.auto)); });
@@ -257,7 +260,7 @@ function pintar(keep){
   } else if (VISTA === 'citas') pintarCitas(keep);
   else if (VISTA === 'miembros') {
     const sel = INFO.miembros.filter(m => hit(m.nombre + ' ' + m.telefono));
-    M.innerHTML = '<h2>Miembros</h2><p class="desc">Vendedores de ' + esc(t.marca || t.nombre) + '. Todos atienden desde el mismo WhatsApp del lote; cuando el asistente escala un chat, le avisa a la persona que lo lleva.</p>' + tools('Buscar miembro…') +
+    M.innerHTML = '<h2>Mis vendedores</h2>' + tools('Buscar miembro…') +
       '<p class="count"><b>' + INFO.miembros.filter(m => m.activo).length + '</b> activos · <b>' + INFO.miembros.filter(m => !m.activo).length + '</b> pendientes de código</p><div class="grid">' + (sel.map(m => '<div class="cd"><div class="lg">' + esc(ini(m.nombre)) + '</div><div class="bd"><div class="t">' + esc(m.nombre) + (m.activo ? '<span class="pill ok"><i></i>Activo</span>' : '<span class="pill warn"><i></i>Pendiente</span>') + (m.rol === 'admin' ? ' <span class="pill off"><i></i>Admin</span>' : '') + '</div><div class="s">+52 ' + esc(telFmt(m.telefono)) + '</div></div>' + (m.activo ? '<a class="ib" href="/fyrachat.html?vendedor=' + TID + '&como=' + m.id + '" title="Entrar a su FyraChat" style="margin-right:6px">' + ico('chat') + '</a>' : '') + '<button class="ib" data-q="' + m.id + '" title="Quitar">' + ico('x') + '</button></div>').join('') || '<div class="vacio">Todavía no hay miembros. Agrega al primero aquí abajo.</div>') + '</div>' +
       '<div class="panel"><h3>Agregar miembro</h3><p>Escribe su nombre y su WhatsApp y mándale el código. Cuando te lo pase, escríbelo y dale de alta.</p><div class="row3"><div><label class="lbl">Nombre</label><input class="inp" id="mb-n" placeholder="Nombre del vendedor"></div><div><label class="lbl">WhatsApp</label><input class="inp" id="mb-t" inputmode="numeric" maxlength="12" placeholder="10 dígitos"></div><div><label class="lbl">Código que le llegó</label><input class="inp" id="mb-c" inputmode="numeric" maxlength="6" placeholder="6 dígitos"></div></div><div class="acts"><button class="btn sec" id="mb-go">Enviar código</button><button class="btn" id="mb-ok">Dar de alta</button></div><div class="hint" id="mb-h"></div></div>';
     bindQ();
@@ -265,7 +268,7 @@ function pintar(keep){
     $('mb-go').onclick = async () => { const b = $('mb-go'); b.disabled = true; const h = $('mb-h'); h.textContent = ''; try { const r = await post('miembro_agregar', { nombre: $('mb-n').value, telefono: $('mb-t').value, vendedor: String(t.id) }); if (!r.ok) { h.textContent = r.error || 'No se pudo'; h.style.color = '#DC2626'; return; } h.style.color = ''; h.textContent = r.enviado ? 'Código enviado por WhatsApp. Escríbelo y dale de alta.' : (r.codigo_prueba ? 'Modo prueba: el código es ' + r.codigo_prueba : 'No se pudo mandar el código por WhatsApp.'); $('mb-c').focus(); } finally { b.disabled = false; } };
     $('mb-ok').onclick = async () => { const b = $('mb-ok'); b.disabled = true; const h = $('mb-h'); try { const r = await post('miembro_confirmar', { telefono: $('mb-t').value, codigo: $('mb-c').value, vendedor: String(t.id) }); if (!r.ok) { h.textContent = r.error || 'No se pudo'; h.style.color = '#DC2626'; return; } await recargar(); } finally { b.disabled = false; } };
   } else if (VISTA === 'numero') {
-    M.innerHTML = '<h2>Número de ' + esc(t.marca || t.nombre) + '</h2><p class="desc">El WhatsApp con el que el asistente atiende a los compradores del lote. Los miembros comparten este mismo número.</p><div class="grid">' +
+    M.innerHTML = '<h2>Número</h2><div class="grid">' +
       '<div class="cd"><div class="lg">' + ico('phone') + '</div><div class="bd"><div class="t">WhatsApp del lote' + (t.telefono ? '<span class="pill ok"><i></i>Vinculado</span>' : '<span class="pill off"><i></i>Sin número</span>') + '</div><div class="s">' + (t.telefono ? '+52 ' + esc(telFmt(t.telefono)) : 'Todavía no hay número. Cuando lo tengas se vincula aquí.') + '</div></div></div>' +
       (t.horario ? '<div class="cd"><div class="lg">' + ico('cal') + '</div><div class="bd"><div class="t">Horario de atención</div><div class="s" style="margin-top:8px"><div class="kv">' + horarioTxt(t.horario) + '</div></div></div></div>' : '') + '</div>';
   }
@@ -274,7 +277,7 @@ function pintar(keep){
 // "Chats de tus vendedores" = el mismo chat filtrado a lo que ese vendedor ve (sus chats + los que no tienen vendedor).
 const CH = { filtro: 'todos', rows: [], sel: null, cargando: false, timer: null };
 const vendDe = mid => { if (mid == null) return null; const m = INFO.miembros.find(x => Number(x.id) === Number(mid)); return m ? m.nombre : 'Vendedor ' + mid; };
-const vendTag = (mid, extra) => { const n = vendDe(mid); return n ? '<span class="vend' + (extra ? ' ' + extra : '') + '">Cliente de ' + esc(n.split(/\s+/).slice(0, 2).join(' ')) + '</span>' : '<span class="vend sin' + (extra ? ' ' + extra : '') + '">WhatsApp general</span>'; };
+const vendTag = (mid, extra) => { const n = vendDe(mid); return n ? '<span class="vend' + (extra ? ' ' + extra : '') + '">' + esc(n.split(/\s+/)[0]) + '</span>' : '<span class="vend sin' + (extra ? ' ' + extra : '') + '">' + esc((INFO.tenant.marca || INFO.tenant.nombre).replace(/\s+IA$/i, '')) + '</span>'; };
 const vendNombre = mid => { const n = vendDe(mid); return n ? esc(n.split(/\s+/).slice(0, 2).join(' ')) : (INFO.tenant.marca || INFO.tenant.nombre); };
 const hora = ts => { if (!ts) return ''; const d = dMx(ts); const hoyK = ymd(Date.now()); return ymd(ts) === hoyK ? (d.getUTCHours() % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (d.getUTCHours() < 12 ? ' am' : ' pm') : d.getUTCDate() + ' ' + MESES[d.getUTCMonth()].slice(0, 3); };
 async function cargarChats(){
@@ -290,10 +293,11 @@ function pintarListaChats(){
   L.querySelectorAll('.crow').forEach(el => el.onclick = () => abrirHilo(Number(el.dataset.c)));
 }
 async function abrirHilo(chatId){
-  CH.sel = chatId; pintarListaChats(); const H = $('ch-hilo'); if (!H) return;
+  CH.sel = chatId; pintarListaChats(); const H = $('ch-hilo'); if (!H) return; const wrap = H.closest('.chats'); if (wrap) wrap.classList.add('abierto');
   const c = CH.rows.find(x => x.chat_id === chatId) || {};
-  H.innerHTML = '<div class="hh"><div class="av" style="width:36px;height:36px;border-radius:50%;background:var(--s1);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--txt2)">' + esc(c.ini || '?') + '</div><div><div class="t">' + esc(c.nombre || c.telefono || '') + '</div><div class="s">+52 ' + esc(telFmt(c.telefono)) + (c.auto && c.auto.nombre ? ' · ' + esc(c.auto.nombre) : '') + '</div></div><div class="sp"></div>' + vendTag(c.miembro_id) + (c.bot === 'humano' ? ' <button class="x" data-devolver="' + chatId + '" title="Seb vuelve a contestar en este chat">Devolver a Seb</button>' : ' <span class="vend bot">Seb atendiendo</span>') + ' <a class="ib" title="Abrir en el chat del vendedor" href="/fyrachat.html?vendedor=' + TID + '&chat=' + chatId + '">' + ico('ext') + '</a></div><div class="ms" id="ch-ms"><div class="vacio" style="border:0">Cargando…</div></div>' +
+  H.innerHTML = '<div class="hh"><button class="ib volver" id="ch-volver" title="Volver">' + ico('l') + '</button><div class="av" style="width:36px;height:36px;border-radius:50%;background:var(--s1);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--txt2)">' + esc(c.ini || '?') + '</div><div><div class="t">' + esc(c.nombre || c.telefono || '') + '</div><div class="s">+52 ' + esc(telFmt(c.telefono)) + (c.auto && c.auto.nombre ? ' · ' + esc(c.auto.nombre) : '') + '</div></div><div class="sp"></div>' + vendTag(c.miembro_id) + (c.bot === 'humano' ? ' <button class="x" data-devolver="' + chatId + '" title="Seb vuelve a contestar en este chat">Devolver a Seb</button>' : ' <span class="vend bot">Seb atendiendo</span>') + ' <a class="ib" title="Abrir en el chat del vendedor" href="/fyrachat.html?vendedor=' + TID + '&chat=' + chatId + '">' + ico('ext') + '</a></div><div class="ms" id="ch-ms"><div class="vacio" style="border:0">Cargando…</div></div>' +
     '<form class="comp" id="ch-comp"><textarea id="ch-tx" rows="1" placeholder="Escribe como ' + esc(INFO.tenant.marca || INFO.tenant.nombre) + '…"></textarea><button type="submit" class="btn" id="ch-send" style="height:38px;padding:0 14px">Enviar</button></form>';
+  $('ch-volver').onclick = () => { CH.sel = null; if (wrap) wrap.classList.remove('abierto'); pintarListaChats(); H.innerHTML = '<div class="ms"><div class="vacio" style="border:0;margin:auto">Elige un chat para leerlo.</div></div>'; };
   const dv = H.querySelector('[data-devolver]'); if (dv) dv.onclick = async () => { dv.disabled = true; const r = await post('bot_estado', { vendedor: String(TID), chat_id: chatId, estado: 'seb' }); if (!r.ok) { alert(r.error || 'No se pudo'); dv.disabled = false; return; } await cargarChats(); abrirHilo(chatId); };
   const form = $('ch-comp'), tx = $('ch-tx'); tx.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
   form.onsubmit = async e => { e.preventDefault(); const texto = tx.value.trim(); if (!texto) return; const b = $('ch-send'); b.disabled = true; tx.disabled = true;
@@ -307,9 +311,9 @@ async function abrirHilo(chatId){
 }
 function pintarChats(){
   const M = $('main'); const t = INFO.tenant; const act = INFO.miembros.filter(m => m.activo);
-  const nomF = CH.filtro === 'todos' ? 'Todos los mensajes del WhatsApp de ' + (t.marca || t.nombre) : (CH.filtro === 'sin' ? 'WhatsApp general: lo que entra directo al número (web, Facebook, anuncios) y atiende ' + (t.marca || t.nombre) : 'Lo que ve ' + (vendDe(CH.filtro) || 'este vendedor') + ': sus clientes y el WhatsApp general');
-  M.innerHTML = '<h2>Chats del lote</h2><p class="desc">' + esc(nomF) + '. A la derecha de cada chat se indica de quién es el cliente; lo que no metió un vendedor es WhatsApp general.</p>' +
-    '<div class="pills"><button class="pl' + (CH.filtro === 'todos' ? ' on' : '') + '" data-f="todos">Todos</button>' + act.map(m => '<button class="pl' + (String(CH.filtro) === String(m.id) ? ' on' : '') + '" data-f="' + m.id + '">' + esc(m.nombre) + '</button>').join('') + '<button class="pl' + (CH.filtro === 'sin' ? ' on' : '') + '" data-f="sin">WhatsApp general</button></div>' +
+  const loteCorto = (t.marca || t.nombre).replace(/\s+IA$/i, '');
+  M.innerHTML = '<h2>Mensajes de WhatsApp</h2>' +
+    '<div class="pills"><button class="pl' + (CH.filtro === 'todos' ? ' on' : '') + '" data-f="todos">Todos</button><button class="pl' + (CH.filtro === 'sin' ? ' on' : '') + '" data-f="sin">WhatsApp de ' + esc(loteCorto) + '</button>' + act.map(m => '<button class="pl' + (String(CH.filtro) === String(m.id) ? ' on' : '') + '" data-f="' + m.id + '">WhatsApp de ' + esc(m.nombre.split(' ')[0]) + '</button>').join('') + '</div>' +
     '<div class="chats"><div class="lst" id="ch-lst"><div class="vacio" style="margin:14px;border:0">Cargando…</div></div><div class="hilo" id="ch-hilo"><div class="ms"><div class="vacio" style="border:0;margin:auto">Elige un chat para leerlo.</div></div></div></div>';
   M.querySelectorAll('.pl').forEach(b => b.onclick = () => { CH.filtro = b.dataset.f; CH.sel = null; pintarChats(); });
   cargarChats();
@@ -375,7 +379,7 @@ function pintarCitas(keep){
   let cells = ''; for (let i = 0; i < 42; i++) { const d = new Date(start.getTime() + i * 86400000); const k = d.toISOString().slice(0, 10); const out = d.getUTCMonth() !== MES.m; const esHoy = k === hoy.toISOString().slice(0, 10);
     cells += '<div class="d' + (out ? ' out' : '') + (esHoy ? ' hoy' : '') + '"><div class="n">' + d.getUTCDate() + '</div>' + (porDia[k] || []).map(c => '<span class="ev' + (['realizada', 'cancelada', 'no_llego'].includes(c.estado) ? ' fin' : (c.estado === 'en_camino' ? ' camino' : '')) + '" title="' + esc((c.nombre || '') + ' · ' + (c.auto || '')) + '">' + esc(((c.precision === 'hora' || c.precision === 'franja') && c.hora ? c.hora + ' ' : '') + (c.nombre || 'Sin nombre')) + '</span>').join('') + '</div>'; }
   const qn = Q.trim().toLowerCase(); const lista = INFO.citas.filter(c => !qn || ((c.nombre || '') + ' ' + (c.auto || '')).toLowerCase().includes(qn)).sort((a, b) => (VIVAS.includes(b.estado) - VIVAS.includes(a.estado)) || (a.ini_ts || 0) - (b.ini_ts || 0));
-  M.innerHTML = '<h2>Citas agendadas</h2><p class="desc">Todas las citas del lote, las vivas y las que ya pasaron. El asistente les da seguimiento solo; aquí las ves de un vistazo.</p>' +
+  M.innerHTML = '<h2>Citas</h2>' +
     '<div class="calh"><button class="ib" id="c-prev">' + ico('l') + '</button><b>' + MESES[MES.m] + ' ' + MES.y + '</b><button class="ib" id="c-next">' + ico('r') + '</button></div><div class="cal">' + ['D', 'L', 'M', 'M', 'J', 'V', 'S'].map(x => '<div class="dn">' + x + '</div>').join('') + cells + '</div>' +
     '<div style="height:22px"></div>' + tools('Buscar cita…') + '<p class="count"><b>' + INFO.citas.filter(c => VIVAS.includes(c.estado)).length + '</b> vivas · <b>' + INFO.citas.filter(c => !VIVAS.includes(c.estado)).length + '</b> cerradas</p><div class="grid">' + (lista.map(citaCard).join('') || '<div class="vacio">Sin citas.</div>') + '</div>';
   $('c-prev').onclick = () => { MES.m--; if (MES.m < 0) { MES.m = 11; MES.y--; } pintarCitas(); }; $('c-next').onclick = () => { MES.m++; if (MES.m > 11) { MES.m = 0; MES.y++; } pintarCitas(); };
@@ -389,7 +393,7 @@ function aplicarAcentos(t){
   [['a2', a2], ['a1', a1]].forEach(([k, h]) => [5, 8, 10, 15, 20, 25].forEach(p => r.setProperty('--' + k + '-' + (p < 10 ? '0' + p : p), h + Math.round(p * 2.55).toString(16).padStart(2, '0'))));
   document.documentElement.dataset.acentos = '1';
 }
-async function recargar(){ const r = await get('panel_info', { vendedor: String(INFO.tenant.id) }); if (r.ok) { INFO = r; contar(); pintarSideFC(); pintar(); } }
+async function recargar(){ const r = await get('panel_info', { vendedor: String(INFO.tenant.id) }); if (r.ok) { INFO = r; contar(); pintar(); } }
 </script>
 </body>
 </html>
