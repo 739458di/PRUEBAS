@@ -237,7 +237,7 @@ function menuCuenta(){
   const fila = (ini_, tt, ss, href) => '<a class="mrow" href="' + href + '"><span class="mav">' + esc(ini_) + '</span><span class="mtx"><b>' + esc(tt) + '</b><small>' + esc(ss) + '</small></span></a>';
   let html = '<div class="mh">Cambiar de cuenta</div>';
   if (esMiembro) html += fila(ini(SES.miembro.nombre), 'WhatsApp de ' + SES.miembro.nombre.split(' ')[0], 'Tus clientes', '/fyrachat.html?vendedor=' + TID);
-  else { html += fila(ini(t.marca || t.nombre), 'WhatsApp de ' + (t.marca || t.nombre).replace(/\s+IA$/i, ''), 'General', '/fyrachat.html?vendedor=' + TID); act.forEach(x => { html += fila(ini(x.nombre), 'WhatsApp de ' + x.nombre.split(' ')[0], x.rol === 'admin' ? 'Administrador' : 'Vendedor', '/fyrachat.html?vendedor=' + TID + '&como=' + x.id); }); }
+  else { /* el WhatsApp general del lote ES este panel (owner 2026-09-24): no se ofrece como cuenta aparte */ act.forEach(x => { html += fila(ini(x.nombre), 'WhatsApp de ' + x.nombre.split(' ')[0], x.rol === 'admin' ? 'Administrador' : 'Vendedor', '/fyrachat.html?vendedor=' + TID + '&como=' + x.id); }); }
   html += '<button class="mrow salir" id="m-salir"><span class="mav">' + ico('logout') + '</span><span class="mtx"><b>Cerrar sesión</b></span></button>';
   $('menu').innerHTML = html; $('menu-bg').hidden = false; $('m-salir').onclick = salir;
 }
