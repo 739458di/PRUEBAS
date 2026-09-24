@@ -2600,7 +2600,7 @@ module.exports = async function handler(req, res) {
         // Identidad: chat_id = conversaciones.id DEL universo de la sesión (VEND_PARAM ya viene blindado). La UI manda
         // chat_id + clave; aquí se resuelve DE NUEVO (universo → chat → teléfono → auto en foco → delegación) antes de ejecutar.
         // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-        const V2 = new Set(['numero_vincular', 'numero_estado', 'numero_qr', 'inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'comision_responder', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
+        const V2 = new Set(['remates', 'remate_ofertar', 'numero_vincular', 'numero_estado', 'numero_qr', 'inbox', 'hilo', 'enviar', 'foco', 'delegar_v2', 'cotizar_v2', 'cita_v2', 'bot_estado', 'reactivar', 'soltar_v2', 'autos_mios', 'auto_detalle', 'auto_editar', 'auto_estado', 'comision_responder', 'panel_info', 'miembro_agregar', 'miembro_confirmar', 'miembro_quitar', 'foto_subir', 'auto_subir', 'subir_chat_hilo', 'subir_chat_msg', 'subir_chat_boton', 'chat_borrar', 'mensaje_borrar',
             'accion_v2', 'recordatorio_v2', 'recordatorios_mios', 'recordatorio_cancelar_v2', 'citas_mias']);   // huecos del front (2026-09-12)
         if (V2.has(action)) {
             const tV = VEND_PARAM ? await tenantDeParam(VEND_PARAM) : await tenantDeParam('');
@@ -3085,6 +3085,33 @@ module.exports = async function handler(req, res) {
             // ══ VINCULAR WHATSAPP DESDE EL PANEL (orden owner 2026-09-24): el dueño escribe el número → se guarda en el universo → el puente abre el
             //    universo con ese número y pide el código de vinculación → la pantalla lo muestra con los pasos y pregunta el estado hasta 'vinculado'.
             //    Misma maquinaria que la card del Sales Brain (/tenant/<id>/open|close|codigo, /qr/<id>); aquí el código se muestra en pantalla (no hay número de casa que lo mande).
+            // ══ REMATES (orden owner 2026-09-24): autos que la gente puso en HazloGPT para "escuchar ofertas". Cada lote los ve en su panel
+            //    ("Carlos está rematando su auto"), pone cuánto da a reserva de verlo y el vendedor recibe cada oferta; el contacto es click-to-chat.
+            if (action === 'remates' || action === 'remate_ofertar') {
+                if (!TV) return err(400, 'el panel es por universo');
+                const esLoteT = !!(tV.config && (tV.config.usuario || tV.config.tipo === 'lote'));
+                if (!esLoteT) return err(403, 'Los remates son para lotes.');
+                await run('CREATE TABLE IF NOT EXISTS hazlo_ventas (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE, nombre TEXT, telefono TEXT, marca TEXT, modelo TEXT, anio INTEGER, km INTEGER, precio INTEGER, descripcion TEXT, modo TEXT, estado TEXT DEFAULT \'activo\', sesion TEXT, created INTEGER, updated INTEGER)');
+                await run('CREATE TABLE IF NOT EXISTS hazlo_ofertas (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER, tenant_id INTEGER, tenant_nombre TEXT, contacto_tel TEXT, monto INTEGER, nota TEXT, created INTEGER, UNIQUE(venta_id, tenant_id))');
+                const marcaL = String((tV.config && tV.config.marca) || tV.nombre || '').replace(/\s+IA$/i, '');
+                const waL = (tel, texto) => 'https://wa.me/' + String(tel || '').replace(/\D/g, '').replace(/^521(\d{10})$/, '52$1') + '?text=' + encodeURIComponent(texto);
+                if (action === 'remate_ofertar') {
+                    if (req.method !== 'POST') return err(405, 'POST');
+                    const puedeOfertar = !!TV && (!SES || !SES.miembro || SES.miembro.rol === 'admin' || MAESTRA);   // misma regla que PUEDE_EDITAR_AUTOS (se declara más abajo)
+                    if (!puedeOfertar) return err(403, 'Solo el dueño del lote o su administrador ofertan.');
+                    const vid = Number(req.body.venta_id) || 0; const monto = Math.round(Number(String(req.body.monto == null ? '' : req.body.monto).replace(/[^0-9.]/g, '')) || 0);
+                    if (!vid || monto < 1000) return err(400, 'Escribe la oferta en pesos.');
+                    const v = (await query("SELECT * FROM hazlo_ventas WHERE id = ? AND modo = 'remate' AND estado = 'activo'", [vid]))[0]; if (!v) return err(404, 'Ese remate ya no está.');
+                    const contacto = String(tV.telefono || (SES && SES.miembro && SES.miembro.telefono) || ((await query("SELECT telefono FROM vendedores_universo WHERE tenant_id = ? AND activo = 1 ORDER BY CASE WHEN rol = 'admin' THEN 0 ELSE 1 END, id LIMIT 1", [TV]).catch(() => []))[0] || {}).telefono || '');
+                    await run('INSERT INTO hazlo_ofertas (venta_id, tenant_id, tenant_nombre, contacto_tel, monto, nota, created) VALUES (?,?,?,?,?,?,?) ON CONFLICT(venta_id, tenant_id) DO UPDATE SET monto = excluded.monto, contacto_tel = excluded.contacto_tel, tenant_nombre = excluded.tenant_nombre, created = excluded.created', [vid, TV, marcaL, contacto, monto, null, Date.now()]);
+                    const autoV = `${v.marca} ${v.modelo} ${v.anio}`; const link = 'https://fyrachat.vercel.app/hazlo.html?venta=' + v.token;
+                    let avisado = false; try { const env = await citasVivas.enviarWA(v.telefono, `Tienes oferta de ${marcaL}: ${'$' + monto.toLocaleString('es-MX')} por tu ${autoV}, a reserva de verlo. Ve todas tus ofertas y ponte en contacto aquí: ${link}`, 0); avisado = !!(env && env.ok); } catch (e) { }
+                    await ACCIONES.registrar({ tenant_id: TV, chat_id: null, tipo: 'remate_oferta', ref_id: vid, meta: { monto, auto: autoV, avisado }, actor: 'vendedor', sesion_id: SID }).catch(() => { });
+                    return okJ({ venta_id: vid, monto, avisado, wa: waL(v.telefono, `Hola ${String(v.nombre || '').split(' ')[0]}, soy de ${marcaL}. Te ofrecí ${'$' + monto.toLocaleString('es-MX')} por tu ${autoV} a reserva de verlo. ¿Cuándo lo podemos ver?`) });
+                }
+                const ventas = await query("SELECT v.*, (SELECT COUNT(*) FROM hazlo_ofertas o WHERE o.venta_id = v.id) n_ofertas, (SELECT monto FROM hazlo_ofertas o WHERE o.venta_id = v.id AND o.tenant_id = ?) mi_oferta, (SELECT MAX(monto) FROM hazlo_ofertas o WHERE o.venta_id = v.id) mejor FROM hazlo_ventas v WHERE v.modo = 'remate' AND v.estado = 'activo' ORDER BY v.id DESC LIMIT 100", [TV]);
+                return okJ({ remates: ventas.map(v => ({ id: Number(v.id), nombre: v.nombre, auto: `${v.marca} ${v.modelo} ${v.anio}`, km: v.km, precio: v.precio, created: v.created, n_ofertas: Number(v.n_ofertas) || 0, mi_oferta: v.mi_oferta == null ? null : Number(v.mi_oferta), mejor: v.mejor == null ? null : Number(v.mejor), wa: v.mi_oferta == null ? null : waL(v.telefono, `Hola ${String(v.nombre || '').split(' ')[0]}, soy de ${marcaL}. Te ofrecí ${'$' + Number(v.mi_oferta).toLocaleString('es-MX')} por tu ${v.marca} ${v.modelo} ${v.anio} a reserva de verlo. ¿Cuándo lo podemos ver?`) })) });
+            }
             if (action === 'numero_estado') {
                 if (!TV) return err(400, 'el panel es por universo');
                 const ses = (await query('SELECT estado, motivo, updated FROM wa_sessions WHERE tenant_id = ?', [TV]).catch(() => []))[0] || null;

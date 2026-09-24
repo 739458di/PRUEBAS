@@ -69,7 +69,7 @@ body{font-family:var(--f);color:var(--ink);background:var(--bg);font-size:15px;l
 <main class="wrap">
   <section class="hello" id="hello">
     <h1>¿Qué auto <span>traes en mente?</span></h1>
-    <p>Pregúntame por el inventario de Fyradrive, míralo aquí mismo y agenda tu cita para manejarlo en Monterrey.</p>
+    <p>Pregúntame por los autos disponibles en Monterrey, míralos aquí mismo y agenda tu cita. ¿Vendes el tuyo? También aquí.</p>
     <div class="chips">
       <button class="chip" data-q="¿Qué autos tienes?">¿Qué autos tienes?</button>
       <button class="chip" data-q="¿Qué japoneses tienes?">Japoneses</button>
@@ -77,6 +77,7 @@ body{font-family:var(--f);color:var(--ink);background:var(--bg);font-size:15px;l
       <button class="chip" data-q="Pickups">Pickups</button>
       <button class="chip" data-q="Algo de menos de 350 mil">Menos de $350 mil</button>
       <button class="chip" data-q="Quiero agendar una cita">Agendar cita</button>
+      <button class="chip" data-q="Quiero vender mi auto">Vender mi auto</button>
     </div>
   </section>
   <section class="msgs" id="msgs"></section>
@@ -93,7 +94,7 @@ const API='/api/hazlo';const $=s=>document.querySelector(s);
 const msgs=$('#msgs'),inp=$('#in'),go=$('#go');
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>n==null?'':'$'+Number(n).toLocaleString('es-MX');
-let hist=[],cita=null,busy=false;const ses=(()=>{try{let s=sessionStorage.getItem('hz');if(!s){s=Math.random().toString(36).slice(2,12);sessionStorage.setItem('hz',s)}return s}catch(e){return 'x'}})();
+let hist=[],cita=null,venta=null,busy=false;const ses=(()=>{try{let s=sessionStorage.getItem('hz');if(!s){s=Math.random().toString(36).slice(2,12);sessionStorage.setItem('hz',s)}return s}catch(e){return 'x'}})();
 function add(rol,html,opts){const m=document.createElement('div');m.className='m '+(rol==='user'?'u':'a');m.innerHTML=(rol==='user'?'':'<div class="who">HazloGPT</div>')+html;msgs.appendChild(m);window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});return m}
 function card(a){return '<article class="cd"><div class="ph">'+(a.foto?'<img loading="lazy" src="'+esc(a.foto)+'" alt="'+esc(a.nombre)+'">':'')+(a.anio?'<span class="k">'+a.anio+'</span>':'')+'</div><div class="bd"><div class="t">'+esc(a.nombre)+'</div><div class="pr">'+fmt(a.precio)+'</div><div class="s">'+(a.km?a.km.toLocaleString('es-MX')+' km':'')+(a.transmision?' · '+esc(a.transmision.toLowerCase()):'')+'</div><div class="ac"><a href="'+esc(a.link)+'" target="_blank" rel="noopener">Ver auto</a><button class="p" data-cita="'+a.id+'" data-n="'+esc(a.nombre)+'">Agendar cita</button></div></div></article>'}
 function carrusel(autos){if(!autos||!autos.length)return '';const id='c'+Math.random().toString(36).slice(2,7);return '<div class="car" data-c="'+id+'"><button class="arr l" aria-label="Anterior">&#8249;</button><div class="rail">'+autos.map(card).join('')+'</div><button class="arr r" aria-label="Siguiente">&#8250;</button></div>'+(autos.length>1?'<div class="cnt">'+autos.length+' autos · desliza o usa las flechas</div>':'')}
@@ -103,15 +104,24 @@ document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>enviar(c.dataset.q))
 $('#form').onsubmit=e=>{e.preventDefault();const t=inp.value.trim();if(t)enviar(t)};
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#form').requestSubmit()}});
 inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,120)+'px'});
+/* PÁGINA DEL VENDEDOR: hazlo.html?venta=<token> → su auto, ofertas de lotes con "Ponerme en contacto" (click-to-chat), interesados */
+(async()=>{const tk=new URLSearchParams(location.search).get('venta');if(!tk)return;$('#hello').style.display='none';
+  const r=await fetch(API+'?action=venta&token='+encodeURIComponent(tk)).then(x=>x.json()).catch(()=>({ok:false}));
+  if(!r.ok){add('a','<div class="b">'+esc(r.error||'No encontré esa venta.')+'</div>');return}
+  const v=r.venta;const modo={consignacion:'Consignación con Fyradrive',hazlo:'Publicado aquí en Hazlo',remate:'Escuchando ofertas de lotes'}[v.modo]||v.modo;
+  let h='<div class="b"><b>'+esc(v.auto)+'</b> · '+(v.km?Number(v.km).toLocaleString('es-MX')+' km · ':'')+'pides '+fmt(v.precio)+'\n'+esc(modo)+'</div>';
+  if(v.modo==='remate'){h+=r.ofertas.length?'<div class="b">Ofertas hasta ahora (a reserva de verlo):</div>'+r.ofertas.map(o=>'<div class="b" style="display:flex;justify-content:space-between;align-items:center;gap:12px;max-width:100%"><span><b>'+esc(o.lote)+'</b> · '+fmt(o.monto)+'</span>'+(o.wa?'<a class="wa" style="padding:8px 14px;font-size:13px" href="'+esc(o.wa)+'" target="_blank" rel="noopener">Ponerme en contacto</a>':'')+'</div>').join(''):'<div class="b">Todavía no hay ofertas. Los lotes ya lo tienen a la vista; vuelve a esta liga o espera mi aviso por WhatsApp.</div>'}
+  if(v.modo==='hazlo')h+='<div class="b">'+(r.interes?r.interes+(r.interes===1?' persona ha pedido':' personas han pedido')+' tu WhatsApp para verlo.':'Aún nadie lo ha pedido; en cuanto alguien busque un auto así se lo enseño.')+'</div>';
+  add('a',h);})();
 async function enviar(texto,extra){if(busy)return;busy=true;go.disabled=true;$('#hello').style.display='none';inp.value='';inp.style.height='auto';
   add('user','<div class="b">'+esc(texto)+'</div>');hist.push({rol:'user',texto});
   const th=add('a','<div class="b think"><i></i><i></i><i></i></div>');
-  let r;try{const c=extra&&extra.auto_id?Object.assign({},cita||{},{auto_id:extra.auto_id}):cita;r=await fetch(API+'?action=chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensaje:texto,historial:hist.slice(-8),cita:c,sesion:ses})}).then(x=>x.json())}catch(e){r={ok:false}}
+  let r;try{const c=extra&&extra.auto_id?Object.assign({},cita||{},{auto_id:extra.auto_id}):cita;r=await fetch(API+'?action=chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensaje:texto,historial:hist.slice(-8),cita:c,venta:venta,sesion:ses})}).then(x=>x.json())}catch(e){r={ok:false}}
   th.remove();
   if(!r||!r.ok){add('a','<div class="b">'+esc((r&&r.error)||'Se me fue la señal un segundo, ¿me lo repites?')+'</div>');busy=false;go.disabled=false;return}
-  cita=r.cita||null;hist.push({rol:'a',texto:r.texto});
+  cita=r.cita||null;venta=r.venta||null;hist.push({rol:'a',texto:r.texto});
   const cuerpo = (r.grupos && r.grupos.length>1) ? r.grupos.map(g=>'<div class="b" style="margin-top:6px">'+esc(g.intro)+'</div>'+carrusel(g.autos)).join('') : ((r.grupos&&r.grupos.length===1&&r.grupos[0].autos.length)?'<div class="b" style="margin-top:6px">'+esc(r.grupos[0].intro)+'</div>'+carrusel(r.grupos[0].autos):carrusel(r.autos));
-  add('a','<div class="b">'+esc(r.texto)+'</div>'+cuerpo+(r.wa?'<div><a class="wa" href="'+esc(r.wa)+'" target="_blank" rel="noopener">Confirmar por WhatsApp</a></div>':''));
+  add('a','<div class="b">'+esc(r.texto)+'</div>'+cuerpo+(r.wa?'<div><a class="wa" href="'+esc(r.wa)+'" target="_blank" rel="noopener">'+esc(r.wa_label||'Confirmar por WhatsApp')+'</a></div>':''));
   busy=false;go.disabled=false;inp.focus()}
 </script>
 </body>

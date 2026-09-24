@@ -181,6 +181,7 @@ html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}
       <button class="nav" data-v="autos">{{car}}Mis autos<span class="n" id="n-autos"></span></button>
       <button class="nav" data-v="citas">{{cal}}Citas<span class="n" id="n-citas"></span></button>
       <button class="nav" data-v="miembros">{{users}}Mis vendedores<span class="n" id="n-miembros"></span></button>
+      <button class="nav" data-v="remates">{{tag}}Remates<span class="n" id="n-remates"></span></button>
       <button class="nav" data-v="numero">{{phone}}Número</button>
     </nav>
     <div class="sp"></div>
@@ -190,7 +191,7 @@ html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}
     <header class="topbar"><div class="brand"><span class="mk" id="tb-mk">T</span><span id="tb-marca">Panel</span></div><button class="av" id="tb-av" title="Cambiar de cuenta">?</button></header>
     <main class="main"><div id="main"></div></main>
     <nav class="bottombar">
-      <button data-v="chats">{{chat}}<span>Mensajes</span></button><button data-v="autos">{{car}}<span>Autos</span></button><button data-v="citas">{{cal}}<span>Citas</span></button><button data-v="miembros">{{users}}<span>Vendedores</span></button><button data-v="numero">{{phone}}<span>Número</span></button>
+      <button data-v="chats">{{chat}}<span>Mensajes</span></button><button data-v="autos">{{car}}<span>Autos</span></button><button data-v="citas">{{cal}}<span>Citas</span></button><button data-v="miembros">{{users}}<span>Vendedores</span></button><button data-v="remates">{{tag}}<span>Remates</span></button><button data-v="numero">{{phone}}<span>Número</span></button>
     </nav>
   </div>
 </div>
@@ -199,7 +200,7 @@ html[data-acentos] .topbar{background:var(--acento2);color:#fff;border-bottom:0}
 const API = '/api/seb-panel';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const I = { logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>', home: '<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>', car: '<path d="M5 16l1.5-5h11L19 16M5 16h14v3H5zM7 19v2M17 19v2"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>', cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-5-6.3"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', chat: '<path d="M4 5h16v11H8l-4 4z"/>', chev: '<path d="m6 9 6 6 6-6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', ext: '<path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', l: '<path d="m15 18-6-6 6-6"/>', r: '<path d="m9 18 6-6-6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>' };
+const I = { tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>', home: '<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>', car: '<path d="M5 16l1.5-5h11L19 16M5 16h14v3H5zM7 19v2M17 19v2"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>', cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-5-6.3"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', chat: '<path d="M4 5h16v11H8l-4 4z"/>', chev: '<path d="m6 9 6 6 6-6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', ext: '<path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', l: '<path d="m15 18-6-6 6-6"/>', r: '<path d="m9 18 6-6-6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>' };
 const ico = n => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[n] || '') + '</svg>';
 document.body.innerHTML = document.body.innerHTML.replace(/\{\{(\w+)\}\}/g, (m, k) => ico(k));
 /* SESIÓN ÚNICA (orden owner 2026-09-24): si el servidor dice que esta página pide otro universo del de la sesión (la cookie cambió en otra pestaña), se recarga en su lugar; jamás se mezclan datos. */
@@ -282,6 +283,7 @@ function pintar(keep){
     M.querySelectorAll('button[data-q]').forEach(b => b.onclick = async () => { if (!confirm('¿Quitar a este miembro?')) return; await post('miembro_quitar', { id: Number(b.dataset.q), vendedor: String(t.id) }); await recargar(); });
     $('mb-go').onclick = async () => { const b = $('mb-go'); b.disabled = true; const h = $('mb-h'); h.textContent = ''; try { const r = await post('miembro_agregar', { nombre: $('mb-n').value, telefono: $('mb-t').value, vendedor: String(t.id) }); if (!r.ok) { h.textContent = r.error || 'No se pudo'; h.style.color = '#DC2626'; return; } h.style.color = ''; h.textContent = r.enviado ? 'Código enviado por WhatsApp. Escríbelo y dale de alta.' : (r.codigo_prueba ? 'Modo prueba: el código es ' + r.codigo_prueba : 'No se pudo mandar el código por WhatsApp.'); $('mb-c').focus(); } finally { b.disabled = false; } };
     $('mb-ok').onclick = async () => { const b = $('mb-ok'); b.disabled = true; const h = $('mb-h'); try { const r = await post('miembro_confirmar', { telefono: $('mb-t').value, codigo: $('mb-c').value, vendedor: String(t.id) }); if (!r.ok) { h.textContent = r.error || 'No se pudo'; h.style.color = '#DC2626'; return; } await recargar(); } finally { b.disabled = false; } };
+  } else if (VISTA === 'remates') { pintarRemates();
   } else if (VISTA === 'numero') {
     /* VINCULAR WHATSAPP (orden owner 2026-09-24): número → código de vinculación en pantalla → "Vinculado" cuando el puente lo confirma */
     const vinc = INFO.wa_estado === 'vinculado'; const esperando = /esperando_codigo|esperando_qr|reconectando/.test(INFO.wa_estado || '');
@@ -413,6 +415,18 @@ function aplicarAcentos(t){
   r.setProperty('--acento2', a2); r.setProperty('--acento', a1); r.setProperty('--acc', a2);
   [['a2', a2], ['a1', a1]].forEach(([k, h]) => [5, 8, 10, 15, 20, 25].forEach(p => r.setProperty('--' + k + '-' + (p < 10 ? '0' + p : p), h + Math.round(p * 2.55).toString(16).padStart(2, '0'))));
   document.documentElement.dataset.acentos = '1';
+}
+/* REMATES (orden owner 2026-09-24): "X está rematando su auto — ¿cuánto das a reserva de verlo?" */
+let REM = [];
+async function pintarRemates(){
+  M.innerHTML = '<h2>Remates</h2><div class="s" style="color:var(--txt2);margin:-8px 0 14px">Gente que quiere vender ya. Pon cuánto das, a reserva de verlo; si te interesa, contáctalo directo.</div><div id="rem-list"><div class="vacio">Cargando…</div></div>';
+  const r = await get('remates', { vendedor: String(TID) }); if (!r.ok) { $('rem-list').innerHTML = '<div class="vacio">' + esc(r.error || 'No se pudo') + '</div>'; return; }
+  REM = r.remates || []; const n = $('n-remates'); if (n) n.textContent = REM.length || '';
+  if (!REM.length) { $('rem-list').innerHTML = '<div class="vacio">Por ahora nadie está rematando su auto.</div>'; return; }
+  $('rem-list').innerHTML = '<div class="grid">' + REM.map(v => '<div class="cd" data-rem="' + v.id + '"><div class="bd"><div class="t">' + esc(v.nombre.split(' ')[0]) + ' está rematando su ' + esc(v.auto) + '</div><div class="s">' + (v.km ? Number(v.km).toLocaleString('es-MX') + ' km · ' : '') + 'pide ' + fmtDinero(v.precio) + (v.n_ofertas ? ' · ' + v.n_ofertas + (v.n_ofertas === 1 ? ' oferta' : ' ofertas') : '') + '</div>' +
+    '<label class="lbl">¿Cuánto das? (a reserva de verlo)</label><div class="numrow"><span class="pre">$</span><input class="inp" inputmode="numeric" data-monto="' + v.id + '" value="' + (v.mi_oferta || '') + '" placeholder="Monto"></div>' +
+    '<div class="numacts"><button class="btn" data-ofertar="' + v.id + '">' + (v.mi_oferta ? 'Actualizar oferta' : 'Ofertar') + '</button>' + (v.wa ? '<a class="btn sec" href="' + esc(v.wa) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none">Ponerme en contacto</a>' : '') + '</div><div class="err" data-err="' + v.id + '"></div></div></div>').join('') + '</div>';
+  $('rem-list').querySelectorAll('[data-ofertar]').forEach(b => b.onclick = async () => { const id = b.dataset.ofertar; const monto = ($('rem-list').querySelector('[data-monto="' + id + '"]').value || '').replace(/[^0-9]/g, ''); const e = $('rem-list').querySelector('[data-err="' + id + '"]'); e.textContent = ''; if (!monto) { e.textContent = 'Escribe el monto.'; return; } b.disabled = true; const r = await post('remate_ofertar', { vendedor: String(TID), venta_id: Number(id), monto }); b.disabled = false; if (!r.ok) { e.textContent = r.error || 'No se pudo'; return; } await pintarRemates(); });
 }
 let NUM_POLL = null;
 async function vincularNumero(){

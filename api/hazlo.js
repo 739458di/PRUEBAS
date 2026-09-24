@@ -39,15 +39,62 @@ async function inventario() {
         const lt = r.agencia_nombre ? (lotes[norm(r.agencia_nombre)] || null) : null;
         return { id: w, nombre: nombre(r), marca: r.marca, modelo: r.modelo, anio: Number(r.anio) || null, precio: Number(r.precio) || null, km: Number(r.kilometraje) || null, color: r.color && !/no espec/i.test(r.color) ? r.color : null, transmision: r.transmision || null, tipo: tipoDe(r), origen: origenDe(r), foto: fs[0] || null, fotos: fs.slice(0, 12), link: 'https://www.fyradrive.com/car/' + w, lote: r.agencia_nombre || null, lote_marca: lt ? lt.marca : null, zona: lt ? lt.zona : ((puntos[Number(r.id)] || {}).direccion || null), punto: puntos[Number(r.id)] || null };
     }).filter(a => a.foto);
+    // VENDEDORES DE HAZLO (orden owner 2026-09-24): autos que la gente dejó "aquí en Hazlo" (modo 'hazlo'). NO son de Fyradrive; Hazlo solo conecta.
+    try {
+        await ensureVentas();
+        for (const v of await query("SELECT id, token, nombre, telefono, marca, modelo, anio, km, precio FROM hazlo_ventas WHERE modo = 'hazlo' AND estado = 'activo' ORDER BY id DESC LIMIT 200")) {
+            const r = { marca: v.marca, modelo: v.modelo, version: null, anio: v.anio, tipo_carroceria: null };
+            autos.push({ id: HZ_BASE + Number(v.id), hazlo: true, token: v.token, vendedor: v.nombre, vendedor_tel: v.telefono, nombre: nombre(r), marca: v.marca, modelo: v.modelo, anio: Number(v.anio) || null, precio: Number(v.precio) || null, km: Number(v.km) || null, color: null, transmision: null, tipo: tipoDe(r), origen: origenDe(r), foto: null, fotos: [], link: 'https://fyrachat.vercel.app/hazlo.html?venta=' + v.token, lote: null, lote_marca: null, zona: 'Trato directo con ' + String(v.nombre || '').split(' ')[0], punto: null });
+        }
+    } catch (e) { console.error('[hazlo ventas]', e.message); }
     CACHE = { t: Date.now(), autos };
     return autos;
 }
+// ══ VENDER EN HAZLO (orden owner 2026-09-24) ══
+// La gente llega a vender: la IA solo extrae los datos del auto; el CÓDIGO pregunta lo que falta y ofrece 3 caminos:
+//  1) consignación con Fyradrive (vendedor + seguimiento; paga la comisión al venderse) · 2) dejarlo en Hazlo (aparece cuando alguien busque;
+//  se le avisa y se ponen de acuerdo) · 3) ofertas inmediatas: los lotes lo ven en su panel ("X está rematando su auto") y ofertan a reserva de verlo.
+// El contacto final SIEMPRE es click-to-chat de WhatsApp (wa.me), nunca el bot.
+const HZ_BASE = 900000000;
+const comisionRegla = precio => Math.max(10000, Math.round(Number(precio || 0) * 0.02));
+const waLink = (tel, texto) => 'https://wa.me/' + String(tel || '').replace(/\D/g, '').replace(/^521(\d{10})$/, '52$1') + '?text=' + encodeURIComponent(texto);
+async function ensureVentas() {
+    if (global.__hzVentasOk) return; global.__hzVentasOk = true;
+    await run('CREATE TABLE IF NOT EXISTS hazlo_ventas (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE, nombre TEXT, telefono TEXT, marca TEXT, modelo TEXT, anio INTEGER, km INTEGER, precio INTEGER, descripcion TEXT, modo TEXT, estado TEXT DEFAULT \'activo\', sesion TEXT, created INTEGER, updated INTEGER)');
+    await run('CREATE TABLE IF NOT EXISTS hazlo_ofertas (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER, tenant_id INTEGER, tenant_nombre TEXT, contacto_tel TEXT, monto INTEGER, nota TEXT, created INTEGER, UNIQUE(venta_id, tenant_id))');
+    await run('CREATE TABLE IF NOT EXISTS hazlo_interes (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER, sesion TEXT, created INTEGER)');
+}
+const numDe = (s) => { const t = norm(s).replace(/,/g, ''); const m = t.match(/(\d+(?:\.\d+)?)\s*(mil|k)?/); if (!m) return 0; let n = Number(m[1]); if (m[2]) n *= 1000; return Math.round(n); };
+const RE_VENDER = /\b(vender|vendo|venta de mi|quiero vender|me compran|compran autos|rematar|remato)\b/i;
+async function avisarVendedor(tel, texto) { try { const CV = require('../lib/seb/citas-vivas.js'); return await CV.enviarWA(tel, texto, 0); } catch (e) { return { ok: false, error: e.message }; } }
+function turnoVenta(v, L, mensaje) {
+    // v = estado en curso {paso, marca, modelo, anio, km, precio, nombre, telefono}. Devuelve { texto, venta } o { listo: v }
+    const t = norm(mensaje);
+    if (L.venta_marca && !v.marca) v.marca = L.venta_marca; if (L.venta_modelo && !v.modelo) v.modelo = L.venta_modelo; if (L.venta_anio > 1990 && !v.anio) v.anio = L.venta_anio;
+    if (L.venta_km > 0 && !v.km) v.km = L.venta_km; if (L.venta_precio > 0 && !v.precio) v.precio = L.venta_precio;
+    const y = (t.match(/\b(19[89]\d|20[0-3]\d)\b/) || [])[1]; if (y && !v.anio) v.anio = Number(y);
+    if (v.paso === 'km' && !v.km) { const n = numDe(mensaje); if (n > 0) v.km = n; }
+    if (v.paso === 'precio' && !v.precio) { const n = numDe(mensaje); if (n >= 10000) v.precio = n; }
+    if (v.paso === 'nombre' && !v.nombre && !/\d{7,}/.test(mensaje)) v.nombre = mensaje.replace(/^(soy|me llamo|mi nombre es)\s+/i, '').trim().slice(0, 60);
+    if (L.nombre && !v.nombre && v.paso === 'nombre') v.nombre = L.nombre;
+    if (v.paso === 'telefono' || !v.telefono) { const d = mensaje.replace(/\D/g, ''); if (d.length >= 10 && v.paso === 'telefono') v.telefono = d.slice(-10); else if (L.telefono && v.paso === 'telefono') v.telefono = L.telefono.replace(/\D/g, '').slice(-10); }
+    if (!v.marca || !v.modelo) { v.paso = 'auto'; return { texto: v.marca && !v.modelo ? `Va, ${v.marca}. ¿Qué modelo y de qué año es?` : 'Claro que sí. ¿Qué auto es? Dime marca, modelo y año (por ejemplo: Mazda 3 2019).', venta: v }; }
+    if (!v.anio) { v.paso = 'auto'; return { texto: `¿De qué año es tu ${v.marca} ${v.modelo}?`, venta: v }; }
+    if (!v.km) { v.paso = 'km'; return { texto: `¿Cuántos kilómetros tiene el ${v.marca} ${v.modelo} ${v.anio}?`, venta: v }; }
+    if (!v.precio) { v.paso = 'precio'; return { texto: '¿En cuánto lo quieres vender?', venta: v }; }
+    if (!v.nombre) { v.paso = 'nombre'; return { texto: 'Perfecto. ¿Cómo te llamas?', venta: v }; }
+    if (!v.telefono) { v.paso = 'telefono'; return { texto: `Gracias, ${v.nombre}. ¿A qué WhatsApp te contactan? (10 dígitos)`, venta: v }; }
+    return { listo: v };
+}
+const autoDe = v => `${v.marca} ${v.modelo} ${v.anio}`;
+const opcionesTexto = v => `Listo, ${v.nombre}: ${autoDe(v)}, ${Number(v.km).toLocaleString('es-MX')} km, en ${fmt(v.precio)}. ¿Cómo le hacemos?\n1) Consignación con Fyradrive: un vendedor lo trabaja con seguimiento especializado y solo al venderse pagarías ${fmt(comisionRegla(v.precio))}.\n2) Dejarlo aquí en Hazlo: aparece cuando alguien busque un auto así y te aviso para que se pongan de acuerdo.\n3) Escuchar ofertas inmediatas: se lo paso a los lotes y te voy diciendo cuánto dan, a reserva de verlo.\nDime 1, 2 o 3.`;
 
 const SCHEMA = {
     type: 'object', additionalProperties: false,
-    required: ['intencion', 'marcas', 'origen', 'tipo', 'precio_min', 'precio_max', 'anio_min', 'transmision', 'lote', 'auto_id', 'nombre', 'telefono', 'cuando', 'respuesta'],
+    required: ['intencion', 'marcas', 'origen', 'tipo', 'precio_min', 'precio_max', 'anio_min', 'transmision', 'lote', 'auto_id', 'nombre', 'telefono', 'cuando', 'respuesta', 'venta_marca', 'venta_modelo', 'venta_anio', 'venta_km', 'venta_precio'],
     properties: {
-        intencion: { type: 'string', enum: ['mostrar', 'ver_auto', 'agendar', 'ubicacion', 'platicar', 'fuera'] },
+        intencion: { type: 'string', enum: ['mostrar', 'ver_auto', 'agendar', 'ubicacion', 'platicar', 'fuera', 'vender'] },
+        venta_marca: { type: 'string' }, venta_modelo: { type: 'string' }, venta_anio: { type: 'number' }, venta_km: { type: 'number' }, venta_precio: { type: 'number' },
         marcas: { type: 'array', items: { type: 'string' } },
         origen: { type: 'string', enum: ['', 'japones', 'coreano', 'americano', 'aleman', 'europeo', 'ingles'] },
         tipo: { type: 'string', enum: ['', 'suv', 'sedan', 'pickup', 'hatchback', 'deportivo'] },
@@ -67,6 +114,7 @@ REGLAS:
 - Filtros solo cuando el comprador los dice: marcas (nombres tal cual), origen, tipo, precios en pesos (0 = sin límite), anio_min (0 = sin límite), transmision, lote (si nombra un lote/agencia del inventario, p. ej. "autos universales", "autos lozano"; '' si no).
 - "respuesta": UNA frase corta y natural en español de México, tuteando, sin emojis, sin inventar datos ni precios. Eres un AGENTE que brinda opciones de distintos vendedores (particulares y lotes), no un solo lote: si vas a mostrar autos di algo como "Claro, mira lo que encontré en SUV:" (el sistema agrupa por vendedor y arma las tarjetas). Si es 'fuera' di amablemente que solo ayudas con autos.
 - Para agendar: extrae nombre, telefono (10 dígitos) y cuando (día/hora) si los dice; deja '' lo que no diga. No confirmes tú la cita: el sistema pregunta lo que falte.
+- vender = quiere VENDER su auto (o rematarlo / que se lo compren). Extrae de SU auto lo que diga: venta_marca, venta_modelo (sin el año), venta_anio, venta_km (kilómetros; "80 mil" = 80000), venta_precio (pesos; "250 mil" = 250000). Lo que no diga: '' o 0. El sistema pregunta lo que falte y le ofrece los caminos; tú no los expliques.
 - Datos de Fyradrive: se paga de contado o con crédito bancario (HEY Banco); enganche desde 25% aprox; los autos se ven en Monterrey con cita.
 INVENTARIO ACTIVO (id, nombre, precio, km, tipo, origen):
 ${lista}`;
@@ -118,10 +166,49 @@ module.exports = async (req, res) => {
     try {
         const autos = await inventario();
         if (action === 'autos') return res.status(200).json({ ok: true, autos });
+        // ── PÁGINA DEL VENDEDOR (hazlo.html?venta=<token>): su auto, el camino elegido, las ofertas de los lotes y quién quiso verlo ──
+        if (action === 'venta') {
+            await ensureVentas(); const tk = String((req.query && req.query.token) || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+            const v = (await query('SELECT * FROM hazlo_ventas WHERE token = ?', [tk]))[0]; if (!v) return res.status(404).json({ ok: false, error: 'No encontré esa venta.' });
+            const ofertas = await query('SELECT o.tenant_id, o.tenant_nombre, o.contacto_tel, o.monto, o.created FROM hazlo_ofertas o WHERE o.venta_id = ? ORDER BY o.monto DESC', [v.id]);
+            const interes = (await query('SELECT COUNT(*) n FROM hazlo_interes WHERE venta_id = ?', [v.id]))[0].n;
+            const nom = String(v.nombre || '').split(' ')[0];
+            return res.status(200).json({ ok: true, venta: { auto: `${v.marca} ${v.modelo} ${v.anio}`, km: v.km, precio: v.precio, modo: v.modo, nombre: v.nombre, estado: v.estado }, interes: Number(interes),
+                ofertas: ofertas.map(o => ({ lote: o.tenant_nombre, monto: o.monto, cuando: o.created, wa: o.contacto_tel ? waLink(o.contacto_tel, `Hola, soy ${nom}. Vi su oferta de ${fmt(o.monto)} por mi ${v.marca} ${v.modelo} ${v.anio} en HazloGPT. ¿Cuándo lo pueden ver?`) : null })) });
+        }
         if (action === 'chat' && req.method === 'POST') {
             const b = req.body || {}; const mensaje = String(b.mensaje || '').trim().slice(0, 600); if (!mensaje) return res.status(400).json({ ok: false, error: 'Escribe algo.' });
+            // ── VENTA EN CURSO (la lleva el cliente en `venta`, el código la completa) ──
+            const vPend = b.venta && typeof b.venta === 'object' ? b.venta : null;
+            const Lv = await leer(autos, b.historial, mensaje);
+            if (vPend || Lv.intencion === 'vender' || RE_VENDER.test(mensaje)) {
+                const v = Object.assign({ paso: 'auto', marca: '', modelo: '', anio: 0, km: 0, precio: 0, nombre: '', telefono: '', modo: '' }, vPend || {});
+                if (v.paso === 'modo') {
+                    const m = norm(mensaje); const op = /\b1\b|consign|fyradrive|vendedor/.test(m) ? 'consignacion' : /\b2\b|aqui|aquí|hazlo|dejarlo|avis/.test(m) ? 'hazlo' : /\b3\b|oferta|lote|remat|inmediat/.test(m) ? 'remate' : '';
+                    if (!op) return res.status(200).json({ ok: true, texto: 'Dime 1, 2 o 3 para saber cómo le hacemos.', autos: [], venta: v });
+                    await ensureVentas(); const token = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 6); const now = Date.now();
+                    await run('INSERT INTO hazlo_ventas (token, nombre, telefono, marca, modelo, anio, km, precio, modo, estado, sesion, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [token, v.nombre, '521' + v.telefono, v.marca, v.modelo, Number(v.anio), Number(v.km), Number(v.precio), op, 'activo', String(b.sesion || ''), now, now]);
+                    CACHE.t = 0;   // el surtido se recarga (modo 'hazlo' entra al instante)
+                    const link = 'https://fyrachat.vercel.app/hazlo.html?venta=' + token; const a = autoDe(v);
+                    if (op === 'consignacion') { avisarVendedor('5218120066355', `Consignación desde HazloGPT: ${v.nombre} · ${a} · ${Number(v.km).toLocaleString('es-MX')} km · pide ${fmt(v.precio)} · WhatsApp ${v.telefono}`).catch(() => {}); return res.status(200).json({ ok: true, texto: `Listo, ${v.nombre}. Tu ${a} queda con Fyradrive: un vendedor te contacta al ${v.telefono} para arrancar la consignación (pagas ${fmt(comisionRegla(v.precio))} solo cuando se venda). Si quieres adelantar, escríbeles por WhatsApp:`, autos: [], venta: null, wa: waLink(WA_BOT, `Hola, soy ${v.nombre}. Quiero consignar mi ${a} con Fyradrive (lo dejé en HazloGPT).`), wa_label: 'Escribir a Fyradrive' }); }
+                    if (op === 'hazlo') return res.status(200).json({ ok: true, texto: `Listo, ${v.nombre}. Tu ${a} ya está aquí en Hazlo. Cuando alguien quiera verlo le doy tu WhatsApp y a ti te aviso al ${v.telefono} para que se pongan de acuerdo. Tu ficha: ${link}`, autos: [], venta: null });
+                    return res.status(200).json({ ok: true, texto: `Listo, ${v.nombre}. Ya se lo pasé a los lotes: van a ver tu ${a} y ofertar a reserva de verlo. Aquí ves las ofertas conforme lleguen y desde ahí te pones en contacto con quien quieras: ${link}\nTambién te aviso al ${v.telefono} cuando entre una.`, autos: [], venta: null });
+                }
+                const r = turnoVenta(v, Lv, mensaje);
+                if (r.venta) return res.status(200).json({ ok: true, texto: r.texto, autos: [], venta: r.venta });
+                const vv = r.listo; vv.paso = 'modo';
+                return res.status(200).json({ ok: true, texto: opcionesTexto(vv), autos: [], venta: vv });
+            }
+            const L = Lv;
+            // ── AUTO DE UN VENDEDOR DE HAZLO: Hazlo solo conecta (click-to-chat), no agenda ni lo hace de Fyradrive ──
+            const hzA = (L.auto_id ? autos.find(a => a.id === Number(L.auto_id) && a.hazlo) : null) || (b.cita && b.cita.auto_id ? autos.find(a => a.id === Number(b.cita.auto_id) && a.hazlo) : null);
+            if (hzA && (L.intencion === 'agendar' || L.intencion === 'ver_auto' || L.intencion === 'ubicacion' || (b.cita && b.cita.auto_id))) {
+                await ensureVentas(); const vid = hzA.id - HZ_BASE; await run('INSERT INTO hazlo_interes (venta_id, sesion, created) VALUES (?,?,?)', [vid, String(b.sesion || ''), Date.now()]).catch(() => {});
+                avisarVendedor(hzA.vendedor_tel, `HazloGPT: alguien quiere ver tu ${hzA.nombre}. Le pasé tu WhatsApp para que se pongan de acuerdo.`).catch(() => {});
+                const nomV = String(hzA.vendedor || '').split(' ')[0];
+                return res.status(200).json({ ok: true, texto: `El ${hzA.nombre} (${fmt(hzA.precio)}${hzA.km ? ', ' + hzA.km.toLocaleString('es-MX') + ' km' : ''}) lo vende ${nomV} directamente. Te conecto por WhatsApp para que se pongan de acuerdo:`, autos: [hzA], cita: null, wa: waLink(hzA.vendedor_tel, `Hola ${nomV}, vi tu ${hzA.nombre} en HazloGPT y me interesa verlo. ¿Cuándo se puede?`), wa_label: 'Escribirle a ' + nomV });
+            }
             const pend = b.cita && typeof b.cita === 'object' ? b.cita : null;   // cita en curso (la lleva el cliente, el código la completa)
-            const L = await leer(autos, b.historial, mensaje);
             const porId = id => autos.find(a => a.id === Number(id)) || null;
             // ── CITA EN CURSO: cualquier mensaje mientras falta un dato se lee como ese dato ──
             if (pend || L.intencion === 'agendar') {
