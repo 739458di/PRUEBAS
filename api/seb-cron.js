@@ -32,6 +32,7 @@ module.exports = async function handler(req, res) {
         // VISITAS FLEXIBLES (universos con citas_flex): el paso del tiempo también es realidad → mismas casillas, misma puerta, reclamo idempotente
         try { r.catalogo_fyradrive = await require('../lib/seb/universo.js').sincronizarCatalogoFyradrive(); } catch (e) { r.catalogo_fyradrive = { error: e.message }; }   // barredor: altas/bajas de cualquier lote → Autos Fyradrive
         try { r.citas_flex = await require('../lib/seb/citas-flex.js').tickTodos(); } catch (e) { r.citas_flex = { error: e.message }; }
+        try { r.cita3 = await require('../lib/seb/cita3.js').tick(); } catch (e) { r.cita3 = { error: e.message }; }   // 3 partes: dueño sin respuesta → escala al vendedor
         try { r.programados = await require('../lib/seb/programados.js').despachar({ ahora: Date.now() }); } catch (e) { r.programados = { error: e.message }; }
         try { r.rescates = await require('../lib/seb/rescate.js').despachar({ ahora: Date.now() }); } catch (e) { r.rescates = { error: e.message }; }
         // ══ HUÉRFANAS @lid (causa 2 del mapa FyraChat): conversaciones t0 con identidad @lid cuyo teléfono ya se conoce → fusión (1/h)
