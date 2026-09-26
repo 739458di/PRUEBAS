@@ -551,7 +551,7 @@ module.exports = async function handler(req, res) {
             //    después la cita hace lo suyo. La pregunta comercial jamás se vuelve un estado de cita.
             let citaF = null, comercialR = null;
             if (CITAF.activo(tS)) {
-                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), interceptar: CITA3.activo(tS) ? (x) => CITA3.interceptar({ tenant: tS, chat: chS, ev: x.ev, nuevo: x.nuevo }) : null, comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
+                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), foto: CITA3.activo(tS) ? await CITA3.fotoTexto(tS, chS).catch(() => null) : null, interceptar: CITA3.activo(tS) ? (x) => CITA3.interceptar({ tenant: tS, chat: chS, ev: x.ev, nuevo: x.nuevo }) : null, comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
                 if (citaF && citaF.manejado && citaF.cita && CITA3.activo(tS) && !citaF.interceptado) {   // RONDA: el cuándo que aplicó el motor (antes de la 1ª confirmación) → 1 voto del comprador; Mario confirma; dueño con 2
                     try {
                         const uiP = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const txP = (uiP && uiP.texto) || '';
@@ -1466,7 +1466,7 @@ module.exports = async function handler(req, res) {
                 if (TSEB) mr = mr.filter(m => m.emisor !== 'sistema');   // incluida la nota "Chat delegado": si el comprador escribe primero, ES primer contacto → OPENER determinista (antes caía en continuación y el ruteador IA a veces escalaba un simple "hola me interesa el auto")
                 // el MISMO mensaje del comprador repetido seguido (doble toque / reenvío en < 60 s) cuenta una vez: duplicado confundía al clasificador y escalaba
                 if (TSEB) mr = mr.filter((m, i) => !(i > 0 && m.direccion === 'in' && mr[i - 1].direccion === 'in' && String(mr[i - 1].texto || '').trim() === String(m.texto || '').trim() && Number(m.ts) - Number(mr[i - 1].ts) < 60000));
-                let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0 }));
+                let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0, emisor: m.emisor || '' }));
                 if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
                 if (TSEB && req.body && req.body.solo_texto) { while (rows.length && rows[rows.length - 1].direccion === 'in') rows.pop(); rows.push({ mensaje: String(req.body.solo_texto), direccion: 'in', ts: Date.now(), ai: 0 }); }   // mensaje con varias partes: aquí solo entra la parte COMERCIAL
                 mensajes = rows;
@@ -1640,7 +1640,9 @@ module.exports = async function handler(req, res) {
                 const { sanearContexto } = LIB_AD_ESPIA;
                 adCtx = await sanearContexto(tel, adCtx, mensajes.filter(m => m.direccion === 'in').slice(0, 3).map(m => m.mensaje).join(' '));
             } catch (e) { console.error('[ad-espia]', e.message); }
-            const histCorto = mensajes.slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));
+            const histCorto = mensajes.filter(h => h.emisor !== 'sistema').slice(-8).map(h => ({ direccion: h.direccion, mensaje: h.mensaje }));   // las notas internas (🔔, 🗓, 🤖) no son plática: no se le dan al clasificador
+            // PREGUNTA PENDIENTE (etapa 3, ley 2): el clasificador ya sabía usarla pero siempre le llegaba vacía — la última pregunta de Seb que el comprador no ha contestado
+            const estadoLectura = (() => { for (let i = mensajes.length - 1; i >= 0; i--) { const h = mensajes[i]; if (h.direccion === 'out' && h.emisor !== 'sistema') { const tx = String(h.mensaje || h.texto || ''); return /\?\s*$/.test(tx.trim()) ? { pregunta_pendiente: tx.slice(0, 240) } : {}; } } return {}; })();
 
             // ══ POSESIÓN = CONTROL TUYO EN ETAPA 3 (human in the loop, 2026-07-13):
             // el bot es piloto normal en opener/continuación/etapa 3 HASTA que tú tomas
@@ -1670,7 +1672,7 @@ module.exports = async function handler(req, res) {
                     const infoP = await LIB_MESA.herramientaEnPosesion({ tel, texto: ultimoSolo }).catch(() => null);
                     if (infoP) return res.status(200).json({ ok: true, modo: 'posesion_herramienta', tipo: 'herr_' + (infoP.universo || 'info_auto'), segmentos: infoP.segmentos, fotos: infoP.fotos || null, fotos_after_index: (infoP.fotos_after_index != null ? infoP.fotos_after_index : 0), ubicacion_auto_id: infoP.ubicacion_auto_id || null, pin_after_index: (infoP.pin_after_index != null ? infoP.pin_after_index : null) });
                     const mcP = adCtx ? '[DESC: ' + adCtx + ']\n' + ultimoSolo : ultimoSolo;
-                    const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: {} });
+                    const clasifP = await entender({ mensaje: mcP, historial: histCorto, estado: estadoLectura });
                     let autoP = clasifP.auto_id;
                     if (!autoP) { try { autoP = await U.autoActivoDe(0, tel); } catch (e) { } }
                     const { responderEtapa3 } = require('../lib/seb/etapa3.js');
@@ -1731,7 +1733,7 @@ module.exports = async function handler(req, res) {
                     return { done: { ok: true, modo: 'aparador', ...opF, escala_ultimo: opF.escalar_owner ? followup : undefined } };
                 }
                 const mc = adCtx ? '[DESC: ' + adCtx + ']\n' + followup : followup;
-                const clasif = await entender({ mensaje: mc, historial: histCorto, estado: {} });
+                const clasif = await entender({ mensaje: mc, historial: histCorto, estado: estadoLectura });
                 // fix raíz: la inferencia de la IA no cambia el auto — el estado manda
                 clasif.auto_id = await LIB_MESA.alinearAuto({ tel, texto: followup, clasif: clasif });
                 // ══ LA MESA (owner 2026-07-21): nombró un auto explícito → entra en juego;
