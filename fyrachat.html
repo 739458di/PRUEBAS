@@ -311,7 +311,12 @@ a{color:var(--pri2)}
 .msg.in .lnk{color:#9fd0ff}
 .msg .med small{word-break:break-all}
 .msg.sel{outline:3px solid var(--pos);outline-offset:2px}
-.composer .quien{flex:0 0 auto;height:36px;padding:0 12px;border-radius:12px;background:var(--s2);color:#fff;font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap}.composer .quien.comp{background:var(--pos);color:#04231a}
+.composer .quien{flex:0 0 auto;height:40px;padding:0 12px;border-radius:12px;background:var(--s2);color:#fff;font-size:13px;font-weight:700;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;line-height:1.1}.composer .quien small{font-size:9.5px;font-weight:600;opacity:.75;letter-spacing:.04em;text-transform:uppercase}.composer .quien.comp{background:var(--pos);color:#04231a}
+.c3s{margin-top:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--sep);background:var(--card,rgba(255,255,255,.04));font-size:13px;line-height:17px;display:flex;flex-direction:column;gap:8px}.c3s[hidden]{display:none}
+.c3s .t{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.c3s .pl{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--sep)}.c3s .pl.ok{background:rgba(53,224,176,.14);border-color:rgba(53,224,176,.45)}
+.c3s .bb{display:flex;flex-wrap:wrap;gap:6px}.c3s button{height:32px;padding:0 11px;border-radius:9px;border:1px solid var(--sep);background:transparent;color:var(--txt);font:600 12.5px var(--f,inherit)}.c3s button.ok{background:var(--pos);border-color:var(--pos);color:#04231a}.c3s button.no{color:#E5484D;border-color:rgba(229,72,77,.45)}.c3s button.sig{background:var(--pri);border-color:var(--pri);color:#fff}
+.c3s .nh{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.c3s .nh[hidden]{display:none}.c3s input,.c3s select{height:32px;border-radius:9px;border:1px solid var(--sep);background:transparent;color:var(--txt);padding:0 8px;font:13px inherit}
+:root[data-tema="blanco"] .c3s{background:#fff;border-color:rgba(0,0,0,.1)}:root[data-tema="blanco"] .c3s button,:root[data-tema="blanco"] .c3s input,:root[data-tema="blanco"] .c3s select{border-color:rgba(0,0,0,.14);color:#111}:root[data-tema="blanco"] .c3s button.sig{color:#fff}
 .sel-bar{position:absolute;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 16px calc(10px + var(--safe-b));background:var(--s1);border-top:1px solid var(--sep)}
 .sel-bar b{flex:1;font-size:15px}
 .sel-bar .cta{width:auto;min-width:0;height:44px;padding:0 16px;margin:0}
@@ -740,6 +745,7 @@ html[data-acentos] .buscar:focus-within{border-color:var(--acento2)}
       <button class="foco" id="ch-foco" onclick="abrirSelectorAuto()"><div class="ph"><i data-ico="car"></i></div><div class="tx"><div class="t">Elegir auto en foco</div><div class="p none">Toca para elegirlo</div></div><i data-ico="chev" class="chev"></i></button>
       <div id="ch-l2"></div>
       <button type="button" class="cf-bar" id="cf-bar" onclick="abrirCitaFlex()" hidden></button>
+      <div class="c3s" id="c3s" hidden></div>
     </div>
     <div class="msgs" id="msgs"></div>
     <button class="nuevos" id="nuevos" onclick="irAlFondo(true)">Nuevos mensajes<i data-ico="down"></i></button>
@@ -1476,7 +1482,11 @@ TX.addEventListener('input', () => { TX.style.height = 'auto'; TX.style.height =
 TX.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarTexto(); } });
 // SANDBOX / PRUEBA: el composer puede hablar como el VENDEDOR (sale por la puerta de siempre, simulado) o como el COMPRADOR (entra al hilo y la IA decide)
 let QUIEN = 'vendedor';
-function pintarQuien(){ const b = $('quien'); if (!b) return; const on = !!(TENANT && TENANT.demo); b.hidden = !on; if (!on) return; const nom = (TENANT.nombre || 'Vendedor').split(/\s+/)[0]; b.textContent = QUIEN === 'comprador' ? 'Comprador' : nom; b.classList.toggle('comp', QUIEN === 'comprador'); TX.placeholder = QUIEN === 'comprador' ? 'Escribe como el comprador…' : 'Escribe un mensaje...'; }
+function pintarQuien(){ const b = $('quien'); if (!b) return; const on = !!(TENANT && TENANT.demo); b.hidden = !on; if (!on) return;
+  // SIMULAR (sandbox): "Hablas como" alterna entre el vendedor del chat y la otra persona (comprador, o dueño en el chat del dueño)
+  const ch = (hiloDe(CHAT_ID) || {}).chat || {}; const vend = ch.vendedor || (TENANT.miembro && TENANT.miembro.nombre ? TENANT.miembro.nombre.split(/\s+/)[0] : 'Vendedor'); const otro = ch.canal === 'dueno' ? 'Dueño' : 'Comprador';
+  b.innerHTML = '<small>Hablas como</small>' + esc(QUIEN === 'comprador' ? otro : vend) + ' ⇄'; b.title = 'Toca para hablar como ' + (QUIEN === 'comprador' ? vend : otro.toLowerCase());
+  b.classList.toggle('comp', QUIEN === 'comprador'); TX.placeholder = QUIEN === 'comprador' ? 'Escribe como el ' + otro.toLowerCase() + '…' : 'Escribe como ' + vend + '…'; }
 function pintarPensando(on){ const e = $('ch-estado'); if (!e) return; if (on) { e.dataset.prev = e.textContent; e.textContent = 'Seb está pensando…'; e.classList.add('ok'); } else if (e.dataset.prev != null) { e.textContent = e.dataset.prev; delete e.dataset.prev; pintarCabecera((hiloDe(CHAT_ID) || {}).chat || INBOX.rows.get(CHAT_ID)); } }
 function toggleQuien(){ QUIEN = QUIEN === 'comprador' ? 'vendedor' : 'comprador'; pintarQuien(); TX.focus(); }
 // UNA COLA POR CHAT: dos mensajes seguidos del comprador se registran y corren su turno EN ORDEN (jamás dos `seb_turno` en paralelo
@@ -2219,6 +2229,42 @@ async function scEnviar(){
 const CF_TIPOS = { vence: 'Vence la ventana', aclaracion: 'Preguntarle si fue o si todavía viene', marcar_pregunta: 'Aviso al vendedor: no contestó la pregunta', r1: 'Recordatorio', vispera: 'Un día antes', dia: 'Mensaje del día', dia_multi: 'Mensaje del día', dia_ultimo: 'Último día', empujon: 'Segundo empujón', marcar: 'Aviso al vendedor: márcale', me_avisas: '“Me avisas cuando vengas”', revision: 'Revisión', revision_suave: 'Mensaje suave', cierre: 'Cierre: ¿llegó?', cierre_2: '¿Llegó? (otra vez)', sin_cierre: 'Queda sin cierre' };
 const CF_EST = { viva: 'Viva', en_camino: 'En camino', esperando_cierre: 'Esperando cierre', realizada: 'Asistió', no_llego: 'No asistió', cancelada: 'Canceló', pospuesta: 'Sin fecha', sin_cierre: 'Sin cierre', reemplazada: 'Reemplazada' };
 let CF = null;
+// ═══ FRANJA DE LA CITA DE 3 PARTES dentro del chat (sandbox y real): los mismos botones de Mario, y en el sandbox "Siguiente movimiento" ═══
+function c3Franja(r){
+  const box = $('c3s'); if (!box) return; const T = r && r.tres; if (!T || ['realizada', 'cancelada', 'no_se_hizo'].includes(T.estado) && !(TENANT && TENANT.demo)) { box.hidden = true; box.innerHTML = ''; return; }
+  const enD = T.desde === 'dueno'; const d = T.dia || {}; const B = (v, txt, cls, x) => '<button type="button" class="' + (cls || '') + '" data-c3="' + v + '"' + (x ? " data-x='" + esc(JSON.stringify(x)) + "'" : '') + '>' + esc(txt) + '</button>';
+  const vt = (k, n) => '<span class="pl' + (T.ok[k] ? ' ok' : '') + '">' + (T.ok[k] ? '✓ ' : '… ') + n + '</span>';
+  const fT = { espera_vendedor: 'Le toca a ' + ((T.vendedor && T.vendedor.nombre) || 'Mario').split(' ')[0] + ' confirmar', espera_comprador: 'Esperando al comprador', espera_dueno: 'Esperando el sí del dueño', pausa_dueno: 'El dueño necesita a Mario' }[T.fase] || '';
+  let h = '<div class="t">' + ((T.estado === 'ronda' || T.fase) ? vt('comprador', 'Comprador') + vt('vendedor', ((T.vendedor && T.vendedor.nombre) || 'Mario').split(' ')[0]) + vt('dueno', 'Dueño') + (fT ? '<span>' + esc(fT) + '</span>' : '') : '') +
+    (['confirmada', 'dia_d', 'pausada'].includes(T.estado) && !T.fase ? ['ok_c:Comprador', 'ok_d:Dueño', 'ok_v:Mario', 'verde:Luz verde', 'voy_c:Va el comprador', 'llego_c:Llegó el comprador'].map(x => { const [k, n] = x.split(':'); return '<span class="pl' + (d[k] ? ' ok' : '') + '">' + (d[k] ? '✓ ' : '') + n + '</span>'; }).join('') : '') + '</div>';
+  let bb = '';
+  if (['ronda', 'confirmada', 'dia_d', 'pausada'].includes(T.estado)) {
+    if (T.fase === 'espera_vendedor' && !enD) bb += B('confirmo', 'Confirmo', 'ok') + B('nuevo', 'Proponer otro horario');
+    else if ((T.fase === 'espera_dueno' || T.fase === 'pausa_dueno') && enD) bb += B('dueno_confirmo', 'Dueño confirmó', 'ok') + B('nuevo', 'Nuevo horario') + B('ya_no_disponible', 'Ya no disponible', 'no');
+    else if (T.fase) bb += B('nuevo', 'Nuevo horario');
+    else { bb += B('nuevo', 'Nuevo horario') + (T.estado === 'pausada' ? B('continuar', 'Continuar', 'ok') : B('pausar', 'Pausar')) + B('cancelar', 'Cancelar', 'no');
+      if (T.estado === 'dia_d' || d.ok_c || d.ok_d) bb += B('palomear', 'Confirmo yo', '', { quien: 'vendedor' }) + (d.ok_c ? '' : B('palomear', 'Confirmó comprador', '', { quien: 'comprador' })) + (d.ok_d ? '' : B('palomear', 'Confirmó dueño', '', { quien: 'dueno' })) + (d.listo_v ? '' : B('listo', 'Listo', 'ok')) + (d.voy_c && !d.sal_v ? B('voy', 'Voy') : '') + (d.sal_v && !d.llego_v ? B('llegue', 'Llegué') : '') + B('los_tres', 'Ya estamos los 3', 'ok'); }
+  }
+  const sig = T.pendientes && T.pendientes[0];
+  if (TENANT && TENANT.demo && sig) bb += B('siguiente', '▶ Siguiente movimiento: ' + sig.que + ' · ' + sig.cuando, 'sig');
+  const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10);
+  h += (bb ? '<div class="bb">' + bb + '</div>' : '') + '<div class="nh" id="c3-nh" hidden><input type="date" id="c3-dia" value="' + (T.ini_ts ? new Date(T.ini_ts - 6 * 3600000).toISOString().slice(0, 10) : hoy) + '"><input type="time" id="c3-hora" value="12:00">' + (!enD && T.confirmada ? '<select id="c3-razon"><option value="comprador">Lo hablé con el comprador</option><option value="vendedor">No puedo yo</option></select>' : '') + '<button type="button" class="ok" data-c3="nuevo_ok">Proponer</button></div>';
+  box.innerHTML = h; box.hidden = false;
+}
+async function c3Accion(v, x){
+  const id = CHAT_ID; if (!id) return; let r;
+  if (v === 'nuevo') { const nh = $('c3-nh'); if (nh) nh.hidden = !nh.hidden; return; }
+  if (v === 'siguiente') { r = await apiPost('citaf_reloj', { chat_id: id, accion: 'siguiente' }); if (r && r.hechas && r.hechas.length) aviso(r.hechas.map(h => h.que).join(' · ')); else if (r && r.sin_siguiente) aviso('No hay nada programado.'); }
+  else {
+    let datos = x || null; let ev = v;
+    if (v === 'nuevo_ok') { const dd = ($('c3-dia') || {}).value, hh = ($('c3-hora') || {}).value; if (!dd || !hh) { aviso('Pon día y hora.'); return; } ev = 'nuevo_horario'; datos = { dia_ini: dd, hora_ini: hh, razon: ($('c3-razon') || {}).value || 'comprador' }; }
+    if (v === 'cancelar') { const rz = prompt('Razón: no puede el comprador · no puede el dueño · no puedo yo · ya no hay venta', 'no puede el comprador'); if (rz == null) return; datos = { razon: rz }; }
+    if (v === 'ya_no_disponible' && !confirm('¿El auto ya no está disponible? Se cancela la cita.')) return;
+    r = await apiPost('cita3_vendedor', { chat_id: id, evento: ev, datos }); if (!r || !r.ok) { aviso((r && r.error) || 'No se pudo'); }
+  }
+  await refrescarHilo(id); await cfBarra(id);
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#c3s button[data-c3]'); if (!b) return; e.preventDefault(); c3Accion(b.dataset.c3, b.dataset.x ? JSON.parse(b.dataset.x) : null); });
 async function cfBarra(id){
   const b = $('cf-bar'); if (!b) return;
   if (!(TENANT && TENANT.citas_flex)) { b.hidden = true; return; }
@@ -2226,7 +2272,9 @@ async function cfBarra(id){
   cfPintarBarra(r); if (CF && CF.id === id) cfPintar(r);
 }
 function cfPintarBarra(r){
-  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita; try { const ba = document.querySelector('#acciones .acc[data-acc="cita"]'); if (ba && !ba.dataset.sim) { ba.dataset.sim = '1'; ba.lastChild.textContent = 'Cita'; } } catch (e) {}
+  pintarQuien(); c3Franja(r);
+  const b = $('cf-bar'); if (!b) return; b.hidden = false; const c = r.cita;
+  if (r.tres) { const T = r.tres; b.className = 'cf-bar' + (T.fase === 'pausa_dueno' || T.estado === 'pausada' ? ' duda' : ''); b.innerHTML = '<span><b>Cita de 3 partes · ' + esc(T.cuando || 'sin hora') + '</b> · ' + esc({ ronda: 'en ronda', confirmada: 'confirmada', dia_d: 'día de la cita', pausada: 'pausada', realizada: 'realizada', cancelada: 'cancelada', no_se_hizo: 'no se hizo' }[T.estado] || T.estado) + (T.pendientes && T.pendientes[0] ? '<br>Sigue: ' + esc(T.pendientes[0].que) + ' · ' + esc(T.pendientes[0].cuando) : '') + '</span><span class="r">' + (r.reloj.virtual ? '⏱ ' : '') + esc(r.reloj.ahora) + '</span>'; return; } try { const ba = document.querySelector('#acciones .acc[data-acc="cita"]'); if (ba && !ba.dataset.sim) { ba.dataset.sim = '1'; ba.lastChild.textContent = 'Cita'; } } catch (e) {}
   const rel = '<span class="r">' + (r.reloj.virtual ? '⏱ ' : '') + esc(r.reloj.ahora) + '</span>';
   if (!c || !c.viva) { b.className = 'cf-bar off'; b.innerHTML = '<span>' + (c ? 'Cita ' + esc((CF_EST[c.estado] || c.estado).toLowerCase()) + ' · toca para ver' : 'Sin cita · escribe como comprador para que nazca') + '</span>' + rel; return; }
   if (c.estado === 'pospuesta') { b.className = 'cf-bar off'; b.innerHTML = '<span><b>Sin fecha</b> · fuera del calendario hasta que diga un día</span>' + rel; return; }
@@ -2262,7 +2310,6 @@ function cfPintar(r){
     else if (['confirmada', 'dia_d', 'pausada'].includes(T.estado)) { bb += Bt('nuevo_horario', 'Nuevo horario (abajo)') + (T.estado === 'pausada' ? Bt('continuar', 'Continuar', 'ok') : Bt('pausar', 'Pausar')) + Bt('cancelar', 'Cancelar', 'no');
       bb += Bt('palomear', 'Confirmo yo', '', { quien: 'vendedor' }) + Bt('palomear', 'Confirmó comprador', '', { quien: 'comprador' }) + Bt('palomear', 'Confirmó dueño', '', { quien: 'dueno' }) + Bt('listo', 'Listo', 'pri') + Bt('ya_va', 'Comprador ya va') + Bt('voy', 'Voy') + Bt('llegue', 'Llegué') + Bt('los_tres', 'Ya estamos los 3', 'ok'); }
     if (bb) h += '<div class="btns">' + bb + '</div>' + cfFormAgenda(off, 'Día y hora para Nuevo horario') + '<p class="hint">Los botones mueven la cita; lo que platiques por chat no.</p>';
-    if (TENANT && TENANT.demo) h += '<a class="cta sec" style="margin-top:6px;text-decoration:none" href="/simulador3.html?vendedor=' + encodeURIComponent(VPARAM() || '') + '" target="_blank" rel="noopener">Abrir el simulador de 3 partes</a>';
   }
   h += '<h4>La cita</h4>';
   if (!c) h += cfFormAgenda(off, 'Agendar yo la visita') + '<div class="card">Todavía no hay cita en este chat. Nace cuando el comprador dice un día: “voy el sábado”, “cómo andas hoy a las 5”, “entre jueves y viernes”.</div>';

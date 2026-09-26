@@ -27,6 +27,19 @@ const SUBIR = require('../lib/seb/subir-chat.js');
 const COMPUERTA = require('../lib/seb/compuerta-entrada.js');
 const LOTE = require('../lib/seb/lote.js');
 const CITA3 = require('../lib/seb/cita3.js');
+/** RELOJ DE 3 PARTES paso a paso (sandbox): avanza la hora del chat del comprador hasta `destino`, ejecutando cada evento a SU hora. */
+async function relojTres(chatId, destino) {
+    const hechas = [];
+    for (let i = 0; i < 40; i++) {
+        const px = (await CITA3.proximo(chatId)).filter(p => p.due <= destino)[0];
+        const paso = px ? Math.max(px.due, Date.now() + await CITAF.offsetDe(chatId)) : destino;
+        await CITAF.ponerOffset(chatId, paso - Date.now());
+        const r = await CITA3.tick({ chatId, hasta: paso }); hechas.push(...r.map(x => ({ k: x.k, que: CITA3.K_TXT[String(x.k).split(':')[0]] || x.k, due: x.due })));
+        if (!px) break;
+    }
+    await CITAF.ponerOffset(chatId, destino - Date.now());
+    return hechas;
+}
 const VOZ = require('../lib/seb/voz.js');   // LA VOZ del chat: Seb o el vendedor (human-on-the-loop)
 const CITAF = require('../lib/seb/citas-flex.js');   // CITAS FLEXIBLES (ventana + eventos + reloj virtual) — solo universos con config.citas_flex=1 (TERRA MOTORS)
 const CTX = require('../lib/seb/contexto.js');   // universo ambiente: el cerebro completo de Seb corriendo para un universo ≠ 0 (TERRA MOTORS)
@@ -276,15 +289,7 @@ module.exports = async function handler(req, res) {
                 else if (acc === 'siguiente') { const px = await CITA3.proximo(chatB.id); if (!px.length) return res.status(200).json({ ok: true, sin_siguiente: true, hechas: [] }); destino = px[0].due + 1000; }
                 else return res.status(400).json({ ok: false, error: 'accion: mas | siguiente | ir' });
                 if (!destino || destino < ahoraV - 1000) return res.status(400).json({ ok: false, error: 'el reloj del simulador solo avanza' });
-                const hechas = [];
-                for (let i = 0; i < 40; i++) {   // paso a paso: cada evento ocurre a SU hora (saludos, bitácora y mediciones quedan con la hora correcta)
-                    const px = (await CITA3.proximo(chatB.id)).filter(p => p.due <= destino)[0];
-                    const paso = px ? Math.max(px.due, Date.now() + await CITAF.offsetDe(chatB.id)) : destino;
-                    await CITAF.ponerOffset(chatB.id, paso - Date.now());
-                    const r = await CITA3.tick({ chatId: chatB.id, hasta: paso }); hechas.push(...r.map(x => ({ k: x.k, que: CITA3.K_TXT[String(x.k).split(':')[0]] || x.k, due: x.due })));
-                    if (!px) break;
-                }
-                await CITAF.ponerOffset(chatB.id, destino - Date.now());
+                const hechas = await relojTres(chatB.id, destino);
                 return res.status(200).json({ ok: true, hechas, ahora_ts: destino, ahora: CITAF.fechaCorta(destino) });
             }
             // sim3_estado: lo que ve cada parte + la ronda + el reloj + lo que sigue
@@ -351,6 +356,17 @@ module.exports = async function handler(req, res) {
             }
             if (action === 'citaf_reloj') {   // RELOJ DE ESTE CLIENTE DE PRUEBA (película): avanzar EJECUTA lo que tocaba; retroceder REBOBINA (regresa mensajes y estado)
                 if (!tC.demo) return res.status(400).json({ ok: false, error: 'el reloj de prueba solo existe en el sandbox' });
+                if (CITA3.activo(tC)) {   // 3 PARTES: la hora es la de la cita (chat del comprador); desde el chat del dueño se mueve la misma
+                    const c3r = String(chC.canal || '') === 'dueno' ? await CITA3.porDuenoChat(tC.id, chC.id) : await CITA3.porChat(tC.id, chC.id);
+                    const cidR = c3r ? Number(c3r.chat_id) : Number(chC.id); const accR = String(req.body.accion || ''); const ahoraR = Date.now() + await CITAF.offsetDe(cidR); let destR = null;
+                    if (accR === 'siguiente') { const px = await CITA3.proximo(cidR); if (!px.length) { const stS = await CITAF.estado({ tenant: tC, chat: chC }); stS.tres = c3r ? await CITA3.estado(c3r.cita_id) : null; return res.status(200).json(Object.assign({ sin_siguiente: true, hechas: [] }, stS)); } destR = px[0].due + 1000; }
+                    else if (accR === 'mas') destR = ahoraR + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
+                    if (destR) {
+                        const hechasR = await relojTres(cidR, destR); if (cidR !== Number(chC.id)) await CITAF.ponerOffset(chC.id, destR - Date.now());
+                        const stR = await CITAF.estado({ tenant: tC, chat: chC }); const c3n = c3r ? await CITA3.porCita(c3r.cita_id) : null; stR.tres = c3n ? Object.assign(await CITA3.estado(c3n.cita_id), { desde: String(chC.canal || '') === 'dueno' ? 'dueno' : 'comprador' }) : null;
+                        return res.status(200).json(Object.assign({ hechas: hechasR.map(h => ({ tipo: 'tres', que: h.que, salio: true })) }, stR));
+                    }
+                }
                 const acc = String(req.body.accion || ''); const off = await CITAF.offsetDe(chC.id); const ahoraV = Date.now() + off; let destino = null, rebobino = null;
                 if (acc === 'mas') destino = ahoraV + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
                 else if (acc === 'ir') destino = Number(req.body.ts) || 0;
@@ -440,6 +456,10 @@ module.exports = async function handler(req, res) {
                     // (a) nombra un auto del catálogo → foco (primer contacto o cambio de auto)
                     const nomL = LOTE.matchCatalogo(ultimoInTxt, catE);
                     if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
+                    // SALUDO O CORTESÍA con auto en foco: no es algo que escalar (antes "hola" entregaba la voz y Seb quedaba mudo)
+                    { const nS = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                      if (focoL && nS.length <= 30 && /^\W*(hola|holi|buen(os|as)?( dias| tardes| noches)?|que tal|hey|saludos|que onda)\W*$/.test(nS)) { const asisG = await asistenteDe(tS, chS.id); const nomG = String(chS.nombre || '').trim().split(/\s+/)[0]; await mandarL('¡Qué tal' + (nomG && !/^\+?\d/.test(nomG) ? ' ' + nomG : '') + '! Aquí estoy para ayudarte con el ' + focoL.nombre + (asisG ? '' : '') + '. ¿Qué te gustaría saber?'); await notaL('🏬 saludo (sin escalar)'); return salirL('saludo', 1); }
+                      if (focoL && nS.length <= 25 && /^\W*(gracias|muchas gracias|ok|okey|va|sale|perfecto|excelente|listo|de nada|👍)\W*$/.test(nS) && !(CITA3.activo(tS) && await CITA3.porChat(tS.id, chS.id))) { await notaL('🏬 cortesía (sin respuesta, sin escalar)'); return salirL('cortesia', 0); } }
                     // (b) sin foco → el lote pregunta / filtra / lista
                     if (!focoL) {
                         const rL = await LOTE.turno({ tenant: tS, chat: chS, texto: ultimoInTxt, catalogo: catL, asistente: await asistenteDe(tS, chS.id) });
@@ -2899,7 +2919,8 @@ module.exports = async function handler(req, res) {
                         auto: focoH ? { id: Number(focoH.id), web_id: focoH.web_id == null ? null : Number(focoH.web_id), nombre: focoH.nombre, precio: focoH.precio == null ? null : Number(focoH.precio), portada: (focoH.web_id && portadasH[Number(focoH.web_id)]) || null } : null,
                         autos_disponibles: cat.slice(0, 200).map(a => autoJson(a, portadasH)),
                         bot: TV ? ((tV.config && Number(tV.config.seb_auto) === 1) ? VOZ.vozDe(c) : 'n/a') : botEstadoT0(c, antes ? [] : asc), delegado: !!deleg,
-                        ghost_dias: ghostDias(c), no_leidos: antes ? noLeidosAntes : 0, canal: c.canal || null
+                        ghost_dias: ghostDias(c), no_leidos: antes ? noLeidosAntes : 0, canal: c.canal || null,
+                        vendedor: TV ? await (async () => { try { const r = (await query('SELECT v.nombre FROM conversaciones x JOIN vendedores_universo v ON v.id = x.miembro_id WHERE x.id = ?', [Number(c.id)]))[0]; return r ? String(r.nombre).trim().split(/\s+/)[0] : null; } catch (e) { return null; } })() : null
                     },
                     mensajes: asc.map(mensajeJson), hay_mas, desde: desde || undefined, antes: antes || undefined
                 });
@@ -2944,7 +2965,9 @@ module.exports = async function handler(req, res) {
                     return res.status(codigoDe(rI)).json(rI);
                 }
                 if (tV.config && Number(tV.config.todo_entra) === 1 && (E.modo || 'silencio') === 'silencio' && E.entrante !== true) return err(400, 'En este universo agregar un comprador es mandarle el primer mensaje: elige qué le mandas.', { necesita: 'modo' });
-                const body = { miembro_nombre: SES && SES.miembro ? SES.miembro.nombre : null, telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, entrante: E.entrante === true, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
+                // SIMULADOR (sandbox con 3 partes): si delega el owner sin "como", el chat queda a nombre del primer vendedor del universo (Mario Simulado)
+                let miembroSim = null; if (!(SES && SES.miembro) && tV.demo && CITA3.activo(tV)) { try { miembroSim = (await query("SELECT id, nombre FROM vendedores_universo WHERE tenant_id = ? AND activo = 1 ORDER BY id LIMIT 1", [TV]))[0] || null; } catch (e) { } }
+                const body = { miembro_nombre: SES && SES.miembro ? SES.miembro.nombre : (miembroSim ? miembroSim.nombre : null), telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, entrante: E.entrante === true, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
                 const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'delegar_v2', sesionId: SID }, async () => {
                     const rD = await delegarCore(tV, body, { sesionId: SID, clave });
                     const o = rD.out || {};
@@ -2952,7 +2975,7 @@ module.exports = async function handler(req, res) {
                     // enviado = el TEXTO que salió (opener o texto de la acción); true si salió algo sin texto (fotos); false si nada
                     const envD = !okD ? false : (o.texto_enviado ? String(o.texto_enviado) : (o.opener_enviado && o.opener ? String(o.opener) : (o.accion_ok ? true : false)));
                     // CHAT → VENDEDOR (orden owner 2026-09-23 "renderiza acorde a mi id"): el comprador que agrega un miembro queda a SU nombre
-                    if (okD && o.chat_id && SES && SES.miembro) { try { await run('UPDATE conversaciones SET miembro_id = ? WHERE id = ? AND COALESCE(tenant_id,0) = ? AND miembro_id IS NULL', [Number(SES.miembro.id), Number(o.chat_id), TV]); } catch (e) { } }
+                    if (okD && o.chat_id && ((SES && SES.miembro) || miembroSim)) { try { await run('UPDATE conversaciones SET miembro_id = ? WHERE id = ? AND COALESCE(tenant_id,0) = ? AND miembro_id IS NULL', [Number((SES && SES.miembro) ? SES.miembro.id : miembroSim.id), Number(o.chat_id), TV]); } catch (e) { } }
                     return { ok: okD, status: rD.status, chat_id: o.chat_id || null, telefono: o.telefono || null, nombre: o.nombre || null, auto: o.auto || null, modo: o.modo || null, ya_delegado: !!o.ya_delegado, opener_enviado: !!o.opener_enviado, accion_ejecutada: o.accion_ejecutada || null, enviado: envD, detalle: o.enviado != null ? o.enviado : (o.opener_enviado ? 'opener' : null), simulado: !!o.simulado, error: o.error || undefined, necesita: o.necesita || undefined };
                 });
                 return res.status(codigoDe(r)).json(r);
