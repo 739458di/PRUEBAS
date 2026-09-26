@@ -2238,12 +2238,29 @@ function c3Franja(r){
   let h = (enD && T.abiertas && T.abiertas.length > 1 ? '<div class="bb"><span style="align-self:center;font-weight:600">Este dueño tiene ' + T.abiertas.length + ' citas abiertas:</span>' + T.abiertas.map(a => B0('ver_cita', (Number(a.cita_id) === Number(T.cita_id) ? '● ' : '') + a.auto, Number(a.cita_id) === Number(T.cita_id) ? 'ok' : '', { cita_id: a.cita_id })).join('') + '</div>' : '') + '<div class="t">' + ((T.estado === 'ronda' || T.fase) ? vt('comprador', 'Comprador') + vt('vendedor', ((T.vendedor && T.vendedor.nombre) || 'Mario').split(' ')[0]) + vt('dueno', 'Dueño') + (fT ? '<span>' + esc(fT) + '</span>' : '') : '') +
     (['confirmada', 'dia_d', 'pausada'].includes(T.estado) && !T.fase ? ['ok_c:Comprador', 'ok_d:Dueño', 'ok_v:Mario', 'verde:Luz verde', 'voy_c:Va el comprador', 'llego_c:Llegó el comprador'].map(x => { const [k, n] = x.split(':'); return '<span class="pl' + (d[k] ? ' ok' : '') + '">' + (d[k] ? '✓ ' : '') + n + '</span>'; }).join('') : '') + '</div>';
   let bb = '';
+  const dia = ts => new Date(Number(ts) - 6 * 3600000).toISOString().slice(0, 10); const hoyD = T.ini_ts && T.ahora_ts && dia(T.ini_ts) === dia(T.ahora_ts);
   if (['ronda', 'confirmada', 'dia_d', 'pausada'].includes(T.estado)) {
-    if (T.fase === 'espera_vendedor' && !enD) bb += B('confirmo', 'Confirmo', 'ok') + B('nuevo', 'Proponer otro horario');
-    else if ((T.fase === 'espera_dueno' || T.fase === 'pausa_dueno') && enD) bb += B('dueno_confirmo', 'Dueño confirmó', 'ok') + B('nuevo', 'Nuevo horario') + B('ya_no_disponible', 'Ya no disponible', 'no');
-    else if (T.fase) bb += B('nuevo', 'Nuevo horario');
-    else { bb += B('nuevo', 'Nuevo horario') + (T.estado === 'pausada' ? B('continuar', 'Continuar', 'ok') : B('pausar', 'Pausar')) + B('cancelar', 'Cancelar', 'no');
-      if (T.estado === 'dia_d' || d.ok_c || d.ok_d) bb += B('palomear', 'Confirmo yo', '', { quien: 'vendedor' }) + (d.ok_c ? '' : B('palomear', 'Confirmó comprador', '', { quien: 'comprador' })) + (d.ok_d ? '' : B('palomear', 'Confirmó dueño', '', { quien: 'dueno' })) + (d.listo_v ? '' : B('listo', 'Listo', 'ok')) + (d.voy_c && !d.sal_v ? B('voy', 'Voy') : '') + (d.sal_v && !d.llego_v ? B('llegue', 'Llegué') : '') + B('los_tres', 'Ya estamos los 3', 'ok'); }
+    if (T.estado === 'ronda' && !T.fase) bb += '<span style="align-self:center">Esperando que el comprador diga día y hora</span>' + B('nuevo', 'Nuevo horario');
+    else if (T.fase === 'espera_vendedor') bb += enD ? '<span style="align-self:center">Le toca a Mario confirmar (en el chat del comprador)</span>' : B('confirmo', 'Confirmo', 'ok') + B('nuevo', 'Proponer otro horario');
+    else if (T.fase === 'espera_comprador') bb += '<span style="align-self:center">Esperando la respuesta del comprador</span>' + B('nuevo', 'Nuevo horario');
+    else if (T.fase === 'espera_dueno' || T.fase === 'pausa_dueno') bb += enD ? B('dueno_confirmo', 'Dueño confirmó', 'ok') + B('nuevo', 'Nuevo horario') + B('ya_no_disponible', 'Ya no disponible', 'no') : '<span style="align-self:center">Esperando al dueño (su chat)</span>' + B('nuevo', 'Nuevo horario');
+    else if (T.estado === 'pausada') bb += B('continuar', 'Continuar', 'ok') + B('nuevo', 'Nuevo horario') + B('cancelar', 'Cancelar', 'no');
+    else if (!hoyD) bb += B('nuevo', 'Nuevo horario') + B('pausar', 'Pausar') + B('cancelar', 'Cancelar', 'no');
+    else {   // DÍA DE LA CITA: solo el siguiente paso de cada quien
+      const tres = d.ok_c && d.ok_d && d.ok_v;
+      if (!d.ok_v) bb += B('palomear', 'Confirmo hoy', 'ok', { quien: 'vendedor' });
+      if (!enD && !d.ok_c) bb += B('palomear', 'Confirmó el comprador (por teléfono)', '', { quien: 'comprador' });
+      if (enD && !d.ok_d) bb += B('palomear', 'Confirmó el dueño (por teléfono)', '', { quien: 'dueno' });
+      if (tres && !d.listo_v) bb += B('listo', 'Listo: salgo en cuanto el comprador avise', 'ok');
+      if (tres && enD && !d.listo_d) bb += B('listo', 'El dueño está listo', '', { quien: 'dueno' });
+      if (d.verde && !d.voy_c && !enD) bb += B('ya_va', 'El comprador ya va');
+      if (d.voy_c && !d.sal_v) bb += B('voy', 'Voy', 'ok');
+      if (d.sal_v && !d.llego_v) bb += B('llegue', 'Llegué');
+      if (enD && d.sal_d && !d.llego_d) bb += B('llegue', 'Llegó el dueño', '', { quien: 'dueno' });
+      if (!enD && d.voy_c && !d.llego_c) bb += B('llegue', 'Llegó el comprador', '', { quien: 'comprador' });
+      if (d.voy_c) bb += B('los_tres', 'Ya estamos los 3', 'ok');
+      bb += B('nuevo', 'Nuevo horario') + B('pausar', 'Pausar') + B('cancelar', 'Cancelar', 'no');
+    }
   }
   const sig = T.pendientes && T.pendientes[0];
   if (TENANT && TENANT.demo && sig) bb += B('siguiente', '▶ Siguiente movimiento: ' + sig.que + ' · ' + sig.cuando, 'sig');

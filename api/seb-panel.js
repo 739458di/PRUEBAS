@@ -29,15 +29,16 @@ const LOTE = require('../lib/seb/lote.js');
 const CITA3 = require('../lib/seb/cita3.js');
 /** RELOJ DE 3 PARTES paso a paso (sandbox): avanza la hora del chat del comprador hasta `destino`, ejecutando cada evento a SU hora. */
 async function relojTres(chatId, destino) {
-    const hechas = [];
+    const hechas = []; const duenos = async () => (await require('../lib/seb/db.js').query('SELECT DISTINCT dueno_chat_id d FROM cita3 WHERE chat_id = ? AND dueno_chat_id IS NOT NULL', [Number(chatId)]).catch(() => [])).map(r => Number(r.d));
+    const sync = async (ts) => { await CITAF.ponerOffset(chatId, ts - Date.now()); for (const d of await duenos()) await CITAF.ponerOffset(d, ts - Date.now()); };
     for (let i = 0; i < 40; i++) {
         const px = (await CITA3.proximo(chatId)).filter(p => p.due <= destino)[0];
         const paso = px ? Math.max(px.due, Date.now() + await CITAF.offsetDe(chatId)) : destino;
-        await CITAF.ponerOffset(chatId, paso - Date.now());
+        await sync(paso);
         const r = await CITA3.tick({ chatId, hasta: paso }); hechas.push(...r.map(x => ({ k: x.k, que: CITA3.K_TXT[String(x.k).split(':')[0]] || x.k, due: x.due })));
         if (!px) break;
     }
-    await CITAF.ponerOffset(chatId, destino - Date.now());
+    await sync(destino);
     return hechas;
 }
 const VOZ = require('../lib/seb/voz.js');   // LA VOZ del chat: Seb o el vendedor (human-on-the-loop)
@@ -394,6 +395,7 @@ module.exports = async function handler(req, res) {
             if (VOZ.vozDe(chS) === 'humano') {
                 const uiH = (await query("SELECT id, msg_id, texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0];
                 const fw = uiH ? await VOZ.reenviarAlVendedor({ tenant: tS, chat: chS, msgId: uiH.msg_id || uiH.id, texto: uiH.texto }) : null;
+                if (uiH && CITA3.activo(tS)) { try { const c3h = String(chS.canal || '') === 'dueno' ? await CITA3.porDuenoChat(tS.id, chS.id) : await CITA3.porChat(tS.id, chS.id); if (c3h) { const who = String(chS.canal || '') === 'dueno' ? 'El dueño' : 'El comprador'; const txN = '🔔 ' + who + ' escribió: "' + String(uiH.texto || '').slice(0, 140) + '". Tú tienes este chat: contéstale y, si mueve la cita, usa Nuevo horario · Pausar · Cancelar' + (String(chS.canal || '') === 'dueno' ? ' · Dueño confirmó' : '') + '. Al terminar, Devolver a Seb.'; if (tS.demo) await DEMO.sistema(tS, telS, txN); else await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'c3h:' + Number(chS.id) + ':' + Date.now(), Date.now(), 'out', 'sistema', txN, 'sistema', 0, Date.now()]); } } catch (e) { } }
                 return res.status(200).json({ ok: true, chat_id: Number(chS.id), voz: 'humano', seb: { ok: false, motivo: 'voz_humano' }, reenviado: !!(fw && fw.ok) });
             }
             const VOZ_GEN = VOZ.genDe(chS);   // generación vigente: todo lo que Seb mande en este turno lleva esta marca
@@ -456,6 +458,16 @@ module.exports = async function handler(req, res) {
                     // (a) nombra un auto del catálogo → foco (primer contacto o cambio de auto)
                     const nomL = LOTE.matchCatalogo(ultimoInTxt, catE);
                     if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
+                    // "¿CUÁNDO PUEDO / A QUÉ HORA ABREN?" (orden owner 2026-09-26): se contesta con el horario y se pide día y hora; no se ignora la duda
+                    { const nQ = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                      if (focoL && /\b(cuando (puedo|podria|se puede|lo puedo|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ)) {
+                          const HR = CITAF.horarioDe(tS); const DN = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']; const hm = h => { const hh = Math.floor(h), mm = Math.round((h % 1) * 60); return (hh % 12 || 12) + (mm ? ':' + String(mm).padStart(2, '0') : '') + ' ' + (hh < 12 ? 'am' : 'pm'); };
+                          const grupos = []; for (const d of [1, 2, 3, 4, 5, 6, 0]) { const hr = HR[d]; const k = hr ? hm(hr[0]) + ' a ' + hm(hr[1]) : null; const g = grupos[grupos.length - 1]; if (g && g.k === k) g.d.push(d); else grupos.push({ k, d: [d] }); }
+                          const txtH = grupos.filter(g => g.k).map(g => (g.d.length > 1 ? DN[g.d[0]] + ' a ' + DN[g.d[g.d.length - 1]] : DN[g.d[0]]) + ' de ' + g.k).join(' y ');
+                          const nomQ = String(chS.nombre || '').trim().split(/\s+/)[0];
+                          await mandarL('Cuando tú me digas' + (nomQ && !/^\+?\d/.test(nomQ) ? ' ' + nomQ : '') + '. Se puede ver ' + txtH + '. ¿Qué día y a qué hora te acomoda?');
+                          await notaL('🏬 disponibilidad contestada con el horario (sin escalar)'); return salirL('horario', 1);
+                      } }
                     // SALUDO O CORTESÍA con auto en foco: no es algo que escalar (antes "hola" entregaba la voz y Seb quedaba mudo)
                     { const nS = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                       if (focoL && nS.length <= 30 && /^\W*(hola|holi|buen(os|as)?( dias| tardes| noches)?|que tal|hey|saludos|que onda)\W*$/.test(nS)) { const asisG = await asistenteDe(tS, chS.id); const nomG = String(chS.nombre || '').trim().split(/\s+/)[0]; await mandarL('¡Qué tal' + (nomG && !/^\+?\d/.test(nomG) ? ' ' + nomG : '') + '! Aquí estoy para ayudarte con el ' + focoL.nombre + (asisG ? '' : '') + '. ¿Qué te gustaría saber?'); await notaL('🏬 saludo (sin escalar)'); return salirL('saludo', 1); }
@@ -2920,7 +2932,7 @@ module.exports = async function handler(req, res) {
                         autos_disponibles: cat.slice(0, 200).map(a => autoJson(a, portadasH)),
                         bot: TV ? ((tV.config && Number(tV.config.seb_auto) === 1) ? VOZ.vozDe(c) : 'n/a') : botEstadoT0(c, antes ? [] : asc), delegado: !!deleg,
                         ghost_dias: ghostDias(c), no_leidos: antes ? noLeidosAntes : 0, canal: c.canal || null,
-                        vendedor: TV ? await (async () => { try { const r = (await query('SELECT v.nombre FROM conversaciones x JOIN vendedores_universo v ON v.id = x.miembro_id WHERE x.id = ?', [Number(c.id)]))[0]; return r ? String(r.nombre).trim().split(/\s+/)[0] : null; } catch (e) { return null; } })() : null
+                        vendedor: TV ? await (async () => { try { let r = (await query('SELECT v.nombre FROM conversaciones x JOIN vendedores_universo v ON v.id = x.miembro_id WHERE x.id = ?', [Number(c.id)]))[0]; if (!r && CITA3.activo(tV)) r = (await query('SELECT nombre FROM vendedores_universo WHERE tenant_id = ? AND activo = 1 ORDER BY id LIMIT 1', [TV]))[0]; return r ? String(r.nombre).trim().split(/\s+/)[0] : null; } catch (e) { return null; } })() : null
                     },
                     mensajes: asc.map(mensajeJson), hay_mas, desde: desde || undefined, antes: antes || undefined
                 });
@@ -3126,12 +3138,15 @@ module.exports = async function handler(req, res) {
                     // REANUDAR: Seb mira la realidad que quedó → turno pendiente (se procesa por el flujo normal) · falta un movimiento comercial (UN gancho por el gobernador) · nada
                     let reanudo = 'nada';
                     try {
-                        const tp = await VOZ.turnoPendiente(c.id);
-                        if (tp.pendiente) {
+                        const ultOut = (await query("SELECT emisor FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND COALESCE(emisor,'') <> 'sistema' ORDER BY id DESC LIMIT 1", [Number(c.id)]))[0];
+                        const sinGancho = String(c.canal || '') === 'dueno' || (CITA3.activo(tV) && !!(await CITA3.porChat(TV, c.id)));
+                        const tp = String(c.canal || '') === 'dueno' ? { pendiente: false } : await VOZ.turnoPendiente(c.id);
+                        if (sinGancho && !tp.pendiente) { reanudo = 'nada'; }
+                        else if (tp.pendiente) {
                             let outT = null; const resT = { setHeader() { }, status() { return this; }, json(j) { outT = j; return this; }, end() { return this; } };
                             await module.exports({ method: 'POST', query: { action: 'seb_turno', vendedor: String(TV) }, body: { chat_id: Number(c.id) }, headers: { 'x-api-key': process.env.K_PANEL || '', 'user-agent': 'voz-reanudar' }, socket: { remoteAddress: '127.0.0.1' } }, resT);
                             reanudo = 'turno'; var turnoR = outT;
-                        } else if (Number(tV.config && tV.config.seb_auto) === 1) {
+                        } else if (Number(tV.config && tV.config.seb_auto) === 1 && !(ultOut && ultOut.emisor === 'dueno')) {   // si lo último lo dijo el vendedor a mano, él ya hizo el movimiento: no se empalma un gancho
                             const LIB_ETAPA3 = require('../lib/seb/etapa3.js'); const est3 = await LIB_ETAPA3.estadoConv(Number(c.id));
                             if (!est3.cita_viva && !est3.gancho_abierto) {
                                 const ultIn = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(c.id)]))[0];
