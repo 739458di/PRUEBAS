@@ -382,7 +382,7 @@ module.exports = async function handler(req, res) {
             }
             if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, datos: req.body.datos || null, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
             const st = await CITAF.estado({ tenant: tC, chat: chC }); st.voz = VOZ.vozDe(chC);
-            if (CITA3.activo(tC)) { try { if (String(chC.canal || '') === 'dueno') { const ab = await CITA3.abiertasDueno(tC.id, chC.id); const elegida = ab.find(x => Number(x.cita_id) === Number(req.body.cita_id)) || ab[0]; if (elegida) { st.tres = await CITA3.estado(elegida.cita_id); st.tres.desde = 'dueno'; st.tres.abiertas = ab.map(x => ({ cita_id: x.cita_id, auto: x.auto_nombre })); } } else { const c3 = await CITA3.porChat(tC.id, chC.id) || (st.cita ? await CITA3.porCita(st.cita.id) : null); if (c3) { st.tres = await CITA3.estado(c3.cita_id); st.tres.desde = 'comprador'; } } } catch (e) { } }
+            if (CITA3.activo(tC)) { try { if (String(chC.canal || '') === 'dueno') { const ab = await CITA3.abiertasDueno(tC.id, chC.id); const elegida = ab.find(x => Number(x.cita_id) === Number(req.body.cita_id)) || ab.find(x => ['espera_dueno', 'pausa_dueno'].includes(String(x.fase || ''))) || ab[0]; /* por defecto, la que espera algo del dueño (ahí están Dueño confirmó / Ya no disponible) */ if (elegida) { st.tres = await CITA3.estado(elegida.cita_id); st.tres.desde = 'dueno'; st.tres.abiertas = ab.map(x => ({ cita_id: x.cita_id, auto: x.auto_nombre })); } } else { const c3 = await CITA3.porChat(tC.id, chC.id) || (st.cita ? await CITA3.porCita(st.cita.id) : null); if (c3) { st.tres = await CITA3.estado(c3.cita_id); st.tres.desde = 'comprador'; } } } catch (e) { } }
             return res.status(200).json(Object.assign({ hechas, vendedor: rV }, st));
         }
         if (action === 'seb_turno' && req.method === 'POST') {
@@ -395,7 +395,7 @@ module.exports = async function handler(req, res) {
             if (VOZ.vozDe(chS) === 'humano') {
                 const uiH = (await query("SELECT id, msg_id, texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0];
                 const fw = uiH ? await VOZ.reenviarAlVendedor({ tenant: tS, chat: chS, msgId: uiH.msg_id || uiH.id, texto: uiH.texto }) : null;
-                if (uiH && CITA3.activo(tS)) { try { const c3h = String(chS.canal || '') === 'dueno' ? await CITA3.porDuenoChat(tS.id, chS.id) : await CITA3.porChat(tS.id, chS.id); if (c3h) { const who = String(chS.canal || '') === 'dueno' ? 'El dueño' : 'El comprador'; const txN = '🔔 ' + who + ' escribió: "' + String(uiH.texto || '').slice(0, 140) + '". Tú tienes este chat: contéstale y, si mueve la cita, usa Nuevo horario · Pausar · Cancelar' + (String(chS.canal || '') === 'dueno' ? ' · Dueño confirmó' : '') + '. Al terminar, Devolver a Seb.'; if (tS.demo) await DEMO.sistema(tS, telS, txN); else await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'c3h:' + Number(chS.id) + ':' + Date.now(), Date.now(), 'out', 'sistema', txN, 'sistema', 0, Date.now()]); } } catch (e) { } }
+                if (uiH && CITA3.activo(tS)) { try { const c3h = String(chS.canal || '') === 'dueno' ? await CITA3.porDuenoChat(tS.id, chS.id) : await CITA3.porChat(tS.id, chS.id); if (c3h) { const who = String(chS.canal || '') === 'dueno' ? 'El dueño' : 'El comprador'; const txN = '🔔 ' + who + ' escribió: "' + String(uiH.texto || '').slice(0, 140) + '". Tú tienes este chat: contéstale y ' + (String(chS.canal || '') === 'dueno' ? 'ciérralo con Dueño confirmó · Nuevo horario · Ya no disponible' : (c3h.estado === 'ronda' ? 'si quedan en otro horario pícale Nuevo horario; si acepta lo propuesto, Devolver a Seb y yo lo cierro' : 'si mueve la cita usa Nuevo horario · Pausar · Cancelar')) + '. Al terminar, Devolver a Seb.'; if (tS.demo) await DEMO.sistema(tS, telS, txN); else await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'c3h:' + Number(chS.id) + ':' + Date.now(), Date.now(), 'out', 'sistema', txN, 'sistema', 0, Date.now()]); } } catch (e) { } }
                 return res.status(200).json({ ok: true, chat_id: Number(chS.id), voz: 'humano', seb: { ok: false, motivo: 'voz_humano' }, reenviado: !!(fw && fw.ok) });
             }
             const VOZ_GEN = VOZ.genDe(chS);   // generación vigente: todo lo que Seb mande en este turno lleva esta marca
@@ -434,6 +434,9 @@ module.exports = async function handler(req, res) {
                     return res.status(200).json({ ok: true, chat_id: Number(chS.id), compuerta: cmp, seb: { ok: false, motivo: 'fuera_flujo' } });
                 }
             } catch (e) { console.error('[compuerta]', e.message); }
+            if (CITAF.activo(tS) && CITA3.activo(tS)) {   // 3 partes (ANTES que el lote: una propuesta esperando su respuesta manda sobre el horario genérico): si la ronda espera la respuesta del COMPRADOR a una contrapropuesta, se lee aquí (sí / no / otra fecha → sigue al motor)
+                try { const uiC = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const rC = await CITA3.entranteComprador({ tenant: tS, chat: chS, texto: (uiC && uiC.texto) || '' }); if (rC.manejado) return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita3: rC, seb: { ok: true, modo: 'cita3', tipo: rC.evento, segmentos: 0 } }); } catch (e) { console.error('[cita3 comprador]', e.message); }
+            }
             // ══ UNIVERSO DE LOTE (orden owner 2026-09-24: "cada tenant es uno solo"): sin auto en foco NO corre el cerebro de Fyradrive.
             //    (a) nombra un auto del catálogo → foco + ficha · (b) sin foco → pregunta qué busca / filtra su inventario / lista y pide elegir ·
             //    (c) cita con ≥2 autos en el historial y sin nombrar cuál → se pregunta · (d) contesta cuál → foco y se pide el cuándo.
@@ -460,7 +463,8 @@ module.exports = async function handler(req, res) {
                     if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
                     // "¿CUÁNDO PUEDO / A QUÉ HORA ABREN?" (orden owner 2026-09-26): se contesta con el horario y se pide día y hora; no se ignora la duda
                     { const nQ = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                      if (focoL && /\b(cuando (puedo|podria|se puede|lo puedo|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ)) {
+                      const c3Abierta = CITA3.activo(tS) ? await CITA3.porChat(tS.id, chS.id).catch(() => null) : null;
+                      if (focoL && !(c3Abierta && (c3Abierta.fase || ['confirmada', 'dia_d', 'pausada'].includes(c3Abierta.estado))) && /\b(cuando (puedo|podria|se puede|lo puedo|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ)) {
                           const HR = CITAF.horarioDe(tS); const DN = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']; const hm = h => { const hh = Math.floor(h), mm = Math.round((h % 1) * 60); return (hh % 12 || 12) + (mm ? ':' + String(mm).padStart(2, '0') : '') + ' ' + (hh < 12 ? 'am' : 'pm'); };
                           const grupos = []; for (const d of [1, 2, 3, 4, 5, 6, 0]) { const hr = HR[d]; const k = hr ? hm(hr[0]) + ' a ' + hm(hr[1]) : null; const g = grupos[grupos.length - 1]; if (g && g.k === k) g.d.push(d); else grupos.push({ k, d: [d] }); }
                           const txtH = grupos.filter(g => g.k).map(g => (g.d.length > 1 ? DN[g.d[0]] + ' a ' + DN[g.d[g.d.length - 1]] : DN[g.d[0]]) + ' de ' + g.k).join(' y ');
@@ -525,15 +529,13 @@ module.exports = async function handler(req, res) {
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
             const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : (out.escalar_owner ? ('🔴 Seb escaló (no contestó): ' + String(out.escala_motivo || '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo')));
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
+                if (!out.ok && !out.escalar_owner && /anthropic (4\d\d|5\d\d)|credit balance|overloaded|ETIMEDOUT|fetch failed/i.test(String(out.error || out.motivo || ''))) { out.escalar_owner = true; out.escala_motivo = 'la IA no respondió (' + String(out.error || out.motivo).slice(0, 40) + '): contesta tú'; }   // JAMÁS SILENCIO: si la IA se cae, el mensaje es de un humano
                 if (out.escalar_owner) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: String(out.escala_motivo || 'Seb necesita ayuda') }); } catch (e) { console.error('[voz entregar]', e.message); } }   // ESCALAR = ENTREGAR LA VOZ al vendedor (+ WhatsApp con link)
                 return { out, enviados };
             };
             // ══ VISITAS FLEXIBLES: el mensaje pasa PRIMERO por la puerta de eventos de cita. La IA solo interpreta; el motor aplica. Si el mismo mensaje trae
             //    ADEMÁS una pregunta comercial ("¿aceptan crédito?"), esa parte la contesta el flujo comercial de siempre (el cerebro, con SOLO ese texto) y
             //    después la cita hace lo suyo. La pregunta comercial jamás se vuelve un estado de cita.
-            if (CITAF.activo(tS) && CITA3.activo(tS)) {   // 3 partes: si la ronda espera la respuesta del COMPRADOR a una contrapropuesta, se lee aquí (sí / no / otra fecha → sigue al motor)
-                try { const uiC = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const rC = await CITA3.entranteComprador({ tenant: tS, chat: chS, texto: (uiC && uiC.texto) || '' }); if (rC.manejado) return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita3: rC, seb: { ok: true, modo: 'cita3', tipo: rC.evento, segmentos: 0 } }); } catch (e) { console.error('[cita3 comprador]', e.message); }
-            }
             let citaF = null, comercialR = null;
             if (CITAF.activo(tS)) {
                 try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), interceptar: CITA3.activo(tS) ? (x) => CITA3.interceptar({ tenant: tS, chat: chS, ev: x.ev, nuevo: x.nuevo }) : null, comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
@@ -3140,7 +3142,12 @@ module.exports = async function handler(req, res) {
                     try {
                         const ultOut = (await query("SELECT emisor FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND COALESCE(emisor,'') <> 'sistema' ORDER BY id DESC LIMIT 1", [Number(c.id)]))[0];
                         const sinGancho = String(c.canal || '') === 'dueno' || (CITA3.activo(tV) && !!(await CITA3.porChat(TV, c.id)));
-                        const tp = String(c.canal || '') === 'dueno' ? { pendiente: false } : await VOZ.turnoPendiente(c.id);
+                        let tp = String(c.canal || '') === 'dueno' ? { pendiente: false } : await VOZ.turnoPendiente(c.id);
+                        if (String(c.canal || '') === 'dueno' && CITA3.activo(tV)) {   // canal del dueño: si mientras Mario tenía la voz el dueño dijo un "sí" limpio a la cita abierta, al devolver se toma (antes se quedaba en pausa hasta el botón)
+                            const tpD = await VOZ.turnoPendiente(c.id).catch(() => ({ pendiente: false })); const abD = tpD.pendiente ? await CITA3.abiertasDueno(TV, c.id) : [];
+                            const uiD = tpD.pendiente && abD.length === 1 ? (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(c.id)]))[0] : null;
+                            if (uiD && CITA3.esSi(uiD.texto, abD[0], Date.now() + await CITAF.offsetDe(c.id))) tp = tpD;
+                        }
                         if (sinGancho && !tp.pendiente) { reanudo = 'nada'; }
                         else if (tp.pendiente) {
                             let outT = null; const resT = { setHeader() { }, status() { return this; }, json(j) { outT = j; return this; }, end() { return this; } };

@@ -2241,8 +2241,8 @@ function c3Franja(r){
   const dia = ts => new Date(Number(ts) - 6 * 3600000).toISOString().slice(0, 10); const hoyD = T.ini_ts && T.ahora_ts && dia(T.ini_ts) === dia(T.ahora_ts);
   if (['ronda', 'confirmada', 'dia_d', 'pausada'].includes(T.estado)) {
     if (T.estado === 'ronda' && !T.fase) bb += '<span style="align-self:center">Esperando que el comprador diga día y hora</span>' + B('nuevo', 'Nuevo horario');
-    else if (T.fase === 'espera_vendedor') bb += enD ? '<span style="align-self:center">Le toca a Mario confirmar (en el chat del comprador)</span>' : B('confirmo', 'Confirmo', 'ok') + B('nuevo', 'Proponer otro horario');
-    else if (T.fase === 'espera_comprador') bb += '<span style="align-self:center">Esperando la respuesta del comprador</span>' + B('nuevo', 'Nuevo horario');
+    else if (T.fase === 'espera_vendedor') bb += enD ? '<span style="align-self:center">Le toca a Mario confirmar (en el chat del comprador)</span>' : '<span style="align-self:center">¿Te acomoda? Al confirmar le pregunto al dueño</span>' + B('confirmo', 'Confirmo', 'ok') + B('nuevo', 'Proponer otro horario');
+    else if (T.fase === 'espera_comprador') bb += '<span style="align-self:center">Esperando la respuesta del comprador</span>' + (enD ? '' : B('comprador_acepto', 'Aceptó el comprador', 'ok')) + B('nuevo', 'Nuevo horario');
     else if (T.fase === 'espera_dueno' || T.fase === 'pausa_dueno') bb += enD ? B('dueno_confirmo', 'Dueño confirmó', 'ok') + B('nuevo', 'Nuevo horario') + B('ya_no_disponible', 'Ya no disponible', 'no') : '<span style="align-self:center">Esperando al dueño (su chat)</span>' + B('nuevo', 'Nuevo horario');
     else if (T.estado === 'pausada') bb += B('continuar', 'Continuar', 'ok') + B('nuevo', 'Nuevo horario') + B('cancelar', 'Cancelar', 'no');
     else if (!hoyD) bb += B('nuevo', 'Nuevo horario') + B('pausar', 'Pausar') + B('cancelar', 'Cancelar', 'no');
