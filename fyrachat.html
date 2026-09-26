@@ -788,6 +788,8 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&a
 const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 const clave = (acc, chatId) => acc + ':' + (chatId || '-') + ':' + uuid();
 const ms = (ts) => { ts = Number(ts) || 0; return ts && ts < 1e12 ? ts * 1000 : ts; };
+// HORA DE MONTERREY SIEMPRE (owner 2026-09-26): los textos, recordatorios y el reloj de la cita van en hora de Monterrey; si el navegador está en otra zona, las horas de los mensajes se veían corridas (un recordatorio del domingo 6 pm salía como "lunes 9:00"). mty() devuelve un Date cuyos campos locales = reloj de pared de Monterrey (UTC-6, sin horario de verano).
+const mty = (t) => { const d = new Date(t == null ? Date.now() : t); return new Date(d.getTime() + (d.getTimezoneOffset() - 360) * 60000); };
 const DEMO_TEL = '5210000000009';
 const HOVER = !!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches);
 
@@ -934,7 +936,7 @@ function mostrarAcceso(aviso){ document.documentElement.removeAttribute('data-te
   const tq = (q.get('tel') || '').replace(/\D/g,''); if (tq.length === 10) { $a('acc-tel').value = tq; if (q.get('auto') === '1' && !sessionStorage.getItem('acc_auto_' + tq)) { sessionStorage.setItem('acc_auto_' + tq, '1'); accPedir(); } } }
 const PORTADA = 'https://www.fyradrive.com/';   // donde estabas antes de iniciar sesión (orden owner 2026-09-23: cerrar sesión NO manda a una pantalla intermedia)
 async function accSalir(){ try { localStorage.removeItem('fyra_marca_ses'); } catch(e){} await fetch(API+'?action=acceso_salir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); location.replace(PORTADA); }
-function fechaCorta(x){ try { return new Date(ms(x)).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
+function fechaCorta(x){ try { return mty(ms(x)).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
 async function abrirDispositivos(){
   const sh = sheet({ titulo:'Tus dispositivos', html:'<p class="hint">Cada dispositivo donde entraste con tu código.</p><div class="grupo" id="disp-lista"><div class="row"><div class="sq">' + ico('devices') + '</div><div class="tx"><div class="t">Cargando…</div></div></div></div>', pie:'<button type="button" class="cta rojo" id="disp-cerrar">Cerrar todas las sesiones</button>' });
   sh.pie.querySelector('#disp-cerrar').onclick = () => cerrarTodasSesiones(sh);
@@ -1173,7 +1175,7 @@ async function reiniciarPrueba(){
 const INBOX = { rows: new Map(), cursor: null, fin: false, q: '', filtro: 'todos', gen: 0, cargado: false, cargando: false };
 function skeleton(){ $('lista').innerHTML = Array.from({ length: 7 }, () => '<div class="fila sk"><div class="ava"></div><div class="mid"><div class="l1"></div><div class="l2"></div></div></div>').join(''); }
 function horaCorta(ts){
-  const t = ms(ts); if (!t) return ''; const d = new Date(t), h = new Date();
+  const t = ms(ts); if (!t) return ''; const d = mty(t), h = mty();
   const mismoDia = d.toDateString() === h.toDateString();
   if (mismoDia) return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
   const ayer = new Date(h); ayer.setDate(h.getDate() - 1); if (d.toDateString() === ayer.toDateString()) return 'Ayer';
@@ -1400,7 +1402,7 @@ function ultimoEntranteTs(h, c){
   if (h && h.msgs && h.msgs.length) { for (let i = h.msgs.length - 1; i >= 0; i--) { const m = h.msgs[i]; if (m.dir === 'in' && m.emisor !== 'sistema') return ms(m.ts) || 0; } }
   return c && c.ult_dir === 'in' ? (ms(c.ult_ts) || 0) : 0;
 }
-function diaDe(ts){ const d = new Date(ms(ts)), h = new Date(); if (d.toDateString() === h.toDateString()) return 'Hoy'; const ay = new Date(h); ay.setDate(h.getDate() - 1); if (d.toDateString() === ay.toDateString()) return 'Ayer'; return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }); }
+function diaDe(ts){ const d = mty(ms(ts)), h = mty(); if (d.toDateString() === h.toDateString()) return 'Hoy'; const ay = new Date(h); ay.setDate(h.getDate() - 1); if (d.toDateString() === ay.toDateString()) return 'Ayer'; return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }); }
 function estadoHTML(m){
   if (m.dir !== 'out' || m.emisor === 'sistema') return '';
   const e = m.estado || 'enviado';
@@ -1424,7 +1426,7 @@ function burbujaHTML(m){
     else med = '<a class="med" href="' + u + '" target="_blank" rel="noopener"><span class="sq">' + ico('file') + '</span><span><b>' + esc(m.media.nombre || 'Archivo') + '</b><small>Abrir</small></span></a>';
   } else if (m.media && !m.texto) med = esc(textoDe(m));
   const quien = out ? (m.emisor === 'bot' || m.emisor === 'asistente' ? 'Seb' : '') : '';
-  const hora = new Date(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const hora = mty(ms(m.ts) || Date.now()).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
   const tRaw = String(m.texto || '').trim();
   const txtB = (med && (/^\[(captura del punto|ubicaci[oó]n|imagen)\]?/i.test(tRaw) || /^https?:\/\/\S+$/.test(tRaw))) ? '' : linkify(m.texto || '');   // la imagen / la tarjeta ya lo dicen
   return '<div class="msg ' + (out ? 'out' : 'in') + (quien ? ' bot' : '') + '" data-k="' + esc(k) + '" data-ts="' + ts + '">' + med + txtB + '<div class="meta">' + (quien ? '<span class="quien">' + quien + '</span>' : '') + '<span>' + hora + '</span>' + estadoHTML(m) + '</div></div>';
@@ -2069,7 +2071,7 @@ const mesCorto = (d) => d.toLocaleDateString('es-MX', { month: 'short' }).replac
 const diaSemana = (d) => d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '');
 function citaHora(ci, d){ if (ci.hora) return String(ci.hora).slice(0, 5); return d ? d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : ''; }
 function recFecha(r){
-  const t = ms(r.due_ts); if (!t) return ''; const d = new Date(t), hoy = new Date();
+  const t = ms(r.due_ts); if (!t) return ''; const d = mty(t), hoy = mty();
   const dia = d.toDateString() === hoy.toDateString() ? 'hoy' : d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' }).replace('.', '');
   return dia + ' ' + d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 }
