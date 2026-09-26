@@ -445,7 +445,7 @@ module.exports = async function handler(req, res) {
                 try {
                     const catL = await autosDeTenant(tS); const catE = await LOTE.enriquecer(catL);
                     const uiL = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const ultimoInTxt = (uiL && uiL.texto) || '';
-                    const focoL = await focoDe(tS, telS);
+                    let focoL = await focoDe(tS, telS);
                     const mandarL = async (texto) => MSJ.enviar({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: 'lote:' + Number(chS.id) + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 7), manual: false, accion: 'seb_turno', voz_gen: VOZ_GEN, texto });
                     const notaL = async (txt) => { try { if (tS.demo) await DEMO.sistema(tS, telS, txt); else await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'lote:' + Number(chS.id) + ':' + Date.now(), Date.now(), 'out', 'sistema', txt, 'sistema', 0, Date.now()]); } catch (e) { } };
                     const nombreInv = inv => [inv.marca, inv.modelo, inv.anio].filter(Boolean).join(' ');
@@ -460,11 +460,19 @@ module.exports = async function handler(req, res) {
                     }
                     // (a) nombra un auto del catálogo → foco (primer contacto o cambio de auto)
                     const nomL = LOTE.matchCatalogo(ultimoInTxt, catE);
-                    if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
+                    if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) {
+                        // LEY 1: nombrar un auto CAMBIA EL FOCO (estado), pero la ficha solo sale si el mensaje no trae nada más; si trae cuándo, precio, dónde… se lee normal con el auto nuevo en foco
+                        const nA = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        const traeMas = /\b(hoy|manana|pasado|lunes|martes|miercoles|jueves|viernes|sabado|domingo|fin de semana|a las|\d{1,2}\s*(am|pm)|cita|visita|ir a verlo|pasar|precio|cuanto|credito|financ|enganche|mensualidad|donde|ubicacion|fotos?|video|km|kilometr|factura|negociable|menos|cambio|a cuenta)\b/.test(nA);
+                        if (!traeMas) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
+                        await ponerFoco(tS, telS, nomL.foco); await notaL('🏬 foco: ' + nombreInv(nomL.foco) + ' (lo nombró; el mensaje trae más, se lee completo)'); focoL = nomL.foco;
+                    }
                     // "¿CUÁNDO PUEDO / A QUÉ HORA ABREN?" (orden owner 2026-09-26): se contesta con el horario y se pide día y hora; no se ignora la duda
                     { const nQ = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                       const c3Abierta = CITA3.activo(tS) ? await CITA3.porChat(tS.id, chS.id).catch(() => null) : null;
-                      if (focoL && !(c3Abierta && (c3Abierta.fase || ['confirmada', 'dia_d', 'pausada'].includes(c3Abierta.estado))) && /\b(cuando (puedo|podria|se puede|lo puedo|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ)) {
+                      if (focoL && !(c3Abierta && (c3Abierta.fase || ['confirmada', 'dia_d', 'pausada'].includes(c3Abierta.estado))) && /\b(cuando (puedo|podria|se puede|lo puedo|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ) && !/\b(mis?|tus?) horarios?\b|\b(checo|reviso|veo|chequeo|checando|revisando)\b/.test(nQ)
+                          // LEY 1 (owner 2026-09-26: "nada contesta por palabra"): la palabra solo marca el candidato; la IA confirma que de verdad pregunta el horario del lote
+                          && await (async () => { try { const hH = (await query("SELECT direccion, texto FROM mensajes WHERE conversacion_id = ? AND COALESCE(emisor,'') <> 'sistema' ORDER BY id DESC LIMIT 7", [Number(chS.id)])).reverse().slice(0, -1).map(m => ({ direccion: m.direccion, mensaje: m.texto })); const cH = await LIB_CLASIFICADOR.entender({ mensaje: ultimoInTxt, historial: hH, estado: {} }); return cH && cH.intencion_principal === 'cita_ubicacion'; } catch (e) { return false; } })()) {
                           const HR = CITAF.horarioDe(tS); const DN = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']; const hm = h => { const hh = Math.floor(h), mm = Math.round((h % 1) * 60); return (hh % 12 || 12) + (mm ? ':' + String(mm).padStart(2, '0') : '') + ' ' + (hh < 12 ? 'am' : 'pm'); };
                           const grupos = []; for (const d of [1, 2, 3, 4, 5, 6, 0]) { const hr = HR[d]; const k = hr ? hm(hr[0]) + ' a ' + hm(hr[1]) : null; const g = grupos[grupos.length - 1]; if (g && g.k === k) g.d.push(d); else grupos.push({ k, d: [d] }); }
                           const txtH = grupos.filter(g => g.k).map(g => (g.d.length > 1 ? DN[g.d[0]] + ' a ' + DN[g.d[g.d.length - 1]] : DN[g.d[0]]) + ' de ' + g.k).join(' y ');
@@ -530,6 +538,11 @@ module.exports = async function handler(req, res) {
             const nota = out.ok ? ('🤖 Seb · ' + [out.modo, out.tipo].filter(Boolean).join(' · ') + (out.escalar_owner ? ' · 🔴 escaló: ' + String(out.escala_motivo || '') : '')) : (out.escalar_owner ? ('🔴 Seb escaló (no contestó): ' + String(out.escala_motivo || '')) : ('🤖 Seb calló · ' + String(out.motivo || out.error || 'sin motivo')));
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
                 if (!out.ok && !out.escalar_owner && /anthropic (4\d\d|5\d\d)|credit balance|overloaded|ETIMEDOUT|fetch failed/i.test(String(out.error || out.motivo || ''))) { out.escalar_owner = true; out.escala_motivo = 'la IA no respondió (' + String(out.error || out.motivo).slice(0, 40) + '): contesta tú'; }   // JAMÁS SILENCIO: si la IA se cae, el mensaje es de un humano
+                // LEY 4 (owner 2026-09-26: "todo se contesta eficaz o escala"): si el cerebro no contestó, el mensaje traía contenido y no fue un silencio a propósito → ESCALA
+                if (!out.ok && !out.escalar_owner && !/^(cortesia_silencio|relleno_silencio|en_curso_silencio|dueno|sin_entrantes|gobernador_silencio|turno_repetido|fuera_flujo)$/.test(String(out.motivo || ''))) {
+                    const uiE = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]).catch(() => []))[0]; const nE = String((uiE && uiE.texto) || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                    if (nE.length >= 4 && !/^\W*(gracias|muchas gracias|ok|okey|va|vale|sale|perfecto|listo|bien|excelente|de acuerdo|jaja+|ja|mm+|si|sip|no|nel)\W*(gracias)?\W*$/.test(nE)) { out.escalar_owner = true; out.escala_motivo = 'Seb no tuvo respuesta (' + String(out.motivo || out.error || 'sin motivo').slice(0, 40) + '): "' + String(uiE.texto).slice(0, 70) + '"'; }
+                }
                 if (out.escalar_owner) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: String(out.escala_motivo || 'Seb necesita ayuda') }); } catch (e) { console.error('[voz entregar]', e.message); } }   // ESCALAR = ENTREGAR LA VOZ al vendedor (+ WhatsApp con link)
                 return { out, enviados };
             };
