@@ -2249,6 +2249,21 @@ function cfPintar(r){
   let h = '<a class="cta sec" style="margin-top:4px;text-decoration:none" href="/entrenar.html?vendedor=' + encodeURIComponent(VPARAM() || '') + '&chat=' + CF.id + '" target="_blank" rel="noopener">Abrir el panel de entrenamiento (pantalla grande)</a><h4>Reloj del sandbox</h4><div class="reloj"><b>' + esc(r.reloj.ahora) + '</b>' + (r.reloj.virtual ? '<span>tiempo adelantado</span>' : '<span style="color:var(--txt2)">tiempo real · hoy el lote abre ' + esc(r.horario_hoy) + '</span>') + '</div>' +
     '<div class="btns"><button class="pri" data-cf="reloj" data-v="siguiente"' + off + '>▶ Siguiente mensaje</button><button data-cf="mas" data-v="3600000"' + off + '>+1 h</button><button data-cf="mas" data-v="21600000"' + off + '>+6 h</button><button data-cf="mas" data-v="86400000"' + off + '>+1 día</button><button data-cf="reloj" data-v="fin"' + off + '>⏭ Fin de la ventana</button><button data-cf="reloj" data-v="reset"' + off + '>↺ Volver a hoy</button></div>' +
     '<p class="hint" style="margin-top:10px">Abajo escribes como el cliente y Seb contesta. Arriba ves lo que eso movió. El cursor solo deja VER; estos botones sí ejecutan (el reloj solo avanza).</p>';
+  if (r.tres) {   // CITA DE 3 PARTES (Autos Fyradrive): la tarjeta y los botones de Mario; vale en el chat del comprador y en el del dueño
+    const T = r.tres; const vok = k => T.ok[k] ? '✅' : '⏳'; const d = T.dia || {}; const ll = k => d[k] ? '🟢' : '⚪'; const enD = T.desde === 'dueno';
+    const Bt = (v, txt, cls, extra) => '<button class="' + (cls || '') + '" data-cf="c3" data-v="' + v + '"' + (extra ? " data-x='" + esc(JSON.stringify(extra)) + "'" : '') + off + '>' + esc(txt) + '</button>';
+    const faseT = { espera_vendedor: 'Te toca confirmar o proponer otro horario', espera_comprador: 'Esperando al comprador', espera_dueno: 'Esperando el sí del dueño', pausa_dueno: 'El dueño necesita que lo atiendas: ciérralo con botón en su chat' }[T.fase] || '';
+    h += '<h4>Cita de 3 partes</h4><div class="card"><div><b>' + esc(T.cuando || '') + '</b> · ' + esc(T.estado) + ' · propuesta ' + T.gen + '</div>' + (T.estado === 'ronda' || T.fase ? '<div class="d">Comprador ' + vok('comprador') + ' · Tú ' + vok('vendedor') + ' · Dueño ' + vok('dueno') + (T.dueno && T.dueno.nombre ? ' (' + esc(T.dueno.nombre) + ')' : '') + '</div><div class="d">' + esc(faseT) + '</div>' : '') +
+      (['confirmada', 'dia_d'].includes(T.estado) && !T.fase ? '<div class="d">Hoy: comprador ' + ll('ok_c') + ' dueño ' + ll('ok_d') + ' tú ' + ll('ok_v') + ' · listos ' + ll('listo_v') + ll('listo_d') + ' · luz verde ' + ll('verde') + ' · va ' + ll('voy_c') + ' · llegó ' + ll('llego_c') + '</div>' : '') + '</div>';
+    let bb = '';
+    if (T.fase === 'espera_vendedor' && !enD) bb += Bt('confirmo', 'Confirmo', 'ok') + Bt('nuevo_horario', 'Proponer el día y hora de abajo');
+    else if ((T.fase === 'espera_dueno' || T.fase === 'pausa_dueno') && enD) bb += Bt('dueno_confirmo', 'Dueño confirmó', 'ok') + Bt('nuevo_horario', 'Nuevo horario (abajo)') + Bt('ya_no_disponible', 'Ya no disponible', 'no');
+    else if (T.fase) bb += Bt('nuevo_horario', 'Nuevo horario (abajo)');
+    else if (['confirmada', 'dia_d', 'pausada'].includes(T.estado)) { bb += Bt('nuevo_horario', 'Nuevo horario (abajo)') + (T.estado === 'pausada' ? Bt('continuar', 'Continuar', 'ok') : Bt('pausar', 'Pausar')) + Bt('cancelar', 'Cancelar', 'no');
+      bb += Bt('palomear', 'Confirmo yo', '', { quien: 'vendedor' }) + Bt('palomear', 'Confirmó comprador', '', { quien: 'comprador' }) + Bt('palomear', 'Confirmó dueño', '', { quien: 'dueno' }) + Bt('listo', 'Listo', 'pri') + Bt('ya_va', 'Comprador ya va') + Bt('voy', 'Voy') + Bt('llegue', 'Llegué') + Bt('los_tres', 'Ya estamos los 3', 'ok'); }
+    if (bb) h += '<div class="btns">' + bb + '</div>' + cfFormAgenda(off, 'Día y hora para Nuevo horario') + '<p class="hint">Los botones mueven la cita; lo que platiques por chat no.</p>';
+    if (TENANT && TENANT.demo) h += '<a class="cta sec" style="margin-top:6px;text-decoration:none" href="/simulador3.html?vendedor=' + encodeURIComponent(VPARAM() || '') + '" target="_blank" rel="noopener">Abrir el simulador de 3 partes</a>';
+  }
   h += '<h4>La cita</h4>';
   if (!c) h += cfFormAgenda(off, 'Agendar yo la visita') + '<div class="card">Todavía no hay cita en este chat. Nace cuando el comprador dice un día: “voy el sábado”, “cómo andas hoy a las 5”, “entre jueves y viernes”.</div>';
   else {
@@ -2288,6 +2303,11 @@ async function cfAccion(tipo, v){
     else if (tipo === 'vend') r = await apiPost('citaf_vendedor', { chat_id: id, evento: v });
     else if (tipo === 'agenda') { const d = (CF.s.body.querySelector('#cf-dia') || {}).value, hh = (CF.s.body.querySelector('#cf-hora') || {}).value; if (!d) { CF.ocupado = false; CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); return aviso('Elige el día.'); } r = await apiPost('citaf_vendedor', { chat_id: id, evento: 'agenda', datos: { dia_ini: d, hora_ini: hh || '' } }); }
     else if (tipo === 'res') r = await apiPost('citaf_vendedor', { chat_id: id, evento: 'resultado', resultado: v });
+    else if (tipo === 'c3') { const bx = CF.s.body.querySelector('button[data-cf="c3"][data-v="' + v + '"]'); let datos = bx && bx.dataset.x ? JSON.parse(bx.dataset.x) : null;
+      const suelta = () => { CF.ocupado = false; CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); };
+      if (v === 'nuevo_horario') { const d = (CF.s.body.querySelector('#cf-dia') || {}).value, hh = (CF.s.body.querySelector('#cf-hora') || {}).value; if (!d || !hh) { suelta(); aviso('Pon el día y la hora abajo antes de proponer.'); return; } datos = { dia_ini: d, hora_ini: hh, razon: 'comprador' }; }
+      if (v === 'cancelar') { const rz = prompt('Razón: no puede el comprador · no puede el dueño · no puedo yo · ya no hay venta', 'no puede el comprador'); if (rz == null) { suelta(); return; } datos = { razon: rz }; }
+      r = await apiPost('cita3_vendedor', { chat_id: id, evento: v, datos }); if (r && r.ok) { const st = await apiPost('citaf_estado', { chat_id: id }); if (st && st.ok) r = Object.assign(st, { ok: true }); } }
   } catch (e) { r = { ok: false, error: e.message }; }
   if (CF) CF.ocupado = false;
   if (!r || !r.ok) { aviso((r && r.error) || 'No se pudo'); if (CF) CF.s.body.querySelectorAll('button[data-cf]').forEach(b => b.disabled = false); return; }

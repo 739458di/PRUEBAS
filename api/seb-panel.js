@@ -235,6 +235,71 @@ module.exports = async function handler(req, res) {
         // ══════════ MODO PRUEBA (2026-09-10): la sesión del tenant demo opera SOLO su universo simulado ══════════
         const SES_DEMO = !!(SES && SES.tenant && SES.tenant.demo);
         if (SES_DEMO && ['sugerir', 'resolver', 'agregar_mensaje', 'nuevo_chat'].includes(action)) return res.status(400).json({ ok: false, error: 'no disponible en modo prueba' });   // escriben en hilos del tenant 0
+        // ══ SIMULADOR DE 3 PARTES (orden owner 2026-09-26): el MISMO motor real, en el universo sandbox (LAB). Nada sale a WhatsApp. ══
+        //    sim3_preparar (Mario simulado + autos) · sim3_estado (los 2 chats + ronda + reloj + lo que sigue) · sim3_reloj (adelanta paso a paso) · sim3_limpiar
+        if (['sim3_preparar', 'sim3_estado', 'sim3_reloj', 'sim3_limpiar'].includes(action)) {
+            const tSm = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : ''));
+            if (!tSm || !tSm.demo || !CITA3.activo(tSm) || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'El simulador solo corre en el universo de pruebas con citas de 3 partes (AUTOS FYRADRIVE SIMULADOR), con tu sesión de owner.' });
+            const TELM = '5210000000096';
+            const marioSim = async () => { let m = (await query('SELECT id, nombre FROM vendedores_universo WHERE tenant_id = ? AND telefono = ?', [Number(tSm.id), TELM]))[0]; if (!m) { await run("INSERT INTO vendedores_universo (tenant_id, nombre, telefono, activo, created, rol) VALUES (?, 'Mario Simulado', ?, 1, ?, 'vendedor')", [Number(tSm.id), TELM, Date.now()]); m = (await query('SELECT id, nombre FROM vendedores_universo WHERE tenant_id = ? AND telefono = ?', [Number(tSm.id), TELM]))[0]; } else await run('UPDATE vendedores_universo SET activo = 1 WHERE id = ?', [Number(m.id)]); return { id: Number(m.id), nombre: m.nombre }; };
+            const chatsSim = async () => { const m = await marioSim(); return (await query("SELECT id FROM conversaciones WHERE tenant_id = ? AND (miembro_id = ? OR canal = 'dueno')", [Number(tSm.id), m.id])).map(r => Number(r.id)); };
+            const msgs = async (cid) => cid ? (await query("SELECT id, direccion, emisor, texto, tipo, ts FROM mensajes WHERE conversacion_id = ? ORDER BY id DESC LIMIT 120", [Number(cid)])).reverse().map(x => ({ id: Number(x.id), dir: x.direccion, emisor: x.emisor, texto: x.tipo === 'location' ? '📍 ' + String(x.texto || '').split('|||')[0] : (x.tipo === 'image' ? '🖼 imagen' : x.texto), tipo: x.tipo, ts: Number(x.ts) })) : [];
+            if (action === 'sim3_preparar') {
+                const m = await marioSim();
+                let cat = await autosDeTenant(tSm);
+                if (cat.length < 4) {   // autos de particulares con ubicación en su ficha, acreditados SOLO en el LAB (no tocan ningún universo real)
+                    const cand = await query("SELECT i.id FROM inventario_autos i WHERE i.estado = 'activo' AND i.fyradrive_web_id IS NOT NULL AND EXISTS (SELECT 1 FROM punto_envio p WHERE p.auto_id = i.id) AND NOT EXISTS (SELECT 1 FROM autos_universo a WHERE a.inv_auto_id = i.id AND a.tenant_id = ?) AND NOT EXISTS (SELECT 1 FROM autos_universo a JOIN tenants tt ON tt.id = a.tenant_id WHERE a.inv_auto_id = i.id AND a.rol = 'dueno' AND tt.id IN (9,10,11)) ORDER BY i.id DESC LIMIT ?", [Number(tSm.id), 5 - cat.length]);
+                    for (const c of cand) await run('INSERT OR IGNORE INTO autos_universo (inv_auto_id, tenant_id, rol, origen, activo, created, updated) VALUES (?,?,?,?,1,?,?)', [Number(c.id), Number(tSm.id), 'acreditado', 'sim3', Date.now(), Date.now()]);
+                    cat = await autosDeTenant(tSm);
+                }
+                const sims = await query("SELECT c.id, c.nombre, c.telefono, c.ult_msg_ts FROM conversaciones c WHERE c.tenant_id = ? AND c.miembro_id = ? AND COALESCE(c.canal,'') <> 'dueno' ORDER BY c.id DESC LIMIT 20", [Number(tSm.id), m.id]);
+                return res.status(200).json({ ok: true, mario: m, universo: { id: Number(tSm.id), nombre: tSm.nombre }, autos: cat.map(a => ({ id: Number(a.id), web: a.fyradrive_web_id, nombre: [a.marca, a.modelo, a.anio].filter(Boolean).join(' '), precio: a.precio })), simulaciones: sims.map(x => ({ chat_id: Number(x.id), nombre: x.nombre, telefono: x.telefono })) });
+            }
+            if (action === 'sim3_limpiar' && req.method === 'POST') {
+                const ids = await chatsSim(); let n = 0;
+                for (const cid of ids) {
+                    for (const c3 of await query('SELECT cita_id FROM cita3 WHERE chat_id = ? OR dueno_chat_id = ?', [cid, cid])) await CITA3.borrarDeCita(c3.cita_id);
+                    const telC = ((await query('SELECT telefono FROM conversaciones WHERE id = ?', [cid]))[0] || {}).telefono;
+                    await CITAF.borrarDeChat(cid).catch(() => { });
+                    for (const [sq, a] of [['DELETE FROM mensajes WHERE conversacion_id = ?', [cid]], ['DELETE FROM seb_turnos WHERE chat_id = ?', [cid]], ['DELETE FROM acciones WHERE chat_id = ?', [cid]], ['DELETE FROM delegaciones WHERE chat_id = ?', [cid]], ['DELETE FROM chats_activos WHERE chat_id = ?', [cid]], ['DELETE FROM citaf_reloj WHERE tenant_id = ?', [CITAF.RELOJ_BASE + cid]], ['DELETE FROM conversaciones WHERE id = ?', [cid]]]) await run(sq, a).catch(() => { });
+                    if (telC) { await run('DELETE FROM escalas_log WHERE telefono = ?', [telC]).catch(() => { }); await run('DELETE FROM ad_por_telefono WHERE telefono = ?', [telC]).catch(() => { }); }
+                    n++;
+                }
+                return res.status(200).json({ ok: true, borrados: n });
+            }
+            const chatB = await U.chatPorId(Number(req.body.chat_id || req.query.chat_id) || 0);
+            if (!chatB || Number(chatB.tenant_id) !== Number(tSm.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en el simulador' });
+            if (action === 'sim3_reloj' && req.method === 'POST') {
+                const off = await CITAF.offsetDe(chatB.id); const ahoraV = Date.now() + off; const acc = String(req.body.accion || 'mas'); let destino;
+                if (acc === 'mas') destino = ahoraV + Math.max(60000, Math.min(14 * 86400000, Number(req.body.ms) || 3600000));
+                else if (acc === 'ir') destino = Number(req.body.ts) || 0;
+                else if (acc === 'siguiente') { const px = await CITA3.proximo(chatB.id); if (!px.length) return res.status(200).json({ ok: true, sin_siguiente: true, hechas: [] }); destino = px[0].due + 1000; }
+                else return res.status(400).json({ ok: false, error: 'accion: mas | siguiente | ir' });
+                if (!destino || destino < ahoraV - 1000) return res.status(400).json({ ok: false, error: 'el reloj del simulador solo avanza' });
+                const hechas = [];
+                for (let i = 0; i < 40; i++) {   // paso a paso: cada evento ocurre a SU hora (saludos, bitácora y mediciones quedan con la hora correcta)
+                    const px = (await CITA3.proximo(chatB.id)).filter(p => p.due <= destino)[0];
+                    const paso = px ? Math.max(px.due, Date.now() + await CITAF.offsetDe(chatB.id)) : destino;
+                    await CITAF.ponerOffset(chatB.id, paso - Date.now());
+                    const r = await CITA3.tick({ chatId: chatB.id, hasta: paso }); hechas.push(...r.map(x => ({ k: x.k, que: CITA3.K_TXT[String(x.k).split(':')[0]] || x.k, due: x.due })));
+                    if (!px) break;
+                }
+                await CITAF.ponerOffset(chatB.id, destino - Date.now());
+                return res.status(200).json({ ok: true, hechas, ahora_ts: destino, ahora: CITAF.fechaCorta(destino) });
+            }
+            // sim3_estado: lo que ve cada parte + la ronda + el reloj + lo que sigue
+            const off = await CITAF.offsetDe(chatB.id); const ahoraV = Date.now() + off;
+            const c3 = await CITA3.porChat(tSm.id, chatB.id) || (await query('SELECT * FROM cita3 WHERE chat_id = ? ORDER BY cita_id DESC LIMIT 1', [chatB.id]))[0] || null;
+            const tres = c3 ? await CITA3.estado(c3.cita_id) : null;
+            const chD = c3 && c3.dueno_chat_id ? await U.chatPorId(c3.dueno_chat_id) : null;
+            const cf = await CITAF.citaViva(tSm.id, chatB.id);
+            const foco = await focoDe(tSm, String(chatB.telefono));
+            return res.status(200).json({ ok: true, reloj: { offset_ms: off, ahora_ts: ahoraV, ahora: CITAF.fechaCorta(ahoraV) },
+                comprador: { chat_id: Number(chatB.id), nombre: chatB.nombre, telefono: chatB.telefono, voz: VOZ.vozDe(chatB), foco: foco ? foco.nombre : null, mensajes: await msgs(chatB.id) },
+                dueno: chD ? { chat_id: Number(chD.id), nombre: chD.nombre, telefono: chD.telefono, voz: VOZ.vozDe(chD), mensajes: await msgs(chD.id) } : null,
+                cita_motor: cf ? { id: Number(cf.id), estado: cf.estado, precision: cf.precision, cuando: CITAF._t.cuandoCorto(cf, ahoraV) } : null,
+                tres, proximos: (await CITA3.proximo(chatB.id)).slice(0, 6).map(p => ({ k: p.k, que: CITA3.K_TXT[String(p.k).split(':')[0]] || p.k, due: p.due, cuando: CITAF.fechaCorta(p.due) })) });
+        }
         if (action === 'demo_responder' && req.method === 'POST') {
             const tDm = await tenantDeParam(VEND_PARAM || String(SES ? SES.tenant_id : '')); if (!tDm || !tDm.demo || !(SES_DEMO || MAESTRA)) return res.status(403).json({ ok: false, error: 'solo en el FyraChat de prueba o sandbox' });
             // v2 (2026-09-12): la UI manda chat_id (conversaciones.id del universo demo); el teléfono se resuelve aquí
@@ -295,11 +360,12 @@ module.exports = async function handler(req, res) {
                 else return res.status(400).json({ ok: false, error: "accion debe ser 'mas' | 'ir' | 'siguiente' | 'fin' | 'reset'" });
                 if (!destino || Math.abs(destino - ahoraV) > 90 * 86400000) return res.status(400).json({ ok: false, error: 'momento inválido' });
                 if (destino < ahoraV - 1000) { rebobino = await CITAF.rebobinar({ tenant: tC, chat: chC, hasta: destino }); if (!rebobino.ok) return res.status(400).json(rebobino); }
-                else { await CITAF.ponerOffset(chC.id, destino - Date.now()); hechas = await CITAF.tick({ tenant: tC, ioDe, chatId: Number(chC.id), hasta: destino }); }
+                else { await CITAF.ponerOffset(chC.id, destino - Date.now()); hechas = await CITAF.tick({ tenant: tC, ioDe, chatId: Number(chC.id), hasta: destino }); if (CITA3.activo(tC)) { try { hechas = hechas.concat((await CITA3.tick({ chatId: Number(chC.id), hasta: destino })).map(x => ({ tipo: 'tres:' + x.k, salio: true }))); } catch (e) { } } }
                 const stR = await CITAF.estado({ tenant: tC, chat: chC }); return res.status(200).json(Object.assign({ hechas, rebobino }, stR));
             }
             if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, datos: req.body.datos || null, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
-            const st = await CITAF.estado({ tenant: tC, chat: chC }); st.voz = VOZ.vozDe(chC); if (CITA3.activo(tC) && st.cita) { try { st.tres = await CITA3.estado(st.cita.id); } catch (e) { } }
+            const st = await CITAF.estado({ tenant: tC, chat: chC }); st.voz = VOZ.vozDe(chC);
+            if (CITA3.activo(tC)) { try { if (String(chC.canal || '') === 'dueno') { const ab = await CITA3.abiertasDueno(tC.id, chC.id); if (ab[0]) { st.tres = await CITA3.estado(ab[0].cita_id); st.tres.desde = 'dueno'; st.tres.abiertas = ab.map(x => ({ cita_id: x.cita_id, auto: x.auto_nombre })); } } else { const c3 = await CITA3.porChat(tC.id, chC.id) || (st.cita ? await CITA3.porCita(st.cita.id) : null); if (c3) { st.tres = await CITA3.estado(c3.cita_id); st.tres.desde = 'comprador'; } } } catch (e) { } }
             return res.status(200).json(Object.assign({ hechas, vendedor: rV }, st));
         }
         if (action === 'seb_turno' && req.method === 'POST') {
@@ -320,6 +386,18 @@ module.exports = async function handler(req, res) {
                 const uiD = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0];
                 const rD = await CITA3.entranteDueno({ tenant: tS, chat: chS, texto: (uiD && uiD.texto) || '' });
                 return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita3: rD, seb: { ok: true, modo: 'cita3_dueno', tipo: rD.evento || 'sin_ronda', segmentos: 0 } });
+            }
+            // ══ 3 PARTES · "HABLAR CON MARIO" (determinista): la voz pasa al vendedor del chat en el acto ══
+            if (CITA3.activo(tS)) {
+                try {
+                    const uiH = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const nH = String((uiH && uiH.texto) || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const asisH = await asistenteDe(tS, chS.id);
+                    if (/\b(hablar con|comunicame|que me (marque|llame|hable)|pasame con|quiero hablar)\b/.test(nH)) {
+                        await MSJ.enviar({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: 'humano:' + Number(chS.id) + ':' + Date.now(), manual: false, accion: 'seb_turno', voz_gen: VOZ_GEN, texto: 'Claro que sí, ahorita te contesta ' + (asisH || 'el vendedor') + ' personalmente.' });
+                        await VOZ.entregar({ tenant: tS, chat: chS, motivo: 'pidió hablar con ' + (asisH || 'el vendedor') });
+                        return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'humano', tipo: 'pidio_vendedor', segmentos: 1 } });
+                    }
+                } catch (e) { console.error('[hablar con]', e.message); }
             }
             // UN TURNO POR MENSAJE (timbre idempotente): si ya corrió —o va corriendo— un turno para el ÚLTIMO mensaje del comprador, este no corre.
             try {
@@ -364,14 +442,14 @@ module.exports = async function handler(req, res) {
                     if (nomL.foco && (!focoL || Number(nomL.foco.id) !== Number(focoL.id))) { await abrirSobre(nomL.foco, focoL ? 'cambio_de_auto' : 'nombro_auto'); return salirL(focoL ? 'cambio_de_auto' : 'nombro_auto', 1); }
                     // (b) sin foco → el lote pregunta / filtra / lista
                     if (!focoL) {
-                        const rL = await LOTE.turno({ tenant: tS, chat: chS, texto: ultimoInTxt, catalogo: catL });
+                        const rL = await LOTE.turno({ tenant: tS, chat: chS, texto: ultimoInTxt, catalogo: catL, asistente: await asistenteDe(tS, chS.id) });
                         for (const sgm of rL.segmentos) await mandarL(sgm);
                         if (rL.foco) await abrirSobre(rL.foco, rL.motivo); else await notaL('🏬 ' + LOTE.marcaCorta(tS) + ' · ' + rL.motivo);
                         if (rL.escalar) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: 'lote: ' + rL.motivo }); } catch (e) { } }
                         return salirL(rL.motivo, rL.segmentos.length, rL.segmentos);
                     }
                     // (c) cita sin auto claro
-                    if (CITAF.activo(tS) && LOTE.esAgenda(ultimoInTxt)) {
+                    if (CITAF.activo(tS) && LOTE.esAgenda(ultimoInTxt) && !(CITA3.activo(tS) && await CITA3.porChat(tS.id, chS.id))) {
                         const idsA = await LOTE.autosDelChat(chS.id);
                         const ops = idsA.map(id => catE.find(a => Number(a.id) === Number(id) || Number(a.fyradrive_web_id) === Number(id))).filter(Boolean).slice(0, 4);
                         if (ops.length >= 2) {
@@ -402,14 +480,14 @@ module.exports = async function handler(req, res) {
                 try { const tsC = citasVivas.resolverCitaTs(out.cita_datos.fecha, out.cita_datos.hora); if (tsC) { const iso = citasVivas.tsAIsoHora(tsC); const rC = await CITAF.vendedor({ tenant: tS, chat: chS, evento: 'agenda', datos: { dia_ini: iso.fecha_iso, hora_ini: iso.hora_hhmm }, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS) }); out = { ok: !!rC.ok, modo: 'cita_flex', tipo: 'agenda_cerebro', segmentos: [], motivo: rC.error || null }; } else out = { ok: false, escalar_owner: true, escala_motivo: 'Seb cerró una cita pero no pude amarrar la fecha — revísala tú' }; } catch (e) { out = { ok: false, escalar_owner: true, escala_motivo: 'error al agendar: ' + e.message }; }
             }
             // ── ENVIAR lo que el cerebro decidió, por la PUERTA DE MENSAJES de este universo (sandbox → se pinta en el hilo; real → WhatsApp) ──
-            const base = 'seb:' + Number(chS.id) + ':' + Date.now() + (soloTexto ? ':c' : ''); let n = 0;
+            const base = 'seb:' + Number(chS.id) + ':' + Date.now() + (soloTexto ? ':c' : ''); let n = 0; const asisS = await asistenteDe(tS, chS.id);
             const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno', voz_gen: VOZ_GEN }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
             const pin = async () => { if (!out.ubicacion_auto_id) return; const pe = (await query('SELECT image_b64, lat, lng, name, maps_link FROM punto_envio WHERE auto_id = ?', [Number(out.ubicacion_auto_id)]).catch(() => []))[0]; if (!pe) return; await mandarS({ imagen: pe.image_b64 || null, imagen_ref: pe.image_b64 ? 'ubic-img:' + Number(out.ubicacion_auto_id) : null, location: (pe.lat != null && pe.lng != null) ? { lat: pe.lat, lng: pe.lng, name: pe.name || '', maps_link: pe.maps_link || undefined } : null }); };
             if (out.ok && Array.isArray(out.segmentos)) {
                 const segs = out.segmentos.map(x => String(x || '').trim()).filter(Boolean); const fotos = Array.isArray(out.fotos) ? out.fotos : [];
                 const fi = out.fotos_after_index == null ? segs.length - 1 : Number(out.fotos_after_index); const pi = out.pin_after_index == null ? segs.length - 1 : Number(out.pin_after_index);
                 if (out.pin_primero) await pin();
-                for (let i = 0; i < segs.length; i++) { await mandarS({ texto: LOTE.identidad(segs[i], tS) }); if (fotos.length && i === fi) await mandarS({ fotos }); if (!out.pin_primero && i === pi) await pin(); }
+                for (let i = 0; i < segs.length; i++) { await mandarS({ texto: LOTE.identidad(segs[i], tS, asisS) }); if (fotos.length && i === fi) await mandarS({ fotos }); if (!out.pin_primero && i === pi) await pin(); }
                 if (!segs.length) { if (fotos.length) await mandarS({ fotos }); if (!out.pin_primero) await pin(); }
             }
             // rastro para entrenar (solo lo ve el vendedor): qué ruta tomó el cerebro, o por qué calló / escaló
@@ -426,13 +504,11 @@ module.exports = async function handler(req, res) {
             }
             let citaF = null, comercialR = null;
             if (CITAF.activo(tS)) {
-                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
-                if (citaF && citaF.manejado && citaF.cita && CITA3.activo(tS)) {   // la ronda de 3 partes: propuesta del comprador → se pregunta al dueño y al vendedor; señales físicas → luces del día D
+                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), interceptar: CITA3.activo(tS) ? (x) => CITA3.interceptar({ tenant: tS, chat: chS, ev: x.ev, nuevo: x.nuevo }) : null, comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
+                if (citaF && citaF.manejado && citaF.cita && CITA3.activo(tS) && !citaF.interceptado) {   // RONDA: el cuándo que aplicó el motor (antes de la 1ª confirmación) → 1 voto del comprador; Mario confirma; dueño con 2
                     try {
                         const uiP = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const txP = (uiP && uiP.texto) || '';
-                        if (['nace', 'revive', 'cambia_dia', 'ajusta_hora', 'precisa', 'reagenda', 'ahorita', 'confirma_dia', 'abre_hora', 'quita_dia'].includes(String(citaF.tipo || ''))) await CITA3.propuesta({ tenant: tS, chat: chS, citaId: citaF.cita, por: 'comprador', nuevo: txP });
-                        else if (citaF.evento === 'ya_voy') { const c3 = await CITA3.porCita(citaF.cita); if (c3) await CITA3.luz({ tenant: tS, c: c3, luz: 'comprador_voy', texto: txP }); }
-                        else if (citaF.evento === 'ya_llegue') { const c3 = await CITA3.porCita(citaF.cita); if (c3) await CITA3.luz({ tenant: tS, c: c3, luz: 'comprador_llego', texto: txP }); }
+                        if (['nace', 'revive', 'cambia_dia', 'ajusta_hora', 'precisa', 'reagenda', 'ahorita', 'confirma_dia', 'abre_hora', 'quita_dia', 'angosta'].includes(String(citaF.tipo || ''))) await CITA3.propuestaComprador({ tenant: tS, chat: chS, citaId: citaF.cita, nuevo: txP });
                     } catch (e) { console.error('[cita3 ronda]', e.message); }
                 }
                 if (citaF && citaF.escalado) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: 'cita: ' + String(citaF.evento || 'no quedó claro') }); } catch (e) { } }
@@ -997,6 +1073,10 @@ module.exports = async function handler(req, res) {
             return { id: Number(rows[0].id), telefono: String(rows[0].telefono || ''), nombre: String(rows[0].nombre || ''), config: cfgT, demo: Number(cfgT.demo) === 1 || Number(cfgT.sandbox) === 1 };   // demo: FyraChat de prueba o SANDBOX (nada sale al puente)
         }
         // Autos del tenant: los suyos (dueño por teléfono); el tenant 0 ve todo el inventario activo
+        async function asistenteDe(t, chatId) {   // AUTOS FYRADRIVE (3 partes): "Seb, asistente virtual de <vendedor del chat>"; en otros universos: null (identidad de lote)
+            if (!CITA3.activo(t) || !chatId) return null;
+            try { const r = (await query('SELECT v.nombre FROM conversaciones c JOIN vendedores_universo v ON v.id = c.miembro_id WHERE c.id = ?', [Number(chatId)]))[0]; const n = String((r && r.nombre) || '').trim().split(/\s+/)[0]; return n ? n.charAt(0).toUpperCase() + n.slice(1).toLowerCase() : null; } catch (e) { return null; }
+        }
         async function autosDeTenant(t) {
             // AUTOS POR UNIVERSO (orden owner 2026-09-08): un auto EXISTE en un universo (autos_universo: comercializa /
             // dueno / acreditado), no se cruza por teléfono. Tenant 0 = Fyradrive comercializa todo el inventario activo.
@@ -1123,10 +1203,11 @@ module.exports = async function handler(req, res) {
             if (!auto) return R(400, { ok: false, error: 'ese auto no es del vendedor', necesita: 'auto' });
             const autoNombre = [auto.marca, auto.modelo, auto.anio].filter(Boolean).join(' ');
             const nomC = String(body.nombre || '').trim();
-            const primerNombre = (t.nombre || 'el vendedor').split(/\s+/)[0];
+            let primerNombre = (t.nombre || 'el vendedor').split(/\s+/)[0];
             // MACHOTE de la presentación (modo 'bot'): PURA presentación a nombre del vendedor, sin pregunta ni venta
             // (el owner lo ajusta en config_json.opener_texto si quiere)
-            const plantilla = (t.config && t.config.opener_texto) || 'Hola{nombre}, soy el asistente de {vendedor} para el {auto}.';
+            const tresD = CITA3.activo(t) && body.miembro_nombre; if (tresD) primerNombre = String(body.miembro_nombre).trim().split(/\s+/)[0];
+            const plantilla = tresD ? 'Qué tal{nombre}, soy Seb, asistente virtual de {vendedor}. Estoy aquí para ayudarte con lo básico del {auto}; si ocupas algo más a fondo, dime "hablar con {vendedor}".' : ((t.config && t.config.opener_texto) || 'Hola{nombre}, soy el asistente de {vendedor} para el {auto}.');
             // ══ FORMA DE ENTRADA (orden owner 2026-09-10): al delegar, el vendedor ELIGE cómo entra el bot ══
             //   'silencio'  → entra sin decir nada (solo se registra el chat)                       — SIN modo explícito = silencio
             //   'texto'     → el texto que él escribió/editó (literal), firmado como SUYO (emisor 'dueno', ai 0)
@@ -2358,7 +2439,8 @@ module.exports = async function handler(req, res) {
             const dirAcc = await citasVivas.direccionDe(TID, telFullB, { crear: !TID });
             if (!dirAcc.chat_id) return R(404, { ok: false, error: 'este contacto no tiene chat en este universo (delega primero)' });
             const claveB = String(B.clave || ('boton:' + accB + ':' + dirAcc.chat_id + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8)));
-            const mandar = (extra) => { if (extra && extra.texto && TID) extra = Object.assign({}, extra, { texto: LOTE.identidad(extra.texto, tAcc) }); return MSJ.enviar(Object.assign({ tenantId: TID, chatId: dirAcc.chat_id, origen: 'boton:' + accB, clave: claveB + ':msg', manual: false, sesionId: SES ? SES.sid : null, accion: 'boton_' + accB, refId: inv.id, meta: { auto: nombreAuto, via: B.via || 'boton' } }, extra || {})); };
+            const asisB = TID ? await asistenteDe(tAcc, dirAcc.chat_id) : null;
+            const mandar = (extra) => { if (extra && extra.texto && TID) extra = Object.assign({}, extra, { texto: LOTE.identidad(extra.texto, tAcc, asisB) }); return MSJ.enviar(Object.assign({ tenantId: TID, chatId: dirAcc.chat_id, origen: 'boton:' + accB, clave: claveB + ':msg', manual: false, sesionId: SES ? SES.sid : null, accion: 'boton_' + accB, refId: inv.id, meta: { auto: nombreAuto, via: B.via || 'boton' } }, extra || {})); };
             const simTxt = () => DEMO.esSandbox(tAcc) ? '' : ('SIMULADO (' + (esDemoB ? 'prueba' : 'carril pruebas') + '): ');
             try {
                 // ── 2) EJECUTAR LITERAL ──
@@ -2862,7 +2944,7 @@ module.exports = async function handler(req, res) {
                     return res.status(codigoDe(rI)).json(rI);
                 }
                 if (tV.config && Number(tV.config.todo_entra) === 1 && (E.modo || 'silencio') === 'silencio' && E.entrante !== true) return err(400, 'En este universo agregar un comprador es mandarle el primer mensaje: elige qué le mandas.', { necesita: 'modo' });
-                const body = { telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, entrante: E.entrante === true, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
+                const body = { miembro_nombre: SES && SES.miembro ? SES.miembro.nombre : null, telefono: req.body.telefono, nombre: req.body.nombre, auto_id: req.body.auto_id, entrante: E.entrante === true, modo_entrada: E.modo || 'silencio', opener_texto: E.texto, enganche: E.enganche, plazo_meses: E.plazo, fecha_iso: E.fecha_iso, hora: E.hora };
                 const r = await MSJ.conClave(clave, { tenantId: TV, accion: 'delegar_v2', sesionId: SID }, async () => {
                     const rD = await delegarCore(tV, body, { sesionId: SID, clave });
                     const o = rD.out || {};
@@ -3110,7 +3192,8 @@ module.exports = async function handler(req, res) {
                 const ch3 = await U.chatPorId(Number(req.body.chat_id) || 0); if (!ch3 || Number(ch3.tenant_id) !== TV) return err(404, 'chat inexistente en este universo');
                 const r3 = await CITA3.vendedor({ tenant: tV, chat: ch3, evento: String(req.body.evento || ''), datos: req.body.datos || null });
                 if (!r3.ok) return err(400, r3.error || 'No se pudo');
-                return okJ(Object.assign({}, r3, { tres: await CITA3.estado(((await CITA3.porChat(TV, ch3.id)) || {}).cita_id || 0) }));
+                const c3r = String(ch3.canal || '') === 'dueno' ? (req.body.datos && req.body.datos.cita_id ? await CITA3.porCita(req.body.datos.cita_id) : await CITA3.porDuenoChat(TV, ch3.id)) : (await CITA3.porChat(TV, ch3.id) || (await query('SELECT * FROM cita3 WHERE chat_id = ? ORDER BY cita_id DESC LIMIT 1', [ch3.id]))[0]);
+                return okJ(Object.assign({}, r3, { tres: c3r ? await CITA3.estado(c3r.cita_id) : null }));
             }
             if (action === 'remates' || action === 'remate_ofertar') {
                 if (!TV) return err(400, 'el panel es por universo');

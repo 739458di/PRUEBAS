@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de citas</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* SIMULADOR DE 3 PARTES (orden owner 2026-09-26): el MISMO motor real sobre el universo de pruebas (LAB). Aquí no se decide nada: solo se ve y se aprieta. */
+:root{--bg:#F4F5F7;--card:#FFFFFF;--ln:#E3E6EB;--ln2:#EEF0F3;--txt:#111827;--txt2:#5B6472;--mut:#8B93A1;--pri:#1F4FD8;--pri2:#EAF0FF;--ok:#12805C;--okbg:#E6F5EE;--warn:#B45309;--warnbg:#FEF3E2;--bad:#C0362C;--badbg:#FDECEA;--wa:#E7F8EF;--wa2:#FFFFFF;--nota:#F2F4F7;--f:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--m:'JetBrains Mono',ui-monospace,monospace;--r:12px}
+*{box-sizing:border-box}html,body{margin:0}body{font:14px/1.45 var(--f);color:var(--txt);background:var(--bg);-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer}
+.top{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--ln);display:flex;align-items:center;gap:14px;padding:10px 16px;flex-wrap:wrap}
+.top h1{font-size:15px;margin:0;font-weight:700;letter-spacing:-.01em}.top h1 small{display:block;font-size:11px;font-weight:500;color:var(--mut)}
+.reloj{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--ln);border-radius:10px;padding:5px 6px 5px 12px}
+.reloj b{font:600 15px var(--m);min-width:150px}.reloj button{border:1px solid var(--ln);background:#fff;border-radius:8px;height:30px;padding:0 10px;font-weight:600;font-size:12.5px}.reloj button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.reloj input{height:30px;border:1px solid var(--ln);border-radius:8px;padding:0 6px;font:12.5px var(--f)}
+.sp{flex:1}.sel{height:32px;border:1px solid var(--ln);border-radius:8px;padding:0 8px;background:#fff;font:13px var(--f);max-width:240px}
+.btn{height:32px;border:1px solid var(--ln);background:#fff;border-radius:8px;padding:0 12px;font-weight:600;font-size:13px;color:var(--txt)}.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}.btn.bad{background:#fff;border-color:#F3C2BD;color:var(--bad)}.btn[disabled]{opacity:.45;cursor:default}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.25fr);gap:12px;padding:12px 16px;align-items:start}
+.col{background:var(--card);border:1px solid var(--ln);border-radius:var(--r);display:flex;flex-direction:column;min-height:0;height:calc(100vh - 170px);min-height:520px;overflow:hidden}
+.ch{padding:10px 12px;border-bottom:1px solid var(--ln);display:flex;align-items:center;gap:10px}.ch .av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12px;flex:0 0 32px}
+.ch b{font-size:13.5px;display:block}.ch small{color:var(--mut);font-size:11.5px}.ch .rol{margin-left:auto;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);background:var(--bg);border:1px solid var(--ln);border-radius:999px;padding:2px 8px}
+.av.c{background:#E8F0FF;color:#1F4FD8}.av.d{background:#FFF1E0;color:#A45A00}.av.v{background:#E6F5EE;color:#12805C}
+.hilo{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:6px;background:#FBFBFC}
+.m{max-width:86%;padding:7px 10px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word;font-size:13.5px;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+.m.yo{align-self:flex-end;background:var(--wa);border-bottom-right-radius:4px}.m.el{align-self:flex-start;background:var(--wa2);border:1px solid var(--ln2);border-bottom-left-radius:4px}
+.m.nota{align-self:stretch;max-width:100%;background:var(--nota);color:var(--txt2);font-size:12px;border-radius:8px;box-shadow:none}
+.m.nota.aviso{background:#FFF8E6;color:#6B4A00}.m.manual{background:#EAF0FF}
+.m i{display:block;font-style:normal;font-size:10.5px;color:var(--mut);margin-top:2px}
+.vacio{margin:auto;color:var(--mut);text-align:center;font-size:13px;padding:20px}
+.comp{border-top:1px solid var(--ln);padding:8px;display:flex;flex-direction:column;gap:6px}
+.chips{display:flex;gap:5px;flex-wrap:wrap}.chip{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:3px 9px;font-size:12px;color:var(--txt2)}.chip:hover{border-color:var(--pri);color:var(--pri)}
+.row{display:flex;gap:6px}.row input,.row textarea{flex:1;border:1px solid var(--ln);border-radius:8px;padding:7px 10px;font:13.5px var(--f);resize:none;min-height:36px}
+.voz{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px}.voz.seb{background:var(--okbg);color:var(--ok)}.voz.humano{background:var(--warnbg);color:var(--warn)}
+/* Mario */
+.tabs{display:flex;border-bottom:1px solid var(--ln)}.tabs button{flex:1;border:0;background:none;padding:9px;font-weight:600;font-size:13px;color:var(--txt2);border-bottom:2px solid transparent}.tabs button.on{color:var(--pri);border-bottom-color:var(--pri)}
+.card{margin:10px;border:1px solid var(--ln);border-radius:10px;padding:10px 12px;background:#fff}
+.card h3{margin:0 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.kv{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}.kv b{font-weight:700}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--bg);color:var(--txt2);border:1px solid var(--ln)}
+.pill.ok{background:var(--okbg);color:var(--ok);border-color:#BFE6D3}.pill.warn{background:var(--warnbg);color:var(--warn);border-color:#F6D9A8}.pill.bad{background:var(--badbg);color:var(--bad);border-color:#F3C2BD}
+.acc{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.acc .btn{height:30px;font-size:12.5px}
+.form{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}.form input,.form select{height:30px;border:1px solid var(--ln);border-radius:8px;padding:0 8px;font:12.5px var(--f)}
+.luces{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.luz{border:1px solid var(--ln);border-radius:8px;padding:6px 8px;font-size:12px}.luz b{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}.luz.on{background:var(--okbg);border-color:#BFE6D3}
+.hint{font-size:12px;color:var(--mut);margin-top:6px}
+.bajo{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:0 16px 16px}
+.panel{background:var(--card);border:1px solid var(--ln);border-radius:var(--r);padding:10px 12px;max-height:260px;overflow:auto}.panel h3{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.li{display:flex;gap:8px;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--ln2)}.li:last-child{border:0}.li time{font:500 11.5px var(--m);color:var(--mut);flex:0 0 108px}
+.li button{margin-left:auto;border:1px solid var(--ln);background:#fff;border-radius:6px;font-size:11.5px;padding:1px 7px}
+.nuevo{position:fixed;inset:0;background:rgba(17,24,39,.35);display:flex;align-items:center;justify-content:center;z-index:20}.nuevo[hidden]{display:none}
+.nuevo .box{background:#fff;border-radius:14px;padding:18px;width:min(420px,92vw);display:flex;flex-direction:column;gap:10px}.nuevo label{font-size:12px;font-weight:600;color:var(--txt2)}.nuevo input,.nuevo select{height:36px;border:1px solid var(--ln);border-radius:8px;padding:0 10px;font:14px var(--f);width:100%}
+.err{background:var(--badbg);color:var(--bad);border:1px solid #F3C2BD;border-radius:10px;padding:14px;margin:16px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:9px 14px;border-radius:10px;font-size:13px;z-index:30;max-width:90vw}
+.cargando{opacity:.55;pointer-events:none}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}.col{height:auto;min-height:420px;max-height:70vh}.bajo{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Simulador de citas · 3 partes<small>Universo de pruebas “Autos Fyradrive Simulador” · motor real, nada sale a WhatsApp</small></h1>
+  <select class="sel" id="sims" title="Simulación"></select>
+  <button class="btn pri" id="b-nueva">Nueva simulación</button>
+  <span class="sp"></span>
+  <div class="reloj" title="Hora de la simulación (Monterrey). Adelantarla ejecuta lo que tocaba en ese lapso.">
+    <b id="hora">—</b>
+    <button data-mas="900000">+15 min</button><button data-mas="3600000">+1 h</button><button data-mas="86400000">+1 día</button>
+    <input type="datetime-local" id="ir"><button id="b-ir">Ir</button>
+    <button class="pri" id="b-sig">▶ Siguiente evento</button>
+  </div>
+</header>
+<div id="app"></div>
+<div class="nuevo" id="dlg" hidden><div class="box">
+  <b style="font-size:15px">Nueva simulación</b>
+  <label>Comprador (nombre inventado)<input id="n-nom" value="Luis"></label>
+  <label>Auto que Mario le delega<select id="n-auto"></select></label>
+  <label>Cómo entra Seb<select id="n-modo"><option value="bot">Se presenta como asistente de Mario</option><option value="info">Manda la ficha del auto</option><option value="fotos">Manda fotos</option><option value="ubicacion">Manda la ubicación</option></select></label>
+  <div class="row" style="justify-content:flex-end"><button class="btn" id="n-cancel">Cancelar</button><button class="btn pri" id="n-go">Delegar a Seb</button></div>
+</div></div>
+<script>
+const API = '/api/seb-panel'; const VEND = new URLSearchParams(location.search).get('vendedor') || '14';   // AUTOS FYRADRIVE SIMULADOR (sandbox con 3 partes); el LAB (12) queda en 2 partes para sus pruebas
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const TZ = 6 * 3600000; const DS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const fmt = ts => { if (!ts) return '—'; const d = new Date(ts - TZ); let h = d.getUTCHours(); const m = d.getUTCMinutes(); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return DS[d.getUTCDay()] + ' ' + d.getUTCDate() + '/' + (d.getUTCMonth() + 1) + ' · ' + h + ':' + String(m).padStart(2, '0') + ' ' + ap; };
+const ymdL = ts => new Date(ts - TZ).toISOString().slice(0, 10);
+let MARIO = null, AUTOS = [], CHAT = Number(new URLSearchParams(location.search).get('chat')) || null, EST = null, TAB = 'comprador', OCUP = false;
+async function call(action, body, q) {
+  try { const r = await fetch(API + '?action=' + action + '&vendedor=' + VEND + (q ? '&' + new URLSearchParams(q) : ''), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action }, body || {})) }); const j = await r.json().catch(() => ({ ok: false, error: 'respuesta inválida' })); j._status = r.status; return j; }
+  catch (e) { return { ok: false, error: 'Sin conexión' }; }
+}
+function toast(t) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3200); }
+const clave = p => p + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 7);
+
+async function iniciar() {
+  const p = await call('sim3_preparar');
+  if (!p.ok) { $('app').innerHTML = '<div class="err"><b>No pude abrir el simulador.</b><br>' + esc(p.error || '') + '<br><br>Para entrar como owner: abre el Sales Brain › Usuarios vinculados › AUTOS FYRADRIVE SIMULADOR › “Su FyraChat”, y ya con esa sesión vuelve a abrir esta página en el mismo navegador.</div>'; return; }
+  MARIO = p.mario; AUTOS = p.autos;
+  $('n-auto').innerHTML = AUTOS.map(a => '<option value="' + a.id + '">' + esc(a.nombre) + (a.precio ? ' · $' + Number(a.precio).toLocaleString('es-MX') : '') + '</option>').join('');
+  $('sims').innerHTML = (p.simulaciones.length ? '' : '<option value="">Sin simulaciones</option>') + p.simulaciones.map(s => '<option value="' + s.chat_id + '">' + esc(s.nombre || s.telefono) + ' · chat ' + s.chat_id + '</option>').join('');
+  if (!CHAT && p.simulaciones[0]) CHAT = p.simulaciones[0].chat_id;
+  if (CHAT) $('sims').value = String(CHAT);
+  if (!CHAT) { $('app').innerHTML = '<div class="card" style="margin:16px;padding:18px"><b>Empieza una simulación.</b><div class="hint">Mario le delega un auto a su asistente con un comprador inventado. Luego escribes como el comprador, como el dueño, y aprietas los botones de Mario.</div><div class="acc"><button class="btn pri" onclick="abrirNueva()">Nueva simulación</button></div></div>'; return; }
+  await refrescar();
+}
+async function refrescar() {
+  if (!CHAT) return; const e = await call('sim3_estado', { chat_id: CHAT });
+  if (!e.ok) { toast(e.error || 'No pude leer la simulación'); return; }
+  EST = e; pintar();
+}
+// ═══ PINTAR ═══
+function burbujas(ms, vista) {
+  const out = []; for (const m of ms || []) {
+    const hora = '<i>' + esc(fmt(m.ts)) + '</i>';
+    if (m.emisor === 'sistema') { if (vista === 'mario') out.push('<div class="m nota' + (/^🔔|^🛑/.test(m.texto || '') ? ' aviso' : '') + '">' + esc(m.texto) + '</div>'); continue; }
+    const suyo = m.dir === 'in';   // lo escribió la persona de esta columna (comprador o dueño)
+    if (vista === 'persona') out.push('<div class="m ' + (suyo ? 'yo' : 'el') + '">' + esc(m.texto) + hora + '</div>');
+    else out.push('<div class="m ' + (suyo ? 'el' : 'yo') + (m.emisor === 'dueno' ? ' manual' : '') + '">' + (m.emisor === 'dueno' ? '<b style="font-size:11px">Mario (a mano)</b>\n' : '') + esc(m.texto) + hora + '</div>');
+  }
+  return out.length ? out.join('') : '<div class="vacio">Sin mensajes todavía.</div>';
+}
+function columnaPersona(quien, data) {
+  const esC = quien === 'comprador';
+  const chips = esC ? ['¿Puedo ir a verlo el martes?', 'A las 11 de la mañana', 'Mejor el jueves a las 5', 'Sí', 'Mándame fotos', '¿Dónde está?', 'Hablar con Mario', 'Creo que no voy a poder', 'Ya voy en camino', 'Ya llegué', 'Gracias']
+    : ['Sí', 'Sí, ahí los espero', 'No puedo', 'Mejor a las 12', '¿Cuánto me van a cobrar?', 'Sí, listo', 'Ya estoy aquí', 'Márcame'];
+  if (!data) return '<section class="col"><div class="ch"><span class="av d">JU</span><div><b>Dueño del auto</b><small>Todavía no se le ha escrito</small></div><span class="rol">Dueño</span></div><div class="hilo"><div class="vacio">Al dueño solo se le escribe cuando el comprador y Mario ya están de acuerdo en un día y hora (2 a 1).</div></div></section>';
+  return '<section class="col"><div class="ch"><span class="av ' + (esC ? 'c' : 'd') + '">' + esc((data.nombre || (esC ? 'C' : 'D')).replace(/^Dueño · /, '').slice(0, 2).toUpperCase()) + '</span><div><b>' + esc(esC ? (data.nombre || 'Comprador') : 'Dueño · ' + String(data.nombre || '').replace(/^Dueño · /, '')) + '</b><small>WhatsApp de ' + (esC ? 'el comprador' : 'el dueño') + ' · +' + esc(data.telefono) + '</small></div><span class="rol">' + (esC ? 'Comprador' : 'Dueño') + '</span></div>' +
+    '<div class="hilo" id="h-' + quien + '">' + burbujas(data.mensajes, 'persona') + '</div>' +
+    '<div class="comp"><div class="chips">' + chips.map(c => '<button class="chip" data-dice="' + quien + '" data-t="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div><div class="row"><input id="in-' + quien + '" placeholder="Escribe como ' + (esC ? 'el comprador' : 'el dueño') + '…"><button class="btn pri" data-enviar="' + quien + '">Enviar</button></div></div></section>';
+}
+function tarjetaCita() {
+  const T = EST.tres; const d = (T && T.dia) || {}; const enDueno = TAB === 'dueno';
+  if (!T) return '<div class="card"><h3>La cita</h3><div class="hint">' + (EST.cita_motor ? 'El comprador dio una ventana (' + esc(EST.cita_motor.cuando) + ') sin hora: no arranca la ronda hasta que diga la hora.' : 'Todavía no hay propuesta. Nace cuando el comprador da día y hora.') + '</div></div>';
+  const faseTxt = { espera_vendedor: 'Te toca confirmar (o proponer otro horario)', espera_comprador: 'Esperando al comprador (sugerencia)', espera_dueno: 'Esperando el “sí” del dueño', pausa_dueno: 'El dueño necesita a Mario: ciérralo con botón en su chat' }[T.fase] || '';
+  const estTxt = { ronda: 'En ronda', confirmada: 'Confirmada', dia_d: 'Día de la cita', pausada: 'Pausada', realizada: 'Realizada', cancelada: 'Cancelada', no_se_hizo: 'No se hizo' }[T.estado] || T.estado;
+  const cls = { confirmada: 'ok', dia_d: 'ok', realizada: 'ok', pausada: 'warn', ronda: 'warn', cancelada: 'bad', no_se_hizo: 'bad' }[T.estado] || '';
+  const voto = (k, n) => '<span class="pill ' + (T.ok[k] ? 'ok' : '') + '">' + (T.ok[k] ? '✓ ' : '… ') + n + '</span>';
+  let h = '<div class="card"><h3>La cita</h3><div class="kv"><span class="pill ' + cls + '">' + esc(estTxt) + '</span><b>' + esc(T.cuando || '') + '</b><span class="pill">propuesta ' + T.gen + ' · de ' + esc({ comprador: 'el comprador', vendedor: 'Mario', dueno: 'el dueño' }[T.por] || T.por || '—') + '</span></div>';
+  if (T.estado === 'ronda' || T.fase) h += '<div class="kv" style="margin-top:6px">' + voto('comprador', 'Comprador') + voto('vendedor', 'Mario') + voto('dueno', 'Dueño') + '</div>' + (faseTxt ? '<div class="hint" style="color:var(--txt)">' + esc(faseTxt) + '</div>' : '');
+  if (T.confirmada && T.confirmada !== T.cuando) h += '<div class="hint">Última confirmada: ' + esc(T.confirmada) + '</div>';
+  if (T.razon) h += '<div class="hint">Razón: ' + esc(T.razon) + '</div>';
+  // ── botones según el momento y el chat donde está parado Mario
+  const B = (ev, txt, cls2, datos) => '<button class="btn ' + (cls2 || '') + '" data-boton="' + ev + '"' + (datos ? " data-datos='" + esc(JSON.stringify(datos)) + "'" : '') + '>' + esc(txt) + '</button>';
+  const formHorario = (etq, ev, conRazon) => '<div class="form"><input type="date" id="f-dia" value="' + (T.ini_ts ? ymdL(T.ini_ts) : ymdL(EST.reloj.ahora_ts + 86400000)) + '"><input type="time" id="f-hora" value="12:00">' + (conRazon ? '<select id="f-razon"><option value="comprador">Lo hablé con el comprador</option><option value="vendedor">No puedo yo</option></select>' : '') + '<button class="btn pri" data-horario="' + ev + '">' + esc(etq) + '</button></div>';
+  let acc = '';
+  const abierta = ['ronda', 'confirmada', 'dia_d', 'pausada'].includes(T.estado);
+  if (abierta) {
+    if (T.fase === 'espera_vendedor' && !enDueno) acc += '<div class="acc">' + B('confirmo', 'Confirmo', 'ok') + '</div>' + formHorario('Proponer este horario', 'nuevo_horario', false);
+    else if ((T.fase === 'espera_dueno' || T.fase === 'pausa_dueno') && enDueno) acc += '<div class="acc">' + B('dueno_confirmo', 'Dueño confirmó', 'ok') + B('ya_no_disponible', 'Ya no disponible', 'bad') + '</div>' + formHorario('Nuevo horario (lo hablé con el dueño)', 'nuevo_horario', false);
+    else if (T.fase) acc += formHorario('Nuevo horario', 'nuevo_horario', !enDueno && !!T.confirmada);
+    if (!T.fase && T.estado !== 'ronda') {
+      acc += '<div class="acc">' + (T.estado === 'pausada' ? B('continuar', 'Continuar', 'ok') : B('pausar', 'Pausar')) + '<select id="f-cancel" class="sel" style="height:30px"><option>No puede el comprador</option><option>No puede el dueño</option><option>No puedo yo</option><option>Ya no hay venta</option></select>' + B('cancelar', 'Cancelar', 'bad') + '</div>';
+      acc += formHorario(enDueno ? 'Nuevo horario (lo hablé con el dueño)' : 'Nuevo horario', 'nuevo_horario', !enDueno);
+    }
+  }
+  h += acc;
+  if (['confirmada', 'dia_d', 'pausada'].includes(T.estado) && !T.fase) {
+    const L = (k, n) => '<div class="luz ' + (d[k] ? 'on' : '') + '"><b>' + esc(n) + '</b>' + (d[k] ? esc(fmt(d[k]).split('· ')[1]) : '—') + '</div>';
+    h += '<h3 style="margin-top:12px">Día de la cita</h3><div class="luces">' + L('ok_c', 'Confirmó comprador') + L('ok_d', 'Confirmó dueño') + L('ok_v', 'Confirmó Mario') + L('listo_d', 'Dueño listo') + L('listo_v', 'Mario listo') + L('verde', 'Luz verde') + L('voy_c', 'Comprador va') + L('sal_v', 'Mario va') + L('sal_d', 'Dueño va') + L('llego_c', 'Llegó comprador') + L('llego_d', 'Llegó dueño') + L('llego_v', 'Llegó Mario') + '</div>';
+    h += '<div class="acc">' + B('palomear', 'Confirmo yo', '', { quien: 'vendedor' }) + B('palomear', 'Confirmó comprador', '', { quien: 'comprador' }) + B('palomear', 'Confirmó dueño', '', { quien: 'dueno' }) + '</div>';
+    h += '<div class="acc">' + B('listo', 'Listo', 'pri') + B('listo', 'Dueño listo', '', { quien: 'dueno' }) + B('ya_va', 'Comprador ya va') + B('voy', 'Voy') + B('llegue', 'Llegué') + B('llegue', 'Llegó el dueño', '', { quien: 'dueno' }) + B('llegue', 'Llegó el comprador', '', { quien: 'comprador' }) + B('los_tres', 'Ya estamos los 3', 'ok') + B('no_se_hizo', 'No se hizo', 'bad') + '</div>';
+  }
+  return h + '</div>';
+}
+function columnaMario() {
+  const tabChat = TAB === 'dueno' ? EST.dueno : EST.comprador;
+  const voz = tabChat ? tabChat.voz : 'seb';
+  return '<section class="col"><div class="ch"><span class="av v">MA</span><div><b>FyraChat de ' + esc(MARIO ? MARIO.nombre : 'Mario') + '</b><small>Lo que ve y aprieta Mario · las notas amarillas son lo que le llega a su WhatsApp</small></div><span class="rol">Vendedor</span></div>' +
+    '<div class="tabs"><button data-tab="comprador" class="' + (TAB === 'comprador' ? 'on' : '') + '">Chat del comprador</button><button data-tab="dueno" class="' + (TAB === 'dueno' ? 'on' : '') + '"' + (EST.dueno ? '' : ' disabled') + '>Chat del dueño</button></div>' +
+    '<div class="hilo" id="h-mario" style="flex:1">' + tarjetaCita() + (tabChat ? burbujas(tabChat.mensajes, 'mario') : '<div class="vacio">Todavía no existe el chat del dueño.</div>') + '</div>' +
+    (tabChat ? '<div class="comp"><div class="row" style="align-items:center;justify-content:space-between"><span class="voz ' + voz + '">' + (voz === 'humano' ? 'Estás atendiendo tú (Seb no lee este chat)' : 'Seb atiende este chat') + '</span>' + (voz === 'humano' ? '<button class="btn" id="b-devolver">Devolver a Seb</button>' : '') + '</div><div class="row"><input id="in-mario" placeholder="Escribe como Mario (toma la voz de este chat)…"><button class="btn pri" id="b-mario">Enviar</button></div></div>' : '') + '</section>';
+}
+function panelesBajo() {
+  const T = EST.tres; const px = EST.proximos || []; const ev = (T && T.eventos) || []; const md = (T && T.medicion) || {};
+  const prox = px.length ? px.map(p => '<div class="li"><time>' + esc(fmt(p.due)) + '</time><span>' + esc(p.que) + '</span><button data-irts="' + p.due + '">Ir</button></div>').join('') : '<div class="hint">Nada programado. El reloj no mueve nada si no hay algo pendiente.</div>';
+  const bit = ev.length ? ev.slice().reverse().map(e => '<div class="li"><time>' + esc(fmt(e.ts)) + '</time><span><b>' + esc({ comprador: 'Comprador', dueno: 'Dueño', vendedor: 'Mario', sistema: 'Sistema' }[e.canal] || e.canal) + '</b> · ' + esc(String(e.evento).replace(/_/g, ' ')) + (e.texto && e.texto !== 'botón' ? ' — “' + esc(e.texto) + '”' : '') + (e.accion ? ' <span style="color:var(--mut)">→ ' + esc(e.accion) + '</span>' : '') + '</span></div>').join('') : '<div class="hint">Aún no hay movimientos de la cita.</div>';
+  const M = (n, v, u) => '<div class="li"><span>' + esc(n) + '</span><b style="margin-left:auto">' + (v == null ? '—' : esc(v) + (u || '')) + '</b></div>';
+  const med = M('Propuestas (rondas)', md.rondas) + M('Comprador confirmó el día (min desde el 1er recordatorio)', md.confirmo_comprador_min, ' min') + M('De luz verde a "ya voy"', md.luz_verde_a_voy_min, ' min') + M('De "ya voy" a llegada del comprador', md.voy_a_llegada_comprador_min, ' min') + M('Dueño esperó en el lugar', md.espera_dueno_en_sitio_min, ' min') + M('Mario esperó en el lugar', md.espera_mario_en_sitio_min, ' min');
+  return '<div class="bajo"><div class="panel"><h3>Lo que sigue</h3>' + prox + '</div><div class="panel"><h3>Bitácora de la cita</h3>' + bit + '</div><div class="panel"><h3>Medición</h3>' + med + '</div></div>';
+}
+function pintar() {
+  if (!EST) return; $('hora').textContent = fmt(EST.reloj.ahora_ts);
+  $('app').innerHTML = '<div class="grid">' + columnaPersona('comprador', EST.comprador) + columnaPersona('dueno', EST.dueno) + columnaMario() + '</div>' + panelesBajo();
+  for (const id of ['h-comprador', 'h-dueno', 'h-mario']) { const el = $(id); if (el) el.scrollTop = el.scrollHeight; }
+}
+// ═══ ACCIONES ═══
+async function ocupado(fn) { if (OCUP) return; OCUP = true; document.body.classList.add('cargando'); try { await fn(); } finally { OCUP = false; document.body.classList.remove('cargando'); } }
+async function dice(quien, texto) {
+  texto = String(texto || '').trim(); if (!texto) return; const cid = quien === 'dueno' ? EST.dueno && EST.dueno.chat_id : EST.comprador.chat_id; if (!cid) return;
+  await ocupado(async () => { const a = await call('demo_responder', { chat_id: cid, texto }); if (!a.ok) { toast(a.error || 'No se registró'); return; } const b = await call('seb_turno', { chat_id: cid }); if (b && b.ok === false && b.error) toast(b.error); await refrescar(); });
+}
+async function boton(ev, datos) {
+  const cid = TAB === 'dueno' ? EST.dueno && EST.dueno.chat_id : EST.comprador.chat_id;
+  await ocupado(async () => { const r = await call('cita3_vendedor', { chat_id: cid, evento: ev, datos: datos || null }, { como: MARIO.id }); if (!r.ok) toast(r.error || 'No se pudo'); await refrescar(); });
+}
+async function reloj(body) {
+  await ocupado(async () => { const r = await call('sim3_reloj', Object.assign({ chat_id: CHAT }, body)); if (!r.ok) toast(r.error || 'No se pudo mover el reloj'); else if (r.sin_siguiente) toast('No hay nada programado.'); else if (r.hechas && r.hechas.length) toast(r.hechas.map(x => x.que).join(' · ')); await refrescar(); });
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t || t.disabled) return;
+  if (t.dataset.dice) return dice(t.dataset.dice, t.dataset.t);
+  if (t.dataset.enviar) { const inp = $('in-' + t.dataset.enviar); const v = inp.value; inp.value = ''; return dice(t.dataset.enviar, v); }
+  if (t.dataset.tab) { TAB = t.dataset.tab; return pintar(); }
+  if (t.dataset.boton) { const ev = t.dataset.boton; let datos = t.dataset.datos ? JSON.parse(t.dataset.datos) : null; if (ev === 'cancelar') datos = { razon: ($('f-cancel') || {}).value || '' }; if (['cancelar', 'ya_no_disponible', 'no_se_hizo'].includes(ev) && !confirm('¿Seguro?')) return; return boton(ev, datos); }
+  if (t.dataset.horario) { const dia = ($('f-dia') || {}).value, hora = ($('f-hora') || {}).value; if (!dia || !hora) return toast('Pon día y hora.'); return boton(t.dataset.horario, { dia_ini: dia, hora_ini: hora, razon: ($('f-razon') || {}).value || '' }); }
+  if (t.dataset.mas) return reloj({ accion: 'mas', ms: Number(t.dataset.mas) });
+  if (t.dataset.irts) return reloj({ accion: 'ir', ts: Number(t.dataset.irts) + 1000 });
+  if (t.id === 'b-sig') return reloj({ accion: 'siguiente' });
+  if (t.id === 'b-ir') { const v = $('ir').value; if (!v) return toast('Elige fecha y hora.'); const [dd, hh] = v.split('T'); const [y, mo, da] = dd.split('-').map(Number); const [h, mi] = hh.split(':').map(Number); return reloj({ accion: 'ir', ts: Date.UTC(y, mo - 1, da, h, mi) + TZ }); }
+  if (t.id === 'b-mario') { const inp = $('in-mario'); const v = inp.value.trim(); if (!v) return; inp.value = ''; const cid = TAB === 'dueno' ? EST.dueno.chat_id : EST.comprador.chat_id; return ocupado(async () => { const r = await call('enviar', { chat_id: cid, texto: v, clave: clave('sim3m') }, { como: MARIO.id }); if (!r.ok) toast(r.error || 'No salió'); await refrescar(); }); }
+  if (t.id === 'b-devolver') { const cid = TAB === 'dueno' ? EST.dueno.chat_id : EST.comprador.chat_id; return ocupado(async () => { const r = await call('bot_estado', { chat_id: cid, estado: 'seb' }, { como: MARIO.id }); if (!r.ok) toast(r.error || 'No se pudo'); await refrescar(); }); }
+  if (t.id === 'b-nueva') return abrirNueva();
+  if (t.id === 'n-cancel') { $('dlg').hidden = true; return; }
+  if (t.id === 'n-go') {
+    const nom = $('n-nom').value.trim() || 'Luis'; const tel = '52100000000' + String(10 + Math.floor(Math.random() * 80));
+    return ocupado(async () => { const r = await call('delegar_v2', { telefono: tel, nombre: nom, auto_id: Number($('n-auto').value), entrada: { modo: $('n-modo').value }, clave: clave('sim3') }, { como: MARIO.id }); if (!r.ok || !r.chat_id) { toast(r.error || 'No se pudo delegar'); return; } $('dlg').hidden = true; CHAT = r.chat_id; TAB = 'comprador'; history.replaceState(null, '', '?vendedor=' + VEND + '&chat=' + CHAT); await iniciar(); });
+  }
+});
+document.addEventListener('keydown', e => { if (e.key !== 'Enter' || !e.target.id) return; if (e.target.id === 'in-comprador') { const v = e.target.value; e.target.value = ''; dice('comprador', v); } else if (e.target.id === 'in-dueno') { const v = e.target.value; e.target.value = ''; dice('dueno', v); } else if (e.target.id === 'in-mario') $('b-mario').click(); });
+$('sims').onchange = () => { CHAT = Number($('sims').value) || null; TAB = 'comprador'; history.replaceState(null, '', '?vendedor=' + VEND + (CHAT ? '&chat=' + CHAT : '')); refrescar(); };
+function abrirNueva() { $('dlg').hidden = false; }
+window.abrirNueva = abrirNueva;
+iniciar();
+</script>
+</body>
+</html>
