@@ -1221,7 +1221,7 @@ module.exports = async function handler(req, res) {
             const modoE = MODOS_MSJ.concat(MODOS_ACC).includes(modoRaw) ? modoRaw : 'silencio';
             const esAccion = MODOS_ACC.includes(modoE);
             const openerBase = modoE === 'texto' ? String(body.opener_texto || '') : (modoE === 'bot' ? plantilla : '');
-            const opener = openerBase.replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').replace('{vendedor}', primerNombre).replace('{auto}', autoNombre).trim();
+            const opener = openerBase.replace('{nombre}', nomC ? ' ' + nomC.split(/\s+/)[0] : '').split('{vendedor}').join(primerNombre).replace('{auto}', autoNombre).trim();
             if (body.solo_preview) return R(200, { ok: true, opener, modo: modoE, modos: MODOS_MSJ.concat(MODOS_ACC) });   // la UI pide el machote para dejarlo editar
             if (modoE === 'texto' && !opener) return R(400, { ok: false, error: 'el texto quedó vacío — elige "sin decir nada" si no quieres mensaje' });
             // datos que la acción exige ANTES de delegar (no se delega para luego fallar): cotizar → enganche; cita → fecha y hora
