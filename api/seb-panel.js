@@ -417,6 +417,7 @@ module.exports = async function handler(req, res) {
                     }
                 } catch (e) { console.error('[hablar con]', e.message); }
             }
+            let TURNO_IN = null;
             // UN TURNO POR MENSAJE (timbre idempotente): si ya corrió —o va corriendo— un turno para el ÚLTIMO mensaje del comprador, este no corre.
             try {
                 await run('CREATE TABLE IF NOT EXISTS seb_turnos (chat_id INTEGER NOT NULL, ultimo_in_id INTEGER NOT NULL, ts INTEGER, PRIMARY KEY (chat_id, ultimo_in_id))');
@@ -424,7 +425,16 @@ module.exports = async function handler(req, res) {
                 if (!ui || !ui.m) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: false, motivo: 'sin_entrantes' } });
                 const cl = await run('INSERT OR IGNORE INTO seb_turnos (chat_id, ultimo_in_id, ts) VALUES (?,?,?)', [Number(chS.id), Number(ui.m), Date.now()]);
                 if (!Number(cl.rowsAffected)) return res.status(200).json({ ok: true, chat_id: Number(chS.id), repetido: true, seb: { ok: false, motivo: 'turno_repetido' } });
+                TURNO_IN = Number(ui.m);
             } catch (e) { console.error('[seb_turno] candado:', e.message); }
+            // ══ RÁFAGAS (orden owner 2026-09-26: "si cae un segundo o tercer mensaje se interpreta como LOS mensajes, no como uno inicial"): el turno espera a que el
+            //    comprador termine de escribir; si mientras tanto llega otro mensaje, este turno se retira y el del mensaje nuevo atiende TODO el bloque junto.
+            const ultimoIn = async () => (await query("SELECT id, created_at FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]).catch(() => []))[0] || null;
+            const superado = async () => { if (!TURNO_IN) return false; const u = await ultimoIn(); return !!(u && Number(u.id) !== TURNO_IN); };
+            if (TURNO_IN && !(req.body && req.body.sin_espera)) {
+                for (let k = 0; k < 4; k++) { const u = await ultimoIn(); if (!u || Number(u.id) !== TURNO_IN) break; const falta = 3500 - (Date.now() - Number(u.created_at || 0)); if (!(falta > 0) || falta > 60000) break; await new Promise(r => setTimeout(r, Math.min(falta, 3500))); }
+                if (await superado()) return res.status(200).json({ ok: true, chat_id: Number(chS.id), superado: true, seb: { ok: false, motivo: 'turno_superado' } });
+            }
             // ══ COMPUERTA DE ENTRADA (orden owner 2026-09-24): primer contacto que NO detona la venta → silencio total (sin cerebro, sin citas, sin escalar) ══
             try {
                 const cmp = await COMPUERTA.evaluar({ tenant: tS, chat: chS, autos: await autosDeTenant(tS) });
@@ -470,7 +480,7 @@ module.exports = async function handler(req, res) {
                     // "¿CUÁNDO PUEDO / A QUÉ HORA ABREN?" (orden owner 2026-09-26): se contesta con el horario y se pide día y hora; no se ignora la duda
                     { const nQ = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                       const c3Abierta = CITA3.activo(tS) ? await CITA3.porChat(tS.id, chS.id).catch(() => null) : null;
-                      if (focoL && !(c3Abierta && (c3Abierta.fase || ['confirmada', 'dia_d', 'pausada'].includes(c3Abierta.estado))) && /\b(cuando (puedo|podria|se puede|lo puedo|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ) && !/\b(mis?|tus?) horarios?\b|\b(checo|reviso|veo|chequeo|checando|revisando)\b/.test(nQ)
+                      if (focoL && !(c3Abierta && (c3Abierta.fase || ['confirmada', 'dia_d', 'pausada'].includes(c3Abierta.estado))) && /\b(cuando (puedo|podria|se puede|(?:lo|la|los|las) (?:puedo|podria|podemos)|abren|atienden|estan|es posible)|a que hora(s)? (abren|atienden|cierran|puedo|se puede)|que horario|horarios?\b|que dias (abren|atienden|puedo))/.test(nQ) && !/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|hoy|a las \d)/.test(nQ) && !/\b(mis?|tus?) horarios?\b|\b(checo|reviso|veo|chequeo|checando|revisando)\b/.test(nQ)
                           // LEY 1 (owner 2026-09-26: "nada contesta por palabra"): la palabra solo marca el candidato; la IA confirma que de verdad pregunta el horario del lote
                           && await (async () => { try { const hH = (await query("SELECT direccion, texto FROM mensajes WHERE conversacion_id = ? AND COALESCE(emisor,'') <> 'sistema' ORDER BY id DESC LIMIT 7", [Number(chS.id)])).reverse().slice(0, -1).map(m => ({ direccion: m.direccion, mensaje: m.texto })); const cH = await LIB_CLASIFICADOR.entender({ mensaje: ultimoInTxt, historial: hH, estado: {} }); return cH && cH.intencion_principal === 'cita_ubicacion'; } catch (e) { return false; } })()) {
                           const HR = CITAF.horarioDe(tS); const DN = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']; const hm = h => { const hh = Math.floor(h), mm = Math.round((h % 1) * 60); return (hh % 12 || 12) + (mm ? ':' + String(mm).padStart(2, '0') : '') + ' ' + (hh < 12 ? 'am' : 'pm'); };
@@ -523,6 +533,17 @@ module.exports = async function handler(req, res) {
             if (out.cita_datos && CITAF.activo(tS)) {   // el cerebro cerró una cita (día + hora en sus letras) → entra por la MISMA puerta de cuándo; el acuse lo da esa puerta
                 try { const tsC = citasVivas.resolverCitaTs(out.cita_datos.fecha, out.cita_datos.hora); if (tsC) { const iso = citasVivas.tsAIsoHora(tsC); const rC = await CITAF.vendedor({ tenant: tS, chat: chS, evento: 'agenda', datos: { dia_ini: iso.fecha_iso, hora_ini: iso.hora_hhmm }, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS) }); out = { ok: !!rC.ok, modo: 'cita_flex', tipo: 'agenda_cerebro', segmentos: [], motivo: rC.error || null }; } else out = { ok: false, escalar_owner: true, escala_motivo: 'Seb cerró una cita pero no pude amarrar la fecha — revísala tú' }; } catch (e) { out = { ok: false, escalar_owner: true, escala_motivo: 'error al agendar: ' + e.message }; }
             }
+            // RÁFAGA: si entró otro mensaje mientras pensaba, no se manda nada — el turno nuevo contesta el bloque completo
+            if (!soloTexto && await superado()) return { out: { ok: false, motivo: 'turno_superado' }, enviados: [] };
+            // RÁFAGA MIXTA (owner 2026-09-26: "un mensaje de escalar seguido de uno respondible → se escaló todo y no se contestó su duda"): si el bloque trae 2+ mensajes
+            // y el conjunto escala, se contesta lo que sí se puede (el último mensaje solo) y lo demás escala igual
+            if (!soloTexto && out.escalar_owner) {
+                try {
+                    const ult = (await query("SELECT direccion, emisor, texto FROM mensajes WHERE conversacion_id = ? ORDER BY id DESC LIMIT 12", [Number(chS.id)])).filter(m => m.emisor !== 'sistema');
+                    const bloque = []; for (const m of ult) { if (m.direccion !== 'in') break; bloque.unshift(String(m.texto || '')); }
+                    if (bloque.length >= 2 && bloque[bloque.length - 1].trim().length >= 4) { const sub = await correrCerebro(bloque[bloque.length - 1]); if (sub && sub.out && sub.out.ok) out.escala_motivo = String(out.escala_motivo || '') + ' (el resto del bloque sí se contestó)'; }
+                } catch (e) { console.error('[rafaga mixta]', e.message); }
+            }
             // ── ENVIAR lo que el cerebro decidió, por la PUERTA DE MENSAJES de este universo (sandbox → se pinta en el hilo; real → WhatsApp) ──
             const base = 'seb:' + Number(chS.id) + ':' + Date.now() + (soloTexto ? ':c' : ''); let n = 0; const asisS = await asistenteDe(tS, chS.id);
             const mandarS = async (extra) => { const e = await MSJ.enviar(Object.assign({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_turno', voz_gen: VOZ_GEN }, extra)); enviados.push({ ok: !!e.ok, error: e.error || null }); return e; };
@@ -539,7 +560,7 @@ module.exports = async function handler(req, res) {
             try { if (tS.demo) await DEMO.sistema(tS, telS, nota); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'seb-nota:' + ts, ts, 'out', 'sistema', nota, 'text', 1, ts]); } } catch (e) { }
                 if (!out.ok && !out.escalar_owner && /anthropic (4\d\d|5\d\d)|credit balance|overloaded|ETIMEDOUT|fetch failed/i.test(String(out.error || out.motivo || ''))) { out.escalar_owner = true; out.escala_motivo = 'la IA no respondió (' + String(out.error || out.motivo).slice(0, 40) + '): contesta tú'; }   // JAMÁS SILENCIO: si la IA se cae, el mensaje es de un humano
                 // LEY 4 (owner 2026-09-26: "todo se contesta eficaz o escala"): si el cerebro no contestó, el mensaje traía contenido y no fue un silencio a propósito → ESCALA
-                if (!out.ok && !out.escalar_owner && !/^(cortesia_silencio|relleno_silencio|en_curso_silencio|dueno|sin_entrantes|gobernador_silencio|turno_repetido|fuera_flujo)$/.test(String(out.motivo || ''))) {
+                if (!out.ok && !out.escalar_owner && !/^(cortesia_silencio|relleno_silencio|en_curso_silencio|dueno|sin_entrantes|gobernador_silencio|turno_repetido|turno_superado|fuera_flujo)$/.test(String(out.motivo || ''))) {
                     const uiE = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]).catch(() => []))[0]; const nE = String((uiE && uiE.texto) || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                     if (nE.length >= 4 && !/^\W*(gracias|muchas gracias|ok|okey|va|vale|sale|perfecto|listo|bien|excelente|de acuerdo|jaja+|ja|mm+|si|sip|no|nel)\W*(gracias)?\W*$/.test(nE)) { out.escalar_owner = true; out.escala_motivo = 'Seb no tuvo respuesta (' + String(out.motivo || out.error || 'sin motivo').slice(0, 40) + '): "' + String(uiE.texto).slice(0, 70) + '"'; }
                 }
@@ -1220,7 +1241,9 @@ module.exports = async function handler(req, res) {
             const autosI = await autosDeTenant(t); const autoI = autosI.find(a => Number(a.id) === Number(body.auto_id) || Number(a.fyradrive_web_id) === Number(body.auto_id)) || {};
             const faltaEnganche = plan.herramientas.includes('cotizar') && !(Number(plan.enganche) > 0);
             const vendedorN = String((t.config && (t.config.vendedor_nombre || t.config.recibe)) || '').trim();
-            const burbujas = plan.saludar === false ? [] : PD.saludo({ nombreComprador: o.nombre || body.nombre, lote: PD.capPalabras(t.nombre), vendedor: vendedorN, herramientas: plan.herramientas, faltaEnganche });
+            // 3 PARTES (owner 2026-09-26): al delegar, Seb se presenta como asistente del vendedor que delegó ("si ocupas hablar con él, me dices")
+            let asisI = null; if (CITA3.activo(t)) { asisI = (SES && SES.miembro && SES.miembro.nombre) || ((await query("SELECT nombre FROM vendedores_universo WHERE tenant_id = ? AND activo = 1 ORDER BY id LIMIT 1", [Number(t.id)]).catch(() => []))[0] || {}).nombre || null; if (asisI) asisI = String(asisI).trim().split(/\s+/)[0]; }
+            const burbujas = plan.saludar === false ? [] : PD.saludo({ nombreComprador: o.nombre || body.nombre, lote: PD.capPalabras(t.nombre), vendedor: vendedorN, herramientas: plan.herramientas, faltaEnganche, asistenteDe: asisI });
             let sal = null; if (burbujas.length) sal = await MSJ.enviar({ tenantId: Number(t.id), chatId: Number(chatI.id), origen: 'delegar', clave: clave + ':puente', manual: false, accion: 'delegar_puente', segmentos: burbujas, sesionId });
             const hechas = [], errores = [];
             for (const h of plan.herramientas) {
@@ -1468,7 +1491,7 @@ module.exports = async function handler(req, res) {
                 if (TSEB) mr = mr.filter((m, i) => !(i > 0 && m.direccion === 'in' && mr[i - 1].direccion === 'in' && String(mr[i - 1].texto || '').trim() === String(m.texto || '').trim() && Number(m.ts) - Number(mr[i - 1].ts) < 60000));
                 let rows = mr.map(m => ({ mensaje: m.texto || '', direccion: m.direccion, ts: Number(m.ts), ai: Number(m.ai_generated) || 0, emisor: m.emisor || '' }));
                 if (resetTsOA) rows = rows.filter(m => m.ts >= resetTsOA);
-                if (TSEB && req.body && req.body.solo_texto) { while (rows.length && rows[rows.length - 1].direccion === 'in') rows.pop(); rows.push({ mensaje: String(req.body.solo_texto), direccion: 'in', ts: Date.now(), ai: 0 }); }   // mensaje con varias partes: aquí solo entra la parte COMERCIAL
+                if (TSEB && req.body && req.body.solo_texto) { while (rows.length && (rows[rows.length - 1].direccion === 'in' || rows[rows.length - 1].emisor === 'sistema')) rows.pop(); rows.push({ mensaje: String(req.body.solo_texto), direccion: 'in', ts: Date.now(), ai: 0 }); }   // mensaje con varias partes: aquí solo entra la parte COMERCIAL
                 mensajes = rows;
             }
             const entrantes = mensajes.filter(m => m.direccion === 'in');
@@ -1604,8 +1627,8 @@ module.exports = async function handler(req, res) {
             }
             // ESTADO por # de RÁFAGAS salientes nuestras (respeta el reset).
             let bursts = 0, prevDir = null, lastOutIdx = -1;
-            mensajes.forEach((m, i) => { if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });
-            const lastDir = mensajes[mensajes.length - 1].direccion;
+            mensajes.forEach((m, i) => { if (m.emisor === 'sistema') return; if (m.direccion === 'out') { if (prevDir !== 'out') bursts++; lastOutIdx = i; } prevDir = m.direccion; });   // las notas internas no son respuestas de Seb: no parten la ráfaga del comprador
+            const lastDir = ((mensajes.filter(m => m.emisor !== 'sistema').slice(-1)[0]) || mensajes[mensajes.length - 1]).direccion;
 
             // ══ IGNACIO RECEPCIÓN EN VIVO (orden owner 2026-07-16): agente para VENDEDORES
             // ("quiero vender mi auto"). Despierta SOLO en primer contacto claro (bursts 0 +
@@ -3166,7 +3189,7 @@ module.exports = async function handler(req, res) {
                         if (sinGancho && !tp.pendiente) { reanudo = 'nada'; }
                         else if (tp.pendiente) {
                             let outT = null; const resT = { setHeader() { }, status() { return this; }, json(j) { outT = j; return this; }, end() { return this; } };
-                            await module.exports({ method: 'POST', query: { action: 'seb_turno', vendedor: String(TV) }, body: { chat_id: Number(c.id) }, headers: { 'x-api-key': process.env.K_PANEL || '', 'user-agent': 'voz-reanudar' }, socket: { remoteAddress: '127.0.0.1' } }, resT);
+                            await module.exports({ method: 'POST', query: { action: 'seb_turno', vendedor: String(TV) }, body: { chat_id: Number(c.id), sin_espera: true }, headers: { 'x-api-key': process.env.K_PANEL || '', 'user-agent': 'voz-reanudar' }, socket: { remoteAddress: '127.0.0.1' } }, resT);
                             reanudo = 'turno'; var turnoR = outT;
                         } else if (Number(tV.config && tV.config.seb_auto) === 1 && !(ultOut && ultOut.emisor === 'dueno')) {   // si lo último lo dijo el vendedor a mano, él ya hizo el movimiento: no se empalma un gancho
                             const LIB_ETAPA3 = require('../lib/seb/etapa3.js'); const est3 = await LIB_ETAPA3.estadoConv(Number(c.id));

@@ -1272,7 +1272,15 @@ const keyDe = (m) => m.id != null && m.id !== '' ? 'id:' + m.id : (m.msg_id ? 'm
 // (el simulador antepone "[prueba] ", y el servidor puede recortar espacios): así no se pinta doble.
 const normTxt = (t) => String(t || '').replace(/^\s*\[prueba\]\s*/i, '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 160);
 function textoDe(m){ if (m.texto) return m.texto; if (m.media) return m.media.tipo === 'imagen' ? 'Foto' : m.media.tipo === 'ubicacion' ? 'Ubicación' : m.media.tipo === 'audio' ? 'Audio' : 'Archivo'; return ''; }
+// MEDIA DE RESPALDO: los mensajes que llegan en vivo pueden traer la referencia cruda ("ubic-img:291", "Nombre|||lat|||lng|||link"); se convierten en imagen / tarjeta de ubicación
+function normMedia(m){
+  if (!m || m.media) return m; const tx = String(m.texto || '');
+  const ub = tx.match(/^ubic-img:(\d+)/); if (ub) { m.media = { tipo: 'imagen', url: '/api/seb-panel?action=ubic_img&auto_id=' + ub[1] }; m.texto = '[captura del punto]'; return m; }
+  const p = tx.split('|||'); if (p.length >= 3 && isFinite(Number(p[1])) && isFinite(Number(p[2])) && String(p[1]).trim() !== '') { m.media = { tipo: 'ubicacion', url: (p[3] && /^https?:/.test(p[3])) ? p[3] : 'https://maps.google.com/?q=' + p[1] + ',' + p[2], nombre: p[0] || null, lat: Number(p[1]), lng: Number(p[2]) }; m.texto = '[ubicación] ' + (p[0] || ''); return m; }
+  return m;
+}
 function mezclar(h, mensajes){
+  (mensajes || []).forEach(normMedia);
   // DEDUP (bug duplicados 2026-09-15): un mismo mensaje llega por varias vías con llaves distintas —
   //   · timbre (id null, msg_id X) y luego el hilo (id N, msg_id X)  → se FUNDE por msg_id
   //   · optimista mío (local) y luego el eco del servidor            → se FUNDE por texto+tiempo
@@ -1324,7 +1332,10 @@ async function recargarHilo(id){
   return r;
 }
 // refresco incremental del hilo abierto (lo nuevo se inserta; los ecos actualizan su burbuja)
-function refrescarHilo(id){ if (CHAT_ID !== id) return Promise.resolve(); return cargarHilo(id).then(x => { if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); return x; }).catch(() => {}); }
+function ordenOk(){ let prev = -Infinity; for (const x of $('msgs').querySelectorAll('.msg,.sis')) { const t = Number(x.dataset.ts || 0); if (t < prev) return false; prev = t; } return true; }
+// ORDEN (owner 2026-09-26: "renderiza horrible el orden"): si algo quedó fuera de lugar en pantalla, se repinta el hilo ya ordenado
+function asegurarOrden(id){ if (CHAT_ID !== id) return; if (!ordenOk()) { const h = hiloDe(id); h.msgs.sort((a, b) => ms(a.ts) - ms(b.ts)); pintarMensajes(h); irAlFondo(true); } }
+function refrescarHilo(id){ if (CHAT_ID !== id) return Promise.resolve(); return cargarHilo(id).then(x => { setTimeout(() => asegurarOrden(id), 0); if (x.ok && x.nuevos && CHAT_ID === id) x.nuevos.forEach(mm => mm._eco ? actualizarBurbuja(mm) : insertarBurbuja(mm, { auto: true })); return x; }).catch(() => {}); }
 function sincronizarFilaConChat(ch){
   const c = INBOX.rows.get(ch.chat_id); if (!c) return;
   let cambio = false;
@@ -1493,7 +1504,7 @@ function pintarPensando(on){ const e = $('ch-estado'); if (!e) return; if (on) {
 function toggleQuien(){ QUIEN = QUIEN === 'comprador' ? 'vendedor' : 'comprador'; pintarQuien(); TX.focus(); }
 // UNA COLA POR CHAT: dos mensajes seguidos del comprador se registran y corren su turno EN ORDEN (jamás dos `seb_turno` en paralelo
 // ni un "pensando" que se apaga mientras el otro sigue). Cada llamada devuelve { ok } para que quien la invoque pueda reaccionar.
-const COLA_COMP = new Map();
+const COLA_COMP = new Map(); const TURNOS_VIVOS = new Map();
 function enviarComoComprador(id, texto){
   const prev = COLA_COMP.get(id) || Promise.resolve();
   const p = prev.catch(() => {}).then(() => enviarComoCompradorYa(id, texto)).catch(e => ({ ok: false, error: e && e.message }));
@@ -1502,7 +1513,7 @@ function enviarComoComprador(id, texto){
 }
 async function enviarComoCompradorYa(id, texto){
   const h = hiloDe(id); const local = clave('comp', id);
-  const m = { local, dir: 'in', emisor: 'comprador', texto, ts: Date.now(), estado: 'enviado' };
+  const tsUlt = h.msgs.reduce((mx, x) => Math.max(mx, ms(x.ts) || 0), 0); const m = { local, dir: 'in', emisor: 'comprador', texto, ts: Math.max(Date.now(), tsUlt + 1), estado: 'enviado' };   // nace al fondo aunque el reloj de la prueba vaya adelantado
   h.keys.add(keyDe(m)); h.msgs.push(m); if (CHAT_ID === id) insertarBurbuja(m); actualizarFilaLocal(id, m);
   const tel = String((h.chat && h.chat.telefono) || (INBOX.rows.get(id) || {}).telefono || '').replace(/\D/g, '');
   const r = await apiPost('demo_responder', { chat_id: id, telefono: tel, texto });
@@ -1512,13 +1523,15 @@ async function enviarComoCompradorYa(id, texto){
     avisoError(r.error || 'No se pudo registrar el mensaje'); return { ok: false, error: r.error };
   }
   // la burbuja local adopta el folio del servidor → al recargar el hilo se FUNDE con su renglón (jamás doble, aunque el reloj del teléfono difiera)
-  if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) m.ts = r.ts; h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); h.keys.add('mid:' + r.msg_id); }
+  if (r.msg_id) { m.msg_id = r.msg_id; if (r.ts) { m.ts = r.ts; const elM = $('msgs').querySelector('[data-k="' + CSS.escape(m._kDom || keyDe(m)) + '"]'); if (elM) elM.dataset.ts = String(ms(r.ts)); setTimeout(() => asegurarOrden(id), 0); } h.porMid = h.porMid || new Map(); h.porMid.set(r.msg_id, m); h.keys.add('mid:' + r.msg_id); }
   // SEB AUTÓNOMO (universos con seb_auto): tras registrar el entrante se pide el turno completo del cerebro (opener → continuación → etapa 3)
   if (r.seb_auto) {
-    pintarPensando(true); let t;
-    try { t = await apiPost('seb_turno', { chat_id: id }); } finally { pintarPensando(false); }
-    if (!t || !t.ok) avisoError('Seb no pudo contestar: ' + ((t && t.error) || 'sin respuesta del servidor'));
-    await refrescarHilo(id); cfBarra(id); return { ok: true, turno: t };
+    // RÁFAGAS: el turno se pide SIN bloquear la cola (el siguiente mensaje se registra al instante). El servidor espera a que termines de escribir;
+    // si mandas otro, el turno viejo se retira y el nuevo contesta todo el bloque junto (como en WhatsApp real).
+    const n0 = TURNOS_VIVOS.get(id) || 0; TURNOS_VIVOS.set(id, n0 + 1); if (!n0) pintarPensando(true);
+    apiPost('seb_turno', { chat_id: id }).then(t => { if (t && t.ok === false && !t.superado) avisoError('Seb no pudo contestar: ' + (t.error || 'sin respuesta del servidor')); })
+      .catch(() => {}).finally(async () => { const n = (TURNOS_VIVOS.get(id) || 1) - 1; if (n <= 0) TURNOS_VIVOS.delete(id); else TURNOS_VIVOS.set(id, n); if (!TURNOS_VIVOS.get(id)) pintarPensando(false); await refrescarHilo(id); cfBarra(id); });
+    return { ok: true };
   }
   setTimeout(() => refrescarHilo(id), 700); setTimeout(() => refrescarHilo(id), 3500);
   return { ok: true };
