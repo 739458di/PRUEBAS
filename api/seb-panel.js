@@ -381,7 +381,7 @@ module.exports = async function handler(req, res) {
             }
             if (action === 'citaf_vendedor') { rV = await CITAF.vendedor({ tenant: tC, chat: chC, evento: String(req.body.evento || ''), resultado: req.body.resultado, razon: req.body.razon, datos: req.body.datos || null, auto: await autoCitaf(tC, chC), io: ioCitaf(tC, chC) }); if (!rV.ok) return res.status(400).json(rV); }
             const st = await CITAF.estado({ tenant: tC, chat: chC }); st.voz = VOZ.vozDe(chC);
-            if (CITA3.activo(tC)) { try { if (String(chC.canal || '') === 'dueno') { const ab = await CITA3.abiertasDueno(tC.id, chC.id); if (ab[0]) { st.tres = await CITA3.estado(ab[0].cita_id); st.tres.desde = 'dueno'; st.tres.abiertas = ab.map(x => ({ cita_id: x.cita_id, auto: x.auto_nombre })); } } else { const c3 = await CITA3.porChat(tC.id, chC.id) || (st.cita ? await CITA3.porCita(st.cita.id) : null); if (c3) { st.tres = await CITA3.estado(c3.cita_id); st.tres.desde = 'comprador'; } } } catch (e) { } }
+            if (CITA3.activo(tC)) { try { if (String(chC.canal || '') === 'dueno') { const ab = await CITA3.abiertasDueno(tC.id, chC.id); const elegida = ab.find(x => Number(x.cita_id) === Number(req.body.cita_id)) || ab[0]; if (elegida) { st.tres = await CITA3.estado(elegida.cita_id); st.tres.desde = 'dueno'; st.tres.abiertas = ab.map(x => ({ cita_id: x.cita_id, auto: x.auto_nombre })); } } else { const c3 = await CITA3.porChat(tC.id, chC.id) || (st.cita ? await CITA3.porCita(st.cita.id) : null); if (c3) { st.tres = await CITA3.estado(c3.cita_id); st.tres.desde = 'comprador'; } } } catch (e) { } }
             return res.status(200).json(Object.assign({ hechas, vendedor: rV }, st));
         }
         if (action === 'seb_turno' && req.method === 'POST') {

@@ -2232,10 +2232,10 @@ let CF = null;
 // ═══ FRANJA DE LA CITA DE 3 PARTES dentro del chat (sandbox y real): los mismos botones de Mario, y en el sandbox "Siguiente movimiento" ═══
 function c3Franja(r){
   const box = $('c3s'); if (!box) return; const T = r && r.tres; if (!T || ['realizada', 'cancelada', 'no_se_hizo'].includes(T.estado) && !(TENANT && TENANT.demo)) { box.hidden = true; box.innerHTML = ''; return; }
-  const enD = T.desde === 'dueno'; const d = T.dia || {}; const B = (v, txt, cls, x) => '<button type="button" class="' + (cls || '') + '" data-c3="' + v + '"' + (x ? " data-x='" + esc(JSON.stringify(x)) + "'" : '') + '>' + esc(txt) + '</button>';
+  const enD = T.desde === 'dueno'; const d = T.dia || {}; const B = (v, txt, cls, x) => { if (enD) x = Object.assign({ cita_id: T.cita_id }, x || {}); return '<button type="button" class="' + (cls || '') + '" data-c3="' + v + '"' + (x ? " data-x='" + esc(JSON.stringify(x)) + "'" : '') + '>' + esc(txt) + '</button>'; }; const B0 = (v, txt, cls, x) => '<button type="button" class="' + (cls || '') + '" data-c3="' + v + '"' + (x ? " data-x='" + esc(JSON.stringify(x)) + "'" : '') + '>' + esc(txt) + '</button>';
   const vt = (k, n) => '<span class="pl' + (T.ok[k] ? ' ok' : '') + '">' + (T.ok[k] ? '✓ ' : '… ') + n + '</span>';
   const fT = { espera_vendedor: 'Le toca a ' + ((T.vendedor && T.vendedor.nombre) || 'Mario').split(' ')[0] + ' confirmar', espera_comprador: 'Esperando al comprador', espera_dueno: 'Esperando el sí del dueño', pausa_dueno: 'El dueño necesita a Mario' }[T.fase] || '';
-  let h = '<div class="t">' + ((T.estado === 'ronda' || T.fase) ? vt('comprador', 'Comprador') + vt('vendedor', ((T.vendedor && T.vendedor.nombre) || 'Mario').split(' ')[0]) + vt('dueno', 'Dueño') + (fT ? '<span>' + esc(fT) + '</span>' : '') : '') +
+  let h = (enD && T.abiertas && T.abiertas.length > 1 ? '<div class="bb"><span style="align-self:center;font-weight:600">Este dueño tiene ' + T.abiertas.length + ' citas abiertas:</span>' + T.abiertas.map(a => B0('ver_cita', (Number(a.cita_id) === Number(T.cita_id) ? '● ' : '') + a.auto, Number(a.cita_id) === Number(T.cita_id) ? 'ok' : '', { cita_id: a.cita_id })).join('') + '</div>' : '') + '<div class="t">' + ((T.estado === 'ronda' || T.fase) ? vt('comprador', 'Comprador') + vt('vendedor', ((T.vendedor && T.vendedor.nombre) || 'Mario').split(' ')[0]) + vt('dueno', 'Dueño') + (fT ? '<span>' + esc(fT) + '</span>' : '') : '') +
     (['confirmada', 'dia_d', 'pausada'].includes(T.estado) && !T.fase ? ['ok_c:Comprador', 'ok_d:Dueño', 'ok_v:Mario', 'verde:Luz verde', 'voy_c:Va el comprador', 'llego_c:Llegó el comprador'].map(x => { const [k, n] = x.split(':'); return '<span class="pl' + (d[k] ? ' ok' : '') + '">' + (d[k] ? '✓ ' : '') + n + '</span>'; }).join('') : '') + '</div>';
   let bb = '';
   if (['ronda', 'confirmada', 'dia_d', 'pausada'].includes(T.estado)) {
@@ -2254,10 +2254,11 @@ function c3Franja(r){
 async function c3Accion(v, x){
   const id = CHAT_ID; if (!id) return; let r;
   if (v === 'nuevo') { const nh = $('c3-nh'); if (nh) nh.hidden = !nh.hidden; return; }
+  if (v === 'ver_cita') { C3_CITA = x && x.cita_id; await cfBarra(id); return; }
   if (v === 'siguiente') { r = await apiPost('citaf_reloj', { chat_id: id, accion: 'siguiente' }); if (r && r.hechas && r.hechas.length) aviso(r.hechas.map(h => h.que).join(' · ')); else if (r && r.sin_siguiente) aviso('No hay nada programado.'); }
   else {
     let datos = x || null; let ev = v;
-    if (v === 'nuevo_ok') { const dd = ($('c3-dia') || {}).value, hh = ($('c3-hora') || {}).value; if (!dd || !hh) { aviso('Pon día y hora.'); return; } ev = 'nuevo_horario'; datos = { dia_ini: dd, hora_ini: hh, razon: ($('c3-razon') || {}).value || 'comprador' }; }
+    if (v === 'nuevo_ok') { const dd = ($('c3-dia') || {}).value, hh = ($('c3-hora') || {}).value; if (!dd || !hh) { aviso('Pon día y hora.'); return; } ev = 'nuevo_horario'; datos = Object.assign({ dia_ini: dd, hora_ini: hh, razon: ($('c3-razon') || {}).value || 'comprador' }, C3_CITA ? { cita_id: C3_CITA } : {}); }
     if (v === 'cancelar') { const rz = prompt('Razón: no puede el comprador · no puede el dueño · no puedo yo · ya no hay venta', 'no puede el comprador'); if (rz == null) return; datos = { razon: rz }; }
     if (v === 'ya_no_disponible' && !confirm('¿El auto ya no está disponible? Se cancela la cita.')) return;
     r = await apiPost('cita3_vendedor', { chat_id: id, evento: ev, datos }); if (!r || !r.ok) { aviso((r && r.error) || 'No se pudo'); }
@@ -2265,10 +2266,12 @@ async function c3Accion(v, x){
   await refrescarHilo(id); await cfBarra(id);
 }
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#c3s button[data-c3]'); if (!b) return; e.preventDefault(); c3Accion(b.dataset.c3, b.dataset.x ? JSON.parse(b.dataset.x) : null); });
+let C3_CITA = null, C3_CHAT = null;
 async function cfBarra(id){
   const b = $('cf-bar'); if (!b) return;
   if (!(TENANT && TENANT.citas_flex)) { b.hidden = true; return; }
-  const r = await apiPost('citaf_estado', { chat_id: id }).catch(() => null); if (CHAT_ID !== id || !r || !r.ok) return;
+  if (C3_CHAT !== id) { C3_CHAT = id; C3_CITA = null; }
+  const r = await apiPost('citaf_estado', Object.assign({ chat_id: id }, C3_CITA ? { cita_id: C3_CITA } : {})).catch(() => null); if (CHAT_ID !== id || !r || !r.ok) return;
   cfPintarBarra(r); if (CF && CF.id === id) cfPintar(r);
 }
 function cfPintarBarra(r){
