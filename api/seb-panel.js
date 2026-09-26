@@ -391,6 +391,9 @@ module.exports = async function handler(req, res) {
             if (!(conPuente || conPanel || MAESTRA || (SES && Number(SES.tenant_id) === Number(tS.id)))) return res.status(401).json({ ok: false, error: 'sin permiso' });
             const chS = await U.chatPorId(Number(req.body.chat_id) || 0); if (!chS || Number(chS.tenant_id) !== Number(tS.id)) return res.status(404).json({ ok: false, error: 'chat inexistente en este universo' });
             const telS = String(chS.telefono);
+            const AGENTE = !!(tS.config && Number(tS.config.agente) === 1);   // SEB AGENTE (owner 2026-09-27): un agente con herramientas reemplaza la cadena vieja del cerebro
+            // MARIO AGREGADOR: si Mario tomó el chat con el botón y lleva 30 min sin escribir, Seb regresa solo (ya no hay que picar "Devolver a Seb")
+            if (AGENTE && VOZ.vozDe(chS) === 'humano' && String(chS.canal || '') !== 'dueno') { try { const um = (await query("SELECT MAX(ts) t FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND COALESCE(ai_generated,0) = 0 AND COALESCE(emisor,'') <> 'sistema'", [Number(chS.id)]))[0]; const ahoraM = Date.now() + await CITAF.offsetDe(chS.id); if (!um || !um.t || ahoraM - Number(um.t) > 30 * 60000) { await VOZ.devolver({ tenant: tS, chat: chS }); chS.estado_bot = 'seb'; } } catch (e) { } }
             // ══ LA VOZ (human-on-the-loop): si el vendedor tiene la voz, Seb NO corre (ni cerebro ni lector de citas); el mensaje se le reenvía a su WhatsApp una vez ══
             if (VOZ.vozDe(chS) === 'humano') {
                 const uiH = (await query("SELECT id, msg_id, texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0];
@@ -425,14 +428,14 @@ module.exports = async function handler(req, res) {
                 if (!ui || !ui.m) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: false, motivo: 'sin_entrantes' } });
                 const cl = await run('INSERT OR IGNORE INTO seb_turnos (chat_id, ultimo_in_id, ts) VALUES (?,?,?)', [Number(chS.id), Number(ui.m), Date.now()]);
                 if (!Number(cl.rowsAffected)) return res.status(200).json({ ok: true, chat_id: Number(chS.id), repetido: true, seb: { ok: false, motivo: 'turno_repetido' } });
-                TURNO_IN = Number(ui.m);
+                TURNO_IN = Number(ui.m); try { MSJ.TURNO.enterWith({ chatId: Number(chS.id), inId: TURNO_IN }); } catch (e) { }   // candado de turno en la puerta de salida
             } catch (e) { console.error('[seb_turno] candado:', e.message); }
             // ══ RÁFAGAS (orden owner 2026-09-26: "si cae un segundo o tercer mensaje se interpreta como LOS mensajes, no como uno inicial"): el turno espera a que el
             //    comprador termine de escribir; si mientras tanto llega otro mensaje, este turno se retira y el del mensaje nuevo atiende TODO el bloque junto.
             const ultimoIn = async () => (await query("SELECT id, created_at FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]).catch(() => []))[0] || null;
             const superado = async () => { if (!TURNO_IN) return false; const u = await ultimoIn(); return !!(u && Number(u.id) !== TURNO_IN); };
             if (TURNO_IN && !(req.body && req.body.sin_espera)) {
-                for (let k = 0; k < 4; k++) { const u = await ultimoIn(); if (!u || Number(u.id) !== TURNO_IN) break; const falta = 3500 - (Date.now() - Number(u.created_at || 0)); if (!(falta > 0) || falta > 60000) break; await new Promise(r => setTimeout(r, Math.min(falta, 3500))); }
+                for (let k = 0; k < 12; k++) { const u = await ultimoIn(); if (!u || Number(u.id) !== TURNO_IN) break; const falta = 10000 - (Date.now() - Number(u.created_at || 0)); if (!(falta > 0) || falta > 60000) break; await new Promise(r => setTimeout(r, Math.min(falta, 2500))); }   // 10 s de silencio del comprador antes de contestar (orden owner: que alcance a leer los mensajes completos)
                 if (await superado()) return res.status(200).json({ ok: true, chat_id: Number(chS.id), superado: true, seb: { ok: false, motivo: 'turno_superado' } });
             }
             // ══ COMPUERTA DE ENTRADA (orden owner 2026-09-24): primer contacto que NO detona la venta → silencio total (sin cerebro, sin citas, sin escalar) ══
@@ -444,6 +447,7 @@ module.exports = async function handler(req, res) {
                     return res.status(200).json({ ok: true, chat_id: Number(chS.id), compuerta: cmp, seb: { ok: false, motivo: 'fuera_flujo' } });
                 }
             } catch (e) { console.error('[compuerta]', e.message); }
+            if (await superado()) return res.status(200).json({ ok: true, chat_id: Number(chS.id), superado: true, seb: { ok: false, motivo: 'turno_superado' } });
             if (CITAF.activo(tS) && CITA3.activo(tS)) {   // 3 partes (ANTES que el lote: una propuesta esperando su respuesta manda sobre el horario genérico): si la ronda espera la respuesta del COMPRADOR a una contrapropuesta, se lee aquí (sí / no / otra fecha → sigue al motor)
                 try { const uiC = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const rC = await CITA3.entranteComprador({ tenant: tS, chat: chS, texto: (uiC && uiC.texto) || '' }); if (rC.manejado) return res.status(200).json({ ok: true, chat_id: Number(chS.id), cita3: rC, seb: { ok: true, modo: 'cita3', tipo: rC.evento, segmentos: 0 } }); } catch (e) { console.error('[cita3 comprador]', e.message); }
             }
@@ -451,7 +455,7 @@ module.exports = async function handler(req, res) {
             //    (a) nombra un auto del catálogo → foco + ficha · (b) sin foco → pregunta qué busca / filtra su inventario / lista y pide elegir ·
             //    (c) cita con ≥2 autos en el historial y sin nombrar cuál → se pregunta · (d) contesta cuál → foco y se pide el cuándo.
             const esLote = Number(tS.id) !== 0;
-            if (esLote) {
+            if (esLote && !AGENTE) {   // con el agente, las reglas de palabras que contestaban solas se quitan: el agente lee el bloque completo
                 try {
                     const catL = await autosDeTenant(tS); const catE = await LOTE.enriquecer(catL);
                     const uiL = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const ultimoInTxt = (uiL && uiL.texto) || '';
@@ -492,7 +496,8 @@ module.exports = async function handler(req, res) {
                       } }
                     // SALUDO O CORTESÍA con auto en foco: no es algo que escalar (antes "hola" entregaba la voz y Seb quedaba mudo)
                     { const nS = ultimoInTxt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                      if (focoL && nS.length <= 30 && /^\W*(hola|holi|buen(os|as)?( dias| tardes| noches)?|que tal|hey|saludos|que onda)\W*$/.test(nS)) { const asisG = await asistenteDe(tS, chS.id); const nomG = String(chS.nombre || '').trim().split(/\s+/)[0]; await mandarL('¡Qué tal' + (nomG && !/^\+?\d/.test(nomG) ? ' ' + nomG : '') + '! Aquí estoy para ayudarte con el ' + focoL.nombre + (asisG ? '' : '') + '. ¿Qué te gustaría saber?'); await notaL('🏬 saludo (sin escalar)'); return salirL('saludo', 1); }
+                      if (focoL && nS.length <= 30 && /^\W*(hola|holi|buen(os|as)?( dias| tardes| noches)?|que tal|hey|saludos|que onda)\W*$/.test(nS) && !(await query("SELECT 1 FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND COALESCE(emisor,'') <> 'sistema' LIMIT 1", [Number(chS.id)]).catch(() => []))[0]) { /* saludo solo: se saluda SOLO si Seb no ha hablado; si ya habló, es cortesía (owner 2026-09-26: "qué tal" tras la cotización no se contesta) */ const asisG = await asistenteDe(tS, chS.id); const nomG = String(chS.nombre || '').trim().split(/\s+/)[0]; await mandarL('¡Qué tal' + (nomG && !/^\+?\d/.test(nomG) ? ' ' + nomG : '') + '! Aquí estoy para ayudarte con el ' + focoL.nombre + (asisG ? '' : '') + '. ¿Qué te gustaría saber?'); await notaL('🏬 saludo (sin escalar)'); return salirL('saludo', 1); }
+                      if (focoL && nS.length <= 30 && /^\W*(hola|holi|buen(os|as)?( dias| tardes| noches)?|que tal|hey|saludos|que onda)\W*$/.test(nS)) { await notaL('🏬 saludo de cortesía (Seb ya había hablado: sin respuesta, sin escalar)'); return salirL('saludo_cortesia', 0); }
                       if (focoL && nS.length <= 25 && /^\W*(gracias|muchas gracias|ok|okey|va|sale|perfecto|excelente|listo|de nada|👍)\W*$/.test(nS) && !(CITA3.activo(tS) && await CITA3.porChat(tS.id, chS.id))) { await notaL('🏬 cortesía (sin respuesta, sin escalar)'); return salirL('cortesia', 0); } }
                     // (b) sin foco → el lote pregunta / filtra / lista
                     if (!focoL) {
@@ -515,6 +520,33 @@ module.exports = async function handler(req, res) {
                     }
                 } catch (e) { console.error('[lote]', e.message); }
             }
+            // ══ SEB AGENTE: un turno del agente con las herramientas del sistema (mismas puertas que los botones) ══
+            const correrAgente = async (soloTexto) => {
+                const AG = require('../lib/seb/agente.js'); const LIB_E3 = require('../lib/seb/etapa3.js');
+                const ms = (await query("SELECT direccion, emisor, texto, ai_generated FROM mensajes WHERE conversacion_id = ? AND COALESCE(emisor,'') <> 'sistema' ORDER BY id DESC LIMIT 20", [Number(chS.id)])).reverse();
+                let iB = ms.length; while (iB > 0 && ms[iB - 1].direccion === 'in') iB--;
+                const bloque = soloTexto ? [String(soloTexto)] : ms.slice(iB).map(m => String(m.texto || '')).filter(Boolean);
+                if (!bloque.length) return { out: { ok: false, motivo: 'sin_entrantes' }, enviados: [] };
+                const asis = await asistenteDe(tS, chS.id); const foco = await focoDe(tS, telS);
+                let duenoTipo = null; if (CITA3.activo(tS) && foco) { try { const d = await CITA3.duenoDe(tS, foco.id); duenoTipo = d && d.tipo; } catch (e) { } }
+                let cita = null; try { cita = CITA3.activo(tS) ? await CITA3.fotoTexto(tS, chS) : null; if (!cita) { const cf = await CITAF.citaViva(tS.id, chS.id); if (cf) cita = 'visita ' + cf.estado + ' · ' + CITAF._t.cuandoCorto(cf, Date.now() + await CITAF.offsetDe(chS.id), true); } } catch (e) { }
+                let pendienteMario = null; try { const pm = (await query("SELECT id, texto FROM mensajes WHERE conversacion_id = ? AND emisor = 'sistema' AND texto LIKE '🔔 Para ti:%' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const mm = (await query("SELECT MAX(id) m FROM mensajes WHERE conversacion_id = ? AND direccion = 'out' AND COALESCE(ai_generated,0) = 0 AND COALESCE(emisor,'') <> 'sistema'", [Number(chS.id)]))[0]; if (pm && !(mm && Number(mm.m) > Number(pm.id))) pendienteMario = String(pm.texto).replace(/^🔔 Para ti: /, '').replace(/ — contéstale.*$/, ''); } catch (e) { }
+                let obligatorio = null; try { const g = require('../lib/seb/doctrina.js').puertaEntrada(bloque.join(' ')); if (g) obligatorio = String(g.motivo || '').replace(/^[\s🔴🔥💰🧠]+/, '').slice(0, 120); } catch (e) { }
+                const est = await LIB_E3.estadoConv(Number(chS.id)).catch(() => ({}));
+                const hist = ms.slice(Math.max(0, iB - 12), iB).map(m => ({ quien: m.direccion === 'in' ? 'Comprador' : (Number(m.ai_generated) ? 'Seb' : (asis || 'Vendedor')), texto: m.texto }));
+                const ctx = { lote: LOTE.marcaCorta ? LOTE.marcaCorta(tS) : tS.nombre, asistente: asis, tres: CITA3.activo(tS), duenoTipo, foco, cita, pendienteMario, obligatorio, est, historial: hist, bloque };
+                const base = 'agente:' + Number(chS.id) + ':' + Date.now(); let n = 0; const enviados = [];
+                const deps = {
+                    ejecutar: (acc, datos) => ejecutarAccion(tS, telS, acc, Object.assign({ via: 'agente', clave: base + ':a' + (n++) }, datos)),
+                    mandarTexto: async (tx) => { const e = await MSJ.enviar({ tenantId: Number(tS.id), chatId: Number(chS.id), origen: 'sb', clave: base + ':' + (n++), manual: false, accion: 'seb_agente', voz_gen: VOZ.genDe(chS), texto: LOTE.identidad(tx, tS, asis) }); enviados.push(e); return e; },
+                    nota: async (tx) => { try { if (tS.demo) await DEMO.sistema(tS, telS, tx); else { const ts = Date.now(); await run("INSERT OR IGNORE INTO mensajes (conversacion_id, msg_id, ts, direccion, emisor, texto, tipo, ai_generated, created_at) VALUES (?,?,?,?,?,?,?,?,?)", [Number(chS.id), 'agente-nota:' + ts + ':' + (n++), ts, 'out', 'sistema', tx, 'text', 1, ts]); } } catch (e) { } },
+                    escalar: (motivo) => VOZ.entregar({ tenant: tS, chat: chS, motivo }),
+                    ponerFoco: (inv) => ponerFoco(tS, telS, inv),
+                    catalogo: () => autosDeTenant(tS),
+                };
+                try { const r = await AG.turno(ctx, deps); return { out: { ok: !!(r.burbujas.length || r.hechos.length), modo: 'agente', tipo: 'agente', agente: r }, enviados }; }
+                catch (e) { console.error('[agente]', e.message); await deps.nota('🧯 Seb agente falló (' + e.message.slice(0, 60) + '): lo ves tú'); await deps.escalar('la IA no respondió: ' + bloque.join(' / ').slice(0, 80)); return { out: { ok: false, motivo: 'agente_error', error: e.message }, enviados }; }
+            };
             const correrCerebro = async (soloTexto) => {
             // el auto del chat (foco de la delegación) → contexto de anuncio en el PRIMER entrante, como cuando el comprador llega de un anuncio
             try {
@@ -562,7 +594,7 @@ module.exports = async function handler(req, res) {
                 // LEY 4 (owner 2026-09-26: "todo se contesta eficaz o escala"): si el cerebro no contestó, el mensaje traía contenido y no fue un silencio a propósito → ESCALA
                 if (!out.ok && !out.escalar_owner && !/^(cortesia_silencio|relleno_silencio|en_curso_silencio|dueno|sin_entrantes|gobernador_silencio|turno_repetido|turno_superado|fuera_flujo)$/.test(String(out.motivo || ''))) {
                     const uiE = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]).catch(() => []))[0]; const nE = String((uiE && uiE.texto) || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                    if (nE.length >= 4 && !/^\W*(gracias|muchas gracias|ok|okey|va|vale|sale|perfecto|listo|bien|excelente|de acuerdo|jaja+|ja|mm+|si|sip|no|nel)\W*(gracias)?\W*$/.test(nE)) { out.escalar_owner = true; out.escala_motivo = 'Seb no tuvo respuesta (' + String(out.motivo || out.error || 'sin motivo').slice(0, 40) + '): "' + String(uiE.texto).slice(0, 70) + '"'; }
+                    if (nE.length >= 4 && !/^\W*(gracias|muchas gracias|ok|okey|va|vale|sale|perfecto|listo|bien|excelente|de acuerdo|jaja+|ja|mm+|si|sip|no|nel|hola|holi|que tal|hey|saludos|que onda|buen dia|buenos dias|buenas( tardes| noches)?)\W*(gracias)?\W*$/.test(nE)) { out.escalar_owner = true; out.escala_motivo = 'Seb no tuvo respuesta (' + String(out.motivo || out.error || 'sin motivo').slice(0, 40) + '): "' + String(uiE.texto).slice(0, 70) + '"'; }
                 }
                 if (out.escalar_owner) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: String(out.escala_motivo || 'Seb necesita ayuda') }); } catch (e) { console.error('[voz entregar]', e.message); } }   // ESCALAR = ENTREGAR LA VOZ al vendedor (+ WhatsApp con link)
                 return { out, enviados };
@@ -570,9 +602,10 @@ module.exports = async function handler(req, res) {
             // ══ VISITAS FLEXIBLES: el mensaje pasa PRIMERO por la puerta de eventos de cita. La IA solo interpreta; el motor aplica. Si el mismo mensaje trae
             //    ADEMÁS una pregunta comercial ("¿aceptan crédito?"), esa parte la contesta el flujo comercial de siempre (el cerebro, con SOLO ese texto) y
             //    después la cita hace lo suyo. La pregunta comercial jamás se vuelve un estado de cita.
+            if (await superado()) return res.status(200).json({ ok: true, chat_id: Number(chS.id), superado: true, seb: { ok: false, motivo: 'turno_superado' } });
             let citaF = null, comercialR = null;
             if (CITAF.activo(tS)) {
-                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), foto: CITA3.activo(tS) ? await CITA3.fotoTexto(tS, chS).catch(() => null) : null, interceptar: CITA3.activo(tS) ? (x) => CITA3.interceptar({ tenant: tS, chat: chS, ev: x.ev, nuevo: x.nuevo }) : null, comercial: async (txt) => { comercialR = await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
+                try { citaF = await CITAF.entrante({ tenant: tS, chat: chS, auto: await autoCitaf(tS, chS), io: ioCitaf(tS, chS), foto: CITA3.activo(tS) ? await CITA3.fotoTexto(tS, chS).catch(() => null) : null, interceptar: CITA3.activo(tS) ? (x) => CITA3.interceptar({ tenant: tS, chat: chS, ev: x.ev, nuevo: x.nuevo }) : null, comercial: async (txt) => { comercialR = AGENTE ? await correrAgente(txt) : await correrCerebro(txt); return !!(comercialR.out && comercialR.out.ok && comercialR.enviados.some(e => e.ok)); } }); } catch (e) { citaF = { manejado: false, error: e.message }; console.error('[citaf] entrante:', e.message); }
                 if (citaF && citaF.manejado && citaF.cita && CITA3.activo(tS) && !citaF.interceptado) {   // RONDA: el cuándo que aplicó el motor (antes de la 1ª confirmación) → 1 voto del comprador; Mario confirma; dueño con 2
                     try {
                         const uiP = (await query("SELECT texto FROM mensajes WHERE conversacion_id = ? AND direccion = 'in' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0]; const txP = (uiP && uiP.texto) || '';
@@ -581,6 +614,13 @@ module.exports = async function handler(req, res) {
                 }
                 if (citaF && citaF.escalado) { try { await VOZ.entregar({ tenant: tS, chat: chS, motivo: 'cita: ' + String(citaF.evento || 'no quedó claro') }); } catch (e) { } }
                 if (citaF && citaF.manejado && !citaF.seguir_cerebro) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: true, modo: 'cita_flex', tipo: citaF.evento, segmentos: 0 }, cita_flex: citaF, comercial: comercialR ? { ok: !!comercialR.out.ok, modo: comercialR.out.modo || null, tipo: comercialR.out.tipo || null, enviados: comercialR.enviados.length, textos: Array.isArray(comercialR.out.segmentos) ? comercialR.out.segmentos.map(x => String(x || '')).filter(Boolean) : [] } : null });
+            }
+            if (AGENTE) {
+                // MARIO AGREGADOR: si Mario ya contestó a mano después de lo último que escribió el comprador, este turno es suyo → Seb no se encima
+                const ult2 = (await query("SELECT direccion, ai_generated FROM mensajes WHERE conversacion_id = ? AND COALESCE(emisor,'') <> 'sistema' ORDER BY id DESC LIMIT 1", [Number(chS.id)]))[0];
+                if (ult2 && ult2.direccion === 'out' && !Number(ult2.ai_generated)) return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: { ok: false, motivo: 'mario_contesto' } });
+                const rA = await correrAgente(null);
+                return res.status(200).json({ ok: true, chat_id: Number(chS.id), seb: Object.assign({ segmentos: (rA.enviados || []).length }, rA.out) });
             }
             const { out, enviados } = await correrCerebro(null);
             try { if (citaF && citaF.nota) await ioCitaf(tS, chS).sistema(citaF.nota); } catch (e) { }
@@ -3173,7 +3213,7 @@ module.exports = async function handler(req, res) {
                 if (TV) {   // universos: la voz se cambia por voz.js (una sola puerta, idempotente)
                     if (!(tV.config && Number(tV.config.seb_auto) === 1)) return okJ({ bot: 'n/a', chat_id: Number(c.id) });   // sin Seb autónomo no hay voz que cambiar
                     if (!['seb', 'humano'].includes(est)) return err(400, "estado debe ser 'seb' o 'humano'");
-                    if (est === 'humano') { const r = await VOZ.entregar({ tenant: tV, chat: c, motivo: 'tomaste el chat', avisar: false, fuente: 'vendedor' }); return okJ({ bot: 'humano', chat_id: Number(c.id), cambio: r.cambio }); }
+                    if (est === 'humano') { const r = await VOZ.entregar({ tenant: tV, chat: c, motivo: 'tomaste el chat', avisar: false, fuente: 'vendedor', forzar: true }); return okJ({ bot: 'humano', chat_id: Number(c.id), cambio: r.cambio }); }
                     const r = await VOZ.devolver({ tenant: tV, chat: c });
                     // REANUDAR: Seb mira la realidad que quedó → turno pendiente (se procesa por el flujo normal) · falta un movimiento comercial (UN gancho por el gobernador) · nada
                     let reanudo = 'nada';
